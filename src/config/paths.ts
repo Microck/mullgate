@@ -15,6 +15,7 @@ export type MullgatePaths = {
   readonly wireproxyConfigFile: string;
   readonly wireproxyConfigTestReportFile: string;
   readonly provisioningCacheFile: string;
+  readonly dockerComposePath: string;
 };
 
 export function resolveMullgatePaths(env: NodeJS.ProcessEnv = process.env): MullgatePaths {
@@ -40,6 +41,7 @@ export function resolveMullgatePaths(env: NodeJS.ProcessEnv = process.env): Mull
     wireproxyConfigFile: path.join(runtimeDir, 'wireproxy.conf'),
     wireproxyConfigTestReportFile: path.join(runtimeDir, 'wireproxy-configtest.json'),
     provisioningCacheFile: path.join(appCacheDir, 'relays.json'),
+    dockerComposePath: path.join(appStateDir, 'docker-compose.yml'),
   };
 }
 
