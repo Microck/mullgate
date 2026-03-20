@@ -1,0 +1,30 @@
+{
+  "name": "mullgate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CLI-first Mullvad proxy bootstrap and runtime management",
+  "type": "module",
+  "bin": {
+    "mullgate": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc --pretty false -p tsconfig.build.json",
+    "typecheck": "tsc --pretty false --noEmit",
+    "test": "tsx scripts/test.ts",
+    "cli": "tsx src/cli.ts"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "commander": "^14.0.2",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.7"
+  },
+  "packageManager": "pnpm@10.18.3"
+}
