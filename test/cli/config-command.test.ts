@@ -272,6 +272,78 @@ local host-file mapping
 `);
   });
 
+  it('renders the dedicated exposure report for no-domain direct-IP public access', () => {
+    const config = createFixtureConfig();
+    config.setup.exposure = {
+      mode: 'public',
+      allowLan: true,
+      baseDomain: null,
+    };
+    config.setup.bind.host = '203.0.113.10';
+    config.routing.locations[0]!.hostname = '203.0.113.10';
+    config.routing.locations[0]!.bindIp = '203.0.113.10';
+    config.routing.locations[1]!.hostname = '203.0.113.11';
+    config.routing.locations[1]!.bindIp = '203.0.113.11';
+    config.runtime.status = {
+      phase: 'unvalidated',
+      lastCheckedAt: null,
+      message: 'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+    };
+
+    const report = renderExposureReport(config, '/tmp/mullgate-home/config/mullgate/config.json');
+
+    expect(report).not.toContain('multi-route-secret');
+    expect(report).not.toContain('123456789012');
+    expect(report).not.toContain('private-key-value-1');
+    expect(report).toContain('[redacted]:[redacted]@203.0.113.10:1080');
+    expect('\n' + report).toMatchInlineSnapshot(`
+"\nMullgate exposure report
+phase: inspect-config
+source: canonical-config
+config: /tmp/mullgate-home/config/mullgate/config.json
+mode: public
+base domain: n/a
+allow lan: yes
+runtime status: unvalidated
+restart needed: yes
+runtime message: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+
+guidance
+- Public mode expects those bind IPs to be reachable from the public internet.
+- Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.
+- No base domain is configured, so clients must reach each route via the direct bind IP entrypoints below.
+
+routes
+1. 203.0.113.10 -> 203.0.113.10
+   alias: sweden-gothenburg
+   route id: sweden-gothenburg
+   dns: not required; use direct bind IP entrypoints
+   socks5 hostname: socks5://[redacted]:[redacted]@203.0.113.10:1080
+   socks5 direct ip: socks5://[redacted]:[redacted]@203.0.113.10:1080
+   http hostname: http://[redacted]:[redacted]@203.0.113.10:8080
+   http direct ip: http://[redacted]:[redacted]@203.0.113.10:8080
+   https hostname: https://[redacted]:[redacted]@203.0.113.10:8443
+   https direct ip: https://[redacted]:[redacted]@203.0.113.10:8443
+2. 203.0.113.11 -> 203.0.113.11
+   alias: austria-vienna
+   route id: austria-vienna
+   dns: not required; use direct bind IP entrypoints
+   socks5 hostname: socks5://[redacted]:[redacted]@203.0.113.11:1080
+   socks5 direct ip: socks5://[redacted]:[redacted]@203.0.113.11:1080
+   http hostname: http://[redacted]:[redacted]@203.0.113.11:8080
+   http direct ip: http://[redacted]:[redacted]@203.0.113.11:8080
+   https hostname: https://[redacted]:[redacted]@203.0.113.11:8443
+   https direct ip: https://[redacted]:[redacted]@203.0.113.11:8443
+
+warnings
+- warning: Public exposure publishes authenticated proxy listeners on publicly routable IPs. Confirm firewalling, rate limits, and monitoring before enabling it on the open internet.
+- warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+
+local host-file mapping
+- \`mullgate config hosts\` remains the copy/paste /etc/hosts view for local-only testing."
+`);
+  });
+
   it('updates exposure settings without raw JSON edits and mirrors the first bind IP back to setup.bind.host', () => {
     const config = createFixtureConfig();
 
