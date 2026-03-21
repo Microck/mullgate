@@ -270,9 +270,11 @@ describe('mullgate setup CLI flow', () => {
           validation: wireproxy-binary/configtest"
         `);
 
-        const [pathResult, showResult, getPasswordResult, getLocationResult, validateResult] = await Promise.all([
+        const [pathResult, showResult, locationsResult, hostsResult, getPasswordResult, getLocationResult, validateResult] = await Promise.all([
           runCli(['config', 'path'], { env }),
           runCli(['config', 'show'], { env }),
+          runCli(['config', 'locations'], { env }),
+          runCli(['config', 'hosts'], { env }),
           runCli(['config', 'get', 'setup.auth.password'], { env }),
           runCli(['config', 'get', 'setup.location.requested'], { env }),
           runCli(['config', 'validate'], { env }),
@@ -280,6 +282,8 @@ describe('mullgate setup CLI flow', () => {
 
         expect(pathResult.status).toBe(0);
         expect(showResult.status).toBe(0);
+        expect(locationsResult.status).toBe(0);
+        expect(hostsResult.status).toBe(0);
         expect(getPasswordResult.status).toBe(0);
         expect(getLocationResult.status).toBe(0);
         expect(validateResult.status).toBe(0);
@@ -287,6 +291,10 @@ describe('mullgate setup CLI flow', () => {
         expect(showResult.stdout).not.toContain('123456789012');
         expect(showResult.stdout).not.toContain('top-secret-password');
         expect(showResult.stdout).toContain('[redacted]');
+        expect(locationsResult.stdout).not.toContain('123456789012');
+        expect(locationsResult.stdout).not.toContain('top-secret-password');
+        expect(hostsResult.stdout).not.toContain('123456789012');
+        expect(hostsResult.stdout).not.toContain('top-secret-password');
         expect(getPasswordResult.stdout.trim()).toBe('[redacted]');
         expect(getLocationResult.stdout.trim()).toBe('sweden-gothenburg');
         expect('\n' + normalizeOutput(pathResult.stdout, env)).toMatchInlineSnapshot(`
@@ -302,6 +310,31 @@ describe('mullgate setup CLI flow', () => {
           docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
           relay cache: /tmp/mullgate-home/cache/mullgate/relays.json (present)"
         `);
+        expect('\n' + normalizeOutput(locationsResult.stdout, env)).toMatchInlineSnapshot(`
+"\nMullgate routed locations
+phase: inspect-config
+source: canonical-config
+config: /tmp/mullgate-home/config/mullgate/config.json
+routes: 1
+
+1. sweden-gothenburg
+   hostname: sweden-gothenburg
+   bind ip: 127.0.0.1
+   requested: sweden-gothenburg
+   resolved alias: sweden-gothenburg
+   country: se
+   city: got
+   route id: sweden-gothenburg
+   wireproxy service: wireproxy-sweden-gothenburg"
+`);
+        expect('\n' + normalizeOutput(hostsResult.stdout, env)).toMatchInlineSnapshot(`
+"\nMullgate routed hosts
+phase: inspect-config
+source: canonical-config
+config: /tmp/mullgate-home/config/mullgate/config.json
+hostname -> bind ip
+1. sweden-gothenburg -> 127.0.0.1 (alias: sweden-gothenburg, route id: sweden-gothenburg)"
+`);
         expect('\n' + normalizeOutput(validateResult.stdout, env)).toMatchInlineSnapshot(`
 "\nMullgate config validated.
 phase: validation
@@ -394,7 +427,9 @@ reason: Validated via wireproxy-binary/configtest."
         expect(renderedWireproxyConfig).toContain('Password = rotated-password');
       },
     );
-  });
+  },
+  20000,
+  );
 
   it('reports corrupted rendered artifacts with phase, source, and secret-safe diagnostics', async () => {
     const env = createTempEnvironment();

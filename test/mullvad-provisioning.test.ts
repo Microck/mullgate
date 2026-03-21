@@ -148,6 +148,34 @@ function createConfig(paths: ReturnType<typeof resolveMullgatePaths>, wireguard:
       },
       wireguard,
     },
+    routing: {
+      locations: [
+        {
+          alias: 'sweden-gothenburg',
+          hostname: 'sweden-gothenburg',
+          bindIp: '127.0.0.1',
+          relayPreference: {
+            requested: 'sweden-gothenburg',
+            resolvedAlias: null,
+          },
+          mullvad: {
+            accountNumber: '123456789012',
+            deviceName: 'mullgate-lab',
+            lastProvisionedAt: timestamp,
+            relayConstraints: {
+              providers: [],
+            },
+            wireguard,
+          },
+          runtime: {
+            routeId: 'sweden-gothenburg',
+            wireproxyServiceName: 'wireproxy-sweden-gothenburg',
+            haproxyBackendName: 'route-sweden-gothenburg',
+            wireproxyConfigFile: 'wireproxy-sweden-gothenburg.conf',
+          },
+        },
+      ],
+    },
     runtime: {
       backend: 'wireproxy',
       sourceConfigPath: paths.configFile,

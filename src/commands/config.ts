@@ -3,7 +3,7 @@ import { constants as fsConstants } from 'node:fs';
 import type { Command } from 'commander';
 
 import { formatRedactedConfig, redactConfig } from '../config/redact.js';
-import { ConfigStore, type LoadConfigResult } from '../config/store.js';
+import { ConfigStore, syncLegacyMirrorsToRouting, type LoadConfigResult } from '../config/store.js';
 import type { MullgateConfig } from '../config/schema.js';
 import { loadStoredRelayCatalog, summarizeValidationSource, verifyHttpsAssets, withRuntimeStatus } from '../app/setup-runner.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
@@ -99,6 +99,48 @@ export function registerConfigCommands(program: Command): void {
     });
 
   config
+    .command('locations')
+    .description('List routed location aliases, bind IPs, relay preferences, and runtime ids without secrets.')
+    .action(async () => {
+      const store = new ConfigStore();
+      const result = await store.load();
+
+      if (!result.ok) {
+        process.stderr.write(`${renderLoadError(result)}\n`);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (result.source === 'empty') {
+        process.stdout.write(`${result.message}\n`);
+        return;
+      }
+
+      process.stdout.write(`${renderLocationsReport(result.config, store.paths.configFile)}\n`);
+    });
+
+  config
+    .command('hosts')
+    .description('List configured proxy hostnames and their route bind IP mappings without secrets.')
+    .action(async () => {
+      const store = new ConfigStore();
+      const result = await store.load();
+
+      if (!result.ok) {
+        process.stderr.write(`${renderLoadError(result)}\n`);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (result.source === 'empty') {
+        process.stdout.write(`${result.message}\n`);
+        return;
+      }
+
+      process.stdout.write(`${renderHostsReport(result.config, store.paths.configFile)}\n`);
+    });
+
+  config
     .command('get')
     .argument('<keyPath>', 'Dot-separated key path within the saved config.')
     .description('Read one saved config value with secret-safe redaction.')
@@ -189,8 +231,9 @@ export function registerConfigCommands(program: Command): void {
         return;
       }
 
+      const canonicalConfig = syncLegacyMirrorsToRouting(updatedConfig);
       const staleConfig = withRuntimeStatus(
-        updatedConfig,
+        canonicalConfig,
         'unvalidated',
         null,
         `Config changed at ${keyPath}; rerun \`mullgate config validate\` to refresh derived artifacts.`,
@@ -258,6 +301,41 @@ export function renderPathReport(report: Awaited<ReturnType<ConfigStore['inspect
     `wireproxy configtest report: ${paths.wireproxyConfigTestReportFile}`,
     `docker compose: ${paths.dockerComposePath}`,
     `relay cache: ${paths.provisioningCacheFile} (${exists.relayCacheFile ? 'present' : 'missing'})`,
+  ].join('\n');
+}
+
+export function renderLocationsReport(config: MullgateConfig, configPath: string): string {
+  return [
+    'Mullgate routed locations',
+    'phase: inspect-config',
+    'source: canonical-config',
+    `config: ${configPath}`,
+    `routes: ${config.routing.locations.length}`,
+    ...config.routing.locations.flatMap((location, index) => [
+      '',
+      `${index + 1}. ${location.alias}`,
+      `   hostname: ${location.hostname}`,
+      `   bind ip: ${location.bindIp}`,
+      `   requested: ${location.relayPreference.requested}`,
+      `   resolved alias: ${location.relayPreference.resolvedAlias ?? 'n/a'}`,
+      `   country: ${location.relayPreference.country ?? 'n/a'}`,
+      `   city: ${location.relayPreference.city ?? 'n/a'}`,
+      `   route id: ${location.runtime.routeId}`,
+      `   wireproxy service: ${location.runtime.wireproxyServiceName}`,
+    ]),
+  ].join('\n');
+}
+
+export function renderHostsReport(config: MullgateConfig, configPath: string): string {
+  return [
+    'Mullgate routed hosts',
+    'phase: inspect-config',
+    'source: canonical-config',
+    `config: ${configPath}`,
+    'hostname -> bind ip',
+    ...config.routing.locations.map(
+      (location, index) => `${index + 1}. ${location.hostname} -> ${location.bindIp} (alias: ${location.alias}, route id: ${location.runtime.routeId})`,
+    ),
   ].join('\n');
 }
 

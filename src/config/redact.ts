@@ -12,13 +12,12 @@ export function redactConfig(config: MullgateConfig): MullgateConfig {
         password: REDACTED,
       },
     },
-    mullvad: {
-      ...config.mullvad,
-      accountNumber: REDACTED,
-      wireguard: {
-        ...config.mullvad.wireguard,
-        privateKey: config.mullvad.wireguard.privateKey ? REDACTED : config.mullvad.wireguard.privateKey,
-      },
+    mullvad: redactProvisioning(config.mullvad),
+    routing: {
+      locations: config.routing.locations.map((location) => ({
+        ...location,
+        mullvad: redactProvisioning(location.mullvad),
+      })),
     },
   } satisfies MullgateConfig;
 
@@ -59,11 +58,28 @@ function redactOptionalText(value: string | null, config: MullgateConfig): strin
 }
 
 function collectKnownSecrets(config: MullgateConfig): string[] {
+  const routeSecrets = config.routing.locations.flatMap((location) => [
+    location.mullvad.accountNumber,
+    location.mullvad.wireguard.privateKey,
+  ]);
+
   return [
     config.mullvad.accountNumber,
     config.setup.auth.password,
     config.mullvad.wireguard.privateKey,
+    ...routeSecrets,
   ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+}
+
+function redactProvisioning(provisioning: MullgateConfig['mullvad']): MullgateConfig['mullvad'] {
+  return {
+    ...provisioning,
+    accountNumber: REDACTED,
+    wireguard: {
+      ...provisioning.wireguard,
+      privateKey: provisioning.wireguard.privateKey ? REDACTED : provisioning.wireguard.privateKey,
+    },
+  };
 }
 
 function redactPrivateKeyMaterial(value: string): string {

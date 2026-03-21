@@ -81,6 +81,46 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
         peerEndpoint: 'se-got-wg-101.relays.mullvad.net:3401',
       },
     },
+    routing: {
+      locations: [
+        {
+          alias: 'sweden-gothenburg',
+          hostname: 'sweden-gothenburg',
+          bindIp: '127.0.0.1',
+          relayPreference: {
+            requested: 'sweden-gothenburg',
+            country: 'se',
+            city: 'got',
+            resolvedAlias: 'sweden-gothenburg',
+          },
+          mullvad: {
+            accountNumber: '123456789012',
+            deviceName: 'mullgate-runtime-test',
+            lastProvisionedAt: timestamp,
+            relayConstraints: {
+              providers: [],
+            },
+            wireguard: {
+              publicKey: 'public-key-value',
+              privateKey: 'private-key-value',
+              ipv4Address: '10.64.12.34/32',
+              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
+              gatewayIpv4: '10.64.0.1',
+              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
+              dnsServers: ['10.64.0.1'],
+              peerPublicKey: 'peer-public-key-value',
+              peerEndpoint: 'se-got-wg-101.relays.mullvad.net:3401',
+            },
+          },
+          runtime: {
+            routeId: 'sweden-gothenburg',
+            wireproxyServiceName: 'wireproxy-sweden-gothenburg',
+            haproxyBackendName: 'route-sweden-gothenburg',
+            wireproxyConfigFile: 'wireproxy-sweden-gothenburg.conf',
+          },
+        },
+      ],
+    },
     runtime: {
       backend: 'wireproxy',
       sourceConfigPath: paths.configFile,

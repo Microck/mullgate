@@ -1,8 +1,16 @@
 import { chmod, mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
+import { normalizeLocationToken } from '../domain/location-aliases.js';
 import { resolveMullgatePaths, type MullgatePaths } from './paths.js';
-import { mullgateConfigSchema, type MullgateConfig } from './schema.js';
+import {
+  mullgateConfigInputSchema,
+  mullgateConfigSchema,
+  type MullgateConfig,
+  type MullgateConfigInput,
+  type RoutedLocation,
+  type RoutedLocationInput,
+} from './schema.js';
 
 export type LoadConfigResult =
   | {
@@ -50,6 +58,8 @@ export type PathReport = {
   };
 };
 
+const DEFAULT_ROUTE_ID = 'primary';
+
 export class ConfigStore {
   readonly paths: MullgatePaths;
 
@@ -61,7 +71,7 @@ export class ConfigStore {
     try {
       const raw = await readFile(this.paths.configFile, 'utf8');
       const parsed = JSON.parse(raw) as unknown;
-      const config = mullgateConfigSchema.parse(parsed);
+      const config = normalizeMullgateConfig(parsed);
 
       return {
         ok: true,
@@ -117,7 +127,7 @@ export class ConfigStore {
   }
 
   async save(input: MullgateConfig): Promise<SaveConfigResult> {
-    const config = mullgateConfigSchema.parse(input);
+    const config = normalizeMullgateConfig(input);
 
     await ensureDirectory(this.paths.appConfigDir);
     await ensureDirectory(this.paths.appStateDir);
@@ -149,6 +159,156 @@ export class ConfigStore {
       },
     };
   }
+}
+
+export function normalizeMullgateConfig(input: unknown): MullgateConfig {
+  const parsed = mullgateConfigInputSchema.parse(input);
+  const locations = normalizeRoutingLocations(parsed);
+  const primaryLocation = locations[0]!;
+
+  const normalized: MullgateConfig = {
+    ...parsed,
+    setup: {
+      ...parsed.setup,
+      location: structuredClone(primaryLocation.relayPreference),
+    },
+    mullvad: structuredClone(primaryLocation.mullvad),
+    routing: {
+      locations,
+    },
+  };
+
+  return mullgateConfigSchema.parse(normalized);
+}
+
+export function syncLegacyMirrorsToRouting(config: MullgateConfig): MullgateConfig {
+  const [firstLocation, ...remainingLocations] = config.routing.locations;
+
+  if (!firstLocation) {
+    return config;
+  }
+
+  const updatedPrimary = normalizeRoutedLocation(
+    {
+      bindIp: firstLocation.bindIp,
+      relayPreference: structuredClone(config.setup.location),
+      mullvad: structuredClone(config.mullvad),
+      runtime: structuredClone(firstLocation.runtime),
+    },
+    0,
+    new Set(),
+    { bindIp: firstLocation.bindIp },
+  );
+
+  return normalizeMullgateConfig({
+    ...config,
+    routing: {
+      locations: [updatedPrimary, ...remainingLocations],
+    },
+  });
+}
+
+function normalizeRoutingLocations(config: MullgateConfigInput): RoutedLocation[] {
+  const usedRouteIds = new Set<string>();
+
+  if (config.routing?.locations.length) {
+    return config.routing.locations.map((location, index) =>
+      normalizeRoutedLocation(location, index, usedRouteIds, {
+        bindIp: index === 0 ? config.setup.bind.host : undefined,
+      }),
+    );
+  }
+
+  return [
+    normalizeRoutedLocation(
+      {
+        relayPreference: structuredClone(config.setup.location),
+        mullvad: structuredClone(config.mullvad),
+      },
+      0,
+      usedRouteIds,
+      { bindIp: config.setup.bind.host },
+    ),
+  ];
+}
+
+function normalizeRoutedLocation(
+  location: RoutedLocationInput,
+  index: number,
+  usedRouteIds: Set<string>,
+  fallbacks: { bindIp?: string },
+): RoutedLocation {
+  const relayPreference = structuredClone(location.relayPreference);
+  const alias = chooseAlias(location, relayPreference, index);
+  const hostname = chooseHostname(location, relayPreference, alias);
+  const bindIp = location.bindIp?.trim() || fallbacks.bindIp || '127.0.0.1';
+  const routeId = chooseUniqueRouteId(location, alias, hostname, index, usedRouteIds);
+
+  return {
+    alias,
+    hostname,
+    bindIp,
+    relayPreference,
+    mullvad: structuredClone(location.mullvad),
+    runtime: {
+      routeId,
+      wireproxyServiceName: location.runtime?.wireproxyServiceName?.trim() || `wireproxy-${routeId}`,
+      haproxyBackendName: location.runtime?.haproxyBackendName?.trim() || `route-${routeId}`,
+      wireproxyConfigFile: location.runtime?.wireproxyConfigFile?.trim() || `wireproxy-${routeId}.conf`,
+    },
+  };
+}
+
+function chooseAlias(location: RoutedLocationInput, relayPreference: RoutedLocationInput['relayPreference'], index: number): string {
+  const explicit = location.alias?.trim();
+
+  if (explicit) {
+    return explicit;
+  }
+
+  const derived = normalizeLocationToken(
+    relayPreference.resolvedAlias ?? relayPreference.hostnameLabel ?? relayPreference.requested,
+  );
+
+  return derived || `route-${index + 1}`;
+}
+
+function chooseHostname(
+  location: RoutedLocationInput,
+  relayPreference: RoutedLocationInput['relayPreference'],
+  alias: string,
+): string {
+  const explicit = location.hostname?.trim();
+
+  if (explicit) {
+    return explicit;
+  }
+
+  return relayPreference.hostnameLabel?.trim() || alias;
+}
+
+function chooseUniqueRouteId(
+  location: RoutedLocationInput,
+  alias: string,
+  hostname: string,
+  index: number,
+  usedRouteIds: Set<string>,
+): string {
+  const baseCandidate =
+    normalizeLocationToken(location.runtime?.routeId ?? hostname ?? alias) ||
+    normalizeLocationToken(alias) ||
+    (index === 0 ? DEFAULT_ROUTE_ID : `route-${index + 1}`);
+
+  let candidate = baseCandidate;
+  let suffix = 2;
+
+  while (usedRouteIds.has(candidate)) {
+    candidate = `${baseCandidate}-${suffix}`;
+    suffix += 1;
+  }
+
+  usedRouteIds.add(candidate);
+  return candidate;
 }
 
 async function ensureDirectory(directoryPath: string): Promise<void> {

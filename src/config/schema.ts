@@ -57,6 +57,46 @@ export const mullvadProvisioningSchema = z.object({
   }),
 });
 
+export const routedLocationRuntimeSchema = z.object({
+  routeId: nonEmptyString,
+  wireproxyServiceName: nonEmptyString,
+  haproxyBackendName: nonEmptyString,
+  wireproxyConfigFile: nonEmptyString,
+});
+
+export const routedLocationSchema = z.object({
+  alias: nonEmptyString,
+  hostname: nonEmptyString,
+  bindIp: nonEmptyString,
+  relayPreference: locationInputSchema,
+  mullvad: mullvadProvisioningSchema,
+  runtime: routedLocationRuntimeSchema,
+});
+
+export const routedLocationInputSchema = z.object({
+  alias: nonEmptyString.optional(),
+  hostname: nonEmptyString.optional(),
+  bindIp: nonEmptyString.optional(),
+  relayPreference: locationInputSchema,
+  mullvad: mullvadProvisioningSchema,
+  runtime: z
+    .object({
+      routeId: nonEmptyString.optional(),
+      wireproxyServiceName: nonEmptyString.optional(),
+      haproxyBackendName: nonEmptyString.optional(),
+      wireproxyConfigFile: nonEmptyString.optional(),
+    })
+    .optional(),
+});
+
+export const routingConfigSchema = z.object({
+  locations: z.array(routedLocationSchema).min(1),
+});
+
+export const routingConfigInputSchema = z.object({
+  locations: z.array(routedLocationInputSchema).min(1),
+});
+
 export const runtimeBundleArtifactSchema = z.object({
   bundleDir: nonEmptyString,
   dockerComposePath: nonEmptyString,
@@ -115,8 +155,23 @@ export const mullgateConfigSchema = z.object({
   updatedAt: timestampString,
   setup: guidedSetupSchema,
   mullvad: mullvadProvisioningSchema,
+  routing: routingConfigSchema,
   runtime: runtimeArtifactSchema,
   diagnostics: diagnosticsSchema,
 });
 
+export const mullgateConfigInputSchema = z.object({
+  version: z.literal(CONFIG_VERSION),
+  createdAt: timestampString,
+  updatedAt: timestampString,
+  setup: guidedSetupSchema,
+  mullvad: mullvadProvisioningSchema,
+  routing: routingConfigInputSchema.optional(),
+  runtime: runtimeArtifactSchema,
+  diagnostics: diagnosticsSchema,
+});
+
+export type RoutedLocation = z.infer<typeof routedLocationSchema>;
+export type RoutedLocationInput = z.infer<typeof routedLocationInputSchema>;
 export type MullgateConfig = z.infer<typeof mullgateConfigSchema>;
+export type MullgateConfigInput = z.infer<typeof mullgateConfigInputSchema>;

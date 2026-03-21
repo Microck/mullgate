@@ -6,7 +6,7 @@ import { cancel as clackCancel, confirm, intro, isCancel, outro, password, text 
 
 import { createLocationAliasCatalog, resolveLocationAlias, type LocationAliasTarget } from '../domain/location-aliases.js';
 import type { MullgatePaths } from '../config/paths.js';
-import { ConfigStore } from '../config/store.js';
+import { ConfigStore, normalizeMullgateConfig } from '../config/store.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../config/schema.js';
 import { fetchRelays, type MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
 import { provisionWireguard, type ProvisionWireguardResult } from '../mullvad/provision-wireguard.js';
@@ -453,7 +453,7 @@ function createCanonicalConfig(input: {
   const timestamp = input.checkedAt ?? new Date().toISOString();
   const httpsEnabled = input.inputs.httpsPort !== null || Boolean(input.inputs.httpsCertPath || input.inputs.httpsKeyPath);
 
-  return {
+  return normalizeMullgateConfig({
     version: CONFIG_VERSION,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -520,7 +520,7 @@ function createCanonicalConfig(input: {
       lastRuntimeStartReportPath: input.paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
     },
-  };
+  });
 }
 
 async function collectSetupInputs(input: {

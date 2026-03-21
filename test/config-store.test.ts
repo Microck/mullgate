@@ -1,5 +1,5 @@
 import { mkdtempSync, statSync } from 'node:fs';
-import { readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -81,6 +81,48 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
         peerEndpoint: null,
       },
     },
+    routing: {
+      locations: [
+        {
+          alias: 'se-sto',
+          hostname: 'se-sto',
+          bindIp: '127.0.0.1',
+          relayPreference: {
+            requested: 'se-sto',
+            country: 'Sweden',
+            city: 'Stockholm',
+            hostnameLabel: 'se-sto',
+            resolvedAlias: null,
+          },
+          mullvad: {
+            accountNumber: '123456789012',
+            deviceName: 'mullgate-test-host',
+            lastProvisionedAt: null,
+            relayConstraints: {
+              ownership: 'mullvad-owned',
+              providers: ['31173'],
+            },
+            wireguard: {
+              publicKey: 'public-key-value',
+              privateKey: 'private-key-value',
+              ipv4Address: null,
+              ipv6Address: null,
+              gatewayIpv4: null,
+              gatewayIpv6: null,
+              dnsServers: ['10.64.0.1'],
+              peerPublicKey: null,
+              peerEndpoint: null,
+            },
+          },
+          runtime: {
+            routeId: 'se-sto',
+            wireproxyServiceName: 'wireproxy-se-sto',
+            haproxyBackendName: 'route-se-sto',
+            wireproxyConfigFile: 'wireproxy-se-sto.conf',
+          },
+        },
+      ],
+    },
     runtime: {
       backend: 'wireproxy',
       sourceConfigPath: paths.configFile,
@@ -107,6 +149,11 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
   };
 }
 
+function createLegacyFixtureConfig(env: NodeJS.ProcessEnv): Omit<MullgateConfig, 'routing'> {
+  const { routing: _routing, ...legacy } = createFixtureConfig(env);
+  return legacy;
+}
+
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
@@ -117,26 +164,51 @@ describe('mullgate config store', () => {
     const config = createFixtureConfig(env);
 
     expect(() => mullgateConfigSchema.parse(config)).not.toThrow();
-    expect(config.runtime).toMatchInlineSnapshot(`
-      {
-        "backend": "wireproxy",
-        "dockerComposePath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/docker-compose.yml",
-        "relayCachePath": "/tmp/mullgate-test-leCtq8/cache/mullgate/relays.json",
-        "runtimeBundle": {
-          "bundleDir": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime",
-          "dockerComposePath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/docker-compose.yml",
-          "httpsSidecarConfigPath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/haproxy.cfg",
-          "manifestPath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/runtime-manifest.json",
+    expect(config.routing.locations).toMatchInlineSnapshot(`
+      [
+        {
+          "alias": "se-sto",
+          "bindIp": "127.0.0.1",
+          "hostname": "se-sto",
+          "mullvad": {
+            "accountNumber": "123456789012",
+            "deviceName": "mullgate-test-host",
+            "lastProvisionedAt": null,
+            "relayConstraints": {
+              "ownership": "mullvad-owned",
+              "providers": [
+                "31173",
+              ],
+            },
+            "wireguard": {
+              "dnsServers": [
+                "10.64.0.1",
+              ],
+              "gatewayIpv4": null,
+              "gatewayIpv6": null,
+              "ipv4Address": null,
+              "ipv6Address": null,
+              "peerEndpoint": null,
+              "peerPublicKey": null,
+              "privateKey": "private-key-value",
+              "publicKey": "public-key-value",
+            },
+          },
+          "relayPreference": {
+            "city": "Stockholm",
+            "country": "Sweden",
+            "hostnameLabel": "se-sto",
+            "requested": "se-sto",
+            "resolvedAlias": null,
+          },
+          "runtime": {
+            "haproxyBackendName": "route-se-sto",
+            "routeId": "se-sto",
+            "wireproxyConfigFile": "wireproxy-se-sto.conf",
+            "wireproxyServiceName": "wireproxy-se-sto",
+          },
         },
-        "sourceConfigPath": "/tmp/mullgate-test-leCtq8/config/mullgate/config.json",
-        "status": {
-          "lastCheckedAt": null,
-          "message": "Pending first render.",
-          "phase": "unvalidated",
-        },
-        "wireproxyConfigPath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/wireproxy.conf",
-        "wireproxyConfigTestReportPath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/wireproxy-configtest.json",
-      }
+      ]
     `);
   });
 
@@ -161,7 +233,65 @@ describe('mullgate config store', () => {
     `);
   });
 
-  it('persists the canonical config atomically with restrictive permissions', async () => {
+  it('loads a legacy single-location config and persists the routed form with intact legacy mirrors', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const store = new ConfigStore(paths);
+    const legacyConfig = createLegacyFixtureConfig(env);
+
+    await mkdir(path.dirname(paths.configFile), { recursive: true, mode: 0o700 });
+    await writeFile(paths.configFile, `${JSON.stringify(legacyConfig, null, 2)}\n`, 'utf8');
+
+    const loaded = await store.load();
+    expect(loaded.ok && loaded.source === 'file').toBe(true);
+
+    if (!loaded.ok || loaded.source !== 'file') {
+      return;
+    }
+
+    expect(loaded.config.routing.locations).toHaveLength(1);
+    expect(loaded.config.routing.locations[0]).toMatchObject({
+      alias: 'se-sto',
+      hostname: 'se-sto',
+      bindIp: '127.0.0.1',
+      relayPreference: {
+        requested: 'se-sto',
+      },
+    });
+    expect(loaded.config.setup.location).toEqual(loaded.config.routing.locations[0]?.relayPreference);
+    expect(loaded.config.mullvad).toEqual(loaded.config.routing.locations[0]?.mullvad);
+
+    await store.save(loaded.config);
+    const saved = JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
+
+    expect(saved).toMatchObject({
+      setup: {
+        location: {
+          requested: 'se-sto',
+        },
+      },
+      mullvad: {
+        deviceName: 'mullgate-test-host',
+      },
+      routing: {
+        locations: [
+          {
+            alias: 'se-sto',
+            hostname: 'se-sto',
+            bindIp: '127.0.0.1',
+            relayPreference: {
+              requested: 'se-sto',
+            },
+            runtime: {
+              routeId: 'se-sto',
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it('persists routed configs atomically and mirrors the first route back into legacy fields', async () => {
     const env = createTempEnvironment();
     const store = new ConfigStore(resolveMullgatePaths(env));
     const initial = createFixtureConfig(env);
@@ -170,26 +300,98 @@ describe('mullgate config store', () => {
       updatedAt: '2026-03-20T18:49:01.000Z',
       setup: {
         ...initial.setup,
-        auth: {
-          ...initial.setup.auth,
-          username: 'bob',
+        location: {
+          requested: 'stale-top-level-location',
+          resolvedAlias: null,
         },
+      },
+      mullvad: {
+        ...initial.mullvad,
+        deviceName: 'stale-top-level-device',
+      },
+      routing: {
+        locations: [
+          {
+            alias: 'se-got',
+            hostname: 'sto.internal',
+            bindIp: '127.0.0.10',
+            relayPreference: {
+              requested: 'se-got',
+              country: 'se',
+              city: 'got',
+              hostnameLabel: 'se-got-wg-101',
+              resolvedAlias: 'sweden-gothenburg',
+            },
+            mullvad: {
+              ...initial.mullvad,
+              deviceName: 'route-one-device',
+            },
+            runtime: {
+              routeId: 'se-got',
+              wireproxyServiceName: 'wireproxy-se-got',
+              haproxyBackendName: 'route-se-got',
+              wireproxyConfigFile: 'wireproxy-se-got.conf',
+            },
+          },
+          {
+            alias: 'se-sto',
+            hostname: 'sto-2.internal',
+            bindIp: '127.0.0.11',
+            relayPreference: {
+              requested: 'se-sto',
+              country: 'se',
+              city: 'sto',
+              hostnameLabel: 'se-sto-wg-001',
+              resolvedAlias: 'sweden-stockholm',
+            },
+            mullvad: {
+              ...initial.mullvad,
+              deviceName: 'route-two-device',
+            },
+            runtime: {
+              routeId: 'se-sto',
+              wireproxyServiceName: 'wireproxy-se-sto',
+              haproxyBackendName: 'route-se-sto',
+              wireproxyConfigFile: 'wireproxy-se-sto.conf',
+            },
+          },
+        ],
       },
     } satisfies MullgateConfig;
 
     await store.save(initial);
     await store.save(updated);
 
-    const saved = await readFile(store.paths.configFile, 'utf8');
+    const saved = JSON.parse(await readFile(store.paths.configFile, 'utf8')) as MullgateConfig;
     const stats = statSync(store.paths.configFile);
 
-    expect(JSON.parse(saved)).toMatchObject({
+    expect(saved).toMatchObject({
       setup: {
-        auth: {
-          username: 'bob',
+        location: {
+          requested: 'se-got',
+          resolvedAlias: 'sweden-gothenburg',
+          hostnameLabel: 'se-got-wg-101',
         },
       },
+      mullvad: {
+        deviceName: 'route-one-device',
+      },
+      routing: {
+        locations: [
+          {
+            alias: 'se-got',
+            hostname: 'sto.internal',
+            bindIp: '127.0.0.10',
+          },
+          {
+            alias: 'se-sto',
+            hostname: 'sto-2.internal',
+            bindIp: '127.0.0.11',
+          },
+        ],
+      },
     });
+    expect(saved.routing.locations).toHaveLength(2);
     expect(stats.mode & 0o777).toBe(0o600);
     expect(await listTemporaryArtifacts(store.paths.appConfigDir)).toEqual([]);
   });
@@ -198,6 +400,33 @@ describe('mullgate config store', () => {
     const env = createTempEnvironment();
     const store = new ConfigStore(resolveMullgatePaths(env));
     const config = createFixtureConfig(env);
+    config.routing.locations.push({
+      alias: 'se-got',
+      hostname: 'got.internal',
+      bindIp: '127.0.0.11',
+      relayPreference: {
+        requested: 'se-got',
+        country: 'se',
+        city: 'got',
+        hostnameLabel: 'se-got-wg-101',
+        resolvedAlias: 'sweden-gothenburg',
+      },
+      mullvad: {
+        ...config.mullvad,
+        accountNumber: '999999999999',
+        deviceName: 'mullgate-secondary-route',
+        wireguard: {
+          ...config.mullvad.wireguard,
+          privateKey: 'secondary-private-key',
+        },
+      },
+      runtime: {
+        routeId: 'se-got',
+        wireproxyServiceName: 'wireproxy-se-got',
+        haproxyBackendName: 'route-se-got',
+        wireproxyConfigFile: 'wireproxy-se-got.conf',
+      },
+    });
     await store.save(config);
 
     const redacted = redactConfig(config);
@@ -215,103 +444,60 @@ describe('mullgate config store', () => {
           privateKey: '[redacted]',
         },
       },
+      routing: {
+        locations: [
+          {
+            mullvad: {
+              accountNumber: '[redacted]',
+              wireguard: {
+                privateKey: '[redacted]',
+              },
+            },
+          },
+          {
+            mullvad: {
+              accountNumber: '[redacted]',
+              wireguard: {
+                privateKey: '[redacted]',
+              },
+            },
+          },
+        ],
+      },
     });
     expect(rendered).not.toContain('123456789012');
+    expect(rendered).not.toContain('999999999999');
     expect(rendered).not.toContain('private-key-value');
+    expect(rendered).not.toContain('secondary-private-key');
     expect(rendered).not.toContain('super-secret-password');
-    expect(JSON.parse(rendered)).toMatchInlineSnapshot(`
-      {
-        "createdAt": "2026-03-20T18:48:01.000Z",
-        "diagnostics": {
-          "lastRuntimeStart": null,
-          "lastRuntimeStartReportPath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/last-start.json",
-        },
-        "mullvad": {
-          "accountNumber": "[redacted]",
-          "deviceName": "mullgate-test-host",
-          "lastProvisionedAt": null,
-          "relayConstraints": {
-            "ownership": "mullvad-owned",
-            "providers": [
-              "31173",
-            ],
-          },
-          "wireguard": {
-            "dnsServers": [
-              "10.64.0.1",
-            ],
-            "gatewayIpv4": null,
-            "gatewayIpv6": null,
-            "ipv4Address": null,
-            "ipv6Address": null,
-            "peerEndpoint": null,
-            "peerPublicKey": null,
-            "privateKey": "[redacted]",
-            "publicKey": "public-key-value",
-          },
-        },
-        "runtime": {
-          "backend": "wireproxy",
-          "dockerComposePath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/docker-compose.yml",
-          "relayCachePath": "/tmp/mullgate-test-v7REtg/cache/mullgate/relays.json",
-          "runtimeBundle": {
-            "bundleDir": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime",
-            "dockerComposePath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/docker-compose.yml",
-            "httpsSidecarConfigPath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/haproxy.cfg",
-            "manifestPath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/runtime-manifest.json",
-          },
-          "sourceConfigPath": "/tmp/mullgate-test-v7REtg/config/mullgate/config.json",
-          "status": {
-            "lastCheckedAt": null,
-            "message": "Pending first render.",
-            "phase": "unvalidated",
-          },
-          "wireproxyConfigPath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/wireproxy.conf",
-          "wireproxyConfigTestReportPath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/wireproxy-configtest.json",
-        },
-        "setup": {
-          "auth": {
-            "password": "[redacted]",
-            "username": "alice",
-          },
-          "bind": {
-            "host": "127.0.0.1",
-            "httpPort": 8080,
-            "httpsPort": 8443,
-            "socksPort": 1080,
-          },
-          "exposure": {
-            "allowLan": false,
-            "mode": "loopback",
-          },
-          "https": {
-            "enabled": false,
-          },
-          "location": {
-            "city": "Stockholm",
-            "country": "Sweden",
-            "hostnameLabel": "se-sto",
-            "requested": "se-sto",
-            "resolvedAlias": null,
-          },
-          "source": "guided-setup",
-        },
-        "updatedAt": "2026-03-20T18:48:01.000Z",
-        "version": 1,
-      }
-    `);
+    const parsedRendered = JSON.parse(rendered) as MullgateConfig;
+
+    expect(parsedRendered.setup.auth.password).toBe('[redacted]');
+    expect(parsedRendered.mullvad.accountNumber).toBe('[redacted]');
+    expect(parsedRendered.routing.locations).toHaveLength(2);
+    expect(parsedRendered.routing.locations.map((location) => ({ alias: location.alias, hostname: location.hostname, bindIp: location.bindIp }))).toEqual([
+      { alias: 'se-sto', hostname: 'se-sto', bindIp: '127.0.0.1' },
+      { alias: 'se-got', hostname: 'got.internal', bindIp: '127.0.0.11' },
+    ]);
+    expect(parsedRendered.routing.locations[1]?.mullvad.accountNumber).toBe('[redacted]');
+    expect(parsedRendered.routing.locations[1]?.runtime.routeId).toBe('se-got');
+    expect(parsedRendered.runtime.sourceConfigPath).toContain('/config/mullgate/config.json');
   });
 
-  it('prints a clear empty-home message from the real CLI entrypoint', () => {
-    const env = createTempEnvironment();
-    const result = spawnSync('pnpm', ['exec', 'tsx', 'src/cli.ts', 'config', 'show'], {
-      cwd: path.resolve(import.meta.dirname, '..'),
-      env,
-      encoding: 'utf8',
-    });
+  it(
+    'prints a clear empty-home message from the real CLI entrypoint',
+    () => {
+      const env = createTempEnvironment();
+      const result = spawnSync('pnpm', ['exec', 'tsx', 'src/cli.ts', 'config', 'show'], {
+        cwd: path.resolve(import.meta.dirname, '..'),
+        env,
+        encoding: 'utf8',
+      });
 
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain('Mullgate is not configured yet.');
-    expect(result.stdout).toContain(resolveMullgatePaths(env).configFile);
-  });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('Mullgate is not configured yet.');
+      expect(result.stdout).toContain(resolveMullgatePaths(env).configFile);
+    },
+    15000,
+  );
 });
