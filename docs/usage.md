@@ -289,6 +289,70 @@ Important files:
 | `runtime-manifest.json` | Truthful route/endpoint manifest, including redacted published URLs and backend topology |
 | `last-start.json` | Secret-safe success/failure report for the most recent `mullgate start` attempt |
 
+## Integrated release verifier
+
+Use the integrated Linux-first proof command when you want one end-to-end check for the assembled setup/runtime flow instead of running setup, start, status, doctor, and curl probes manually.
+
+### Required environment variables
+
+| Purpose | Environment variable |
+| --- | --- |
+| Mullvad account number | `MULLGATE_ACCOUNT_NUMBER` |
+| Proxy username | `MULLGATE_PROXY_USERNAME` |
+| Proxy password | `MULLGATE_PROXY_PASSWORD` |
+| Deterministic Mullvad device name | `MULLGATE_DEVICE_NAME` |
+
+### Optional verifier and setup inputs
+
+| Purpose | Environment variable / flag |
+| --- | --- |
+| Routed locations (default `sweden-gothenburg,austria-vienna`) | `MULLGATE_LOCATIONS` |
+| Direct-route check target (default `1.1.1.1`) | `MULLGATE_VERIFY_ROUTE_CHECK_IP` / `--route-check-ip` |
+| Exit-check URL (default `https://am.i.mullvad.net/json`) | `MULLGATE_VERIFY_TARGET_URL` / `--target-url` |
+| HTTPS port (default `8443` when the verifier generates TLS assets) | `MULLGATE_HTTPS_PORT` |
+| Existing HTTPS cert/key paths | `MULLGATE_HTTPS_CERT_PATH`, `MULLGATE_HTTPS_KEY_PATH` |
+| Preserve the temp XDG home even on success | `--keep-temp-home` |
+
+### Command
+
+```bash
+export MULLGATE_ACCOUNT_NUMBER=123456789012
+export MULLGATE_PROXY_USERNAME=alice
+export MULLGATE_PROXY_PASSWORD='replace-me'
+export MULLGATE_DEVICE_NAME=mullgate-s06-proof
+pnpm verify:s06
+```
+
+### What the verifier proves
+
+- non-interactive `mullgate setup` against the real CLI
+- `mullgate config hosts` output and saved hostname → bind IP mappings
+- `mullgate start`, `mullgate status`, and `mullgate doctor`
+- authenticated SOCKS5, HTTP, and HTTPS traffic through the published listeners
+- direct host-route invariance before/after `mullgate start`
+- distinct exits for the first two routed hostnames when they resolve locally to distinct bind IPs
+
+### Route-slot prerequisite
+
+The verifier needs one free Mullvad WireGuard device slot per routed location because setup provisions real per-route WireGuard state. If you keep the default two-route verifier contract, the account must have two free slots before `pnpm verify:s06` can pass.
+
+### HTTPS proof note
+
+If you do not provide `MULLGATE_HTTPS_CERT_PATH` and `MULLGATE_HTTPS_KEY_PATH`, the verifier generates a temporary self-signed cert/key with `openssl`. That keeps the HTTPS proof real without asking you to persist raw TLS key material in the saved failure bundle.
+
+### Hostname-resolution failures
+
+The verifier intentionally does **not** hide hostname drift.
+
+If it fails on hostname resolution:
+
+1. run `pnpm exec tsx src/cli.ts config hosts`
+2. install the emitted hosts block locally, or publish/update DNS when using a base domain
+3. rerun `pnpm exec tsx src/cli.ts doctor`
+4. rerun `pnpm verify:s06`
+
+On failure, the verifier preserves its temp XDG home and prints the paths to the saved config, `runtime-manifest.json`, `last-start.json`, and captured CLI/probe outputs so a later agent can localize the break quickly.
+
 ## Troubleshooting playbook
 
 ### `setup` fails

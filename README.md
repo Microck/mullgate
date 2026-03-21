@@ -21,6 +21,8 @@ Install these before following the quick start:
 - curl
 - A live Mullvad account number
 - A proxy username/password you want Mullgate to require on the published SOCKS5/HTTP/HTTPS listeners
+- Enough free Mullvad WireGuard device slots for the routed locations you will verify (the default two-route proof needs two free slots)
+- `openssl` if you want `pnpm verify:s06` to generate its own temporary HTTPS certificate/key pair
 
 ## Command form used in this repo
 
@@ -100,6 +102,36 @@ Use the commands together:
 
 - `status` summarizes saved config, runtime artifacts, live `docker compose ps` state, exposure entrypoints, and the last recorded start result.
 - `doctor` runs route-aware diagnostics for config validity, exposure posture, hostname resolution, runtime health, and the saved `last-start.json` failure/success report.
+
+## Integrated release verifier
+
+When you want one Linux-first proof command for the assembled product, use:
+
+```bash
+export MULLGATE_ACCOUNT_NUMBER=123456789012
+export MULLGATE_PROXY_USERNAME=alice
+export MULLGATE_PROXY_PASSWORD='replace-me'
+export MULLGATE_DEVICE_NAME=mullgate-s06-proof
+pnpm verify:s06
+```
+
+What the verifier does:
+
+- creates a temp XDG home so it does not reuse your normal Mullgate state
+- runs `mullgate setup --non-interactive` against the real CLI and real Mullvad/Docker/curl prerequisites
+- prints/checks `mullgate config hosts`
+- starts the Docker runtime and verifies `mullgate status` + `mullgate doctor`
+- probes authenticated SOCKS5, HTTP, and HTTPS traffic against `https://am.i.mullvad.net/json`
+- confirms the host route to `1.1.1.1` did not change when Mullgate started
+- compares the exits for the first two routed hostnames when they resolve locally to distinct bind IPs
+
+Verifier notes:
+
+- If `MULLGATE_LOCATIONS` is unset, the verifier defaults to `sweden-gothenburg,austria-vienna`.
+- The verifier needs one free Mullvad WireGuard device slot per routed location. The default two-route proof therefore needs two free slots on the account before setup can succeed.
+- If `MULLGATE_HTTPS_CERT_PATH` and `MULLGATE_HTTPS_KEY_PATH` are unset, the verifier generates a temporary self-signed cert/key via `openssl` so HTTPS proxy proof stays real without persisting raw key material in the saved failure bundle.
+- On failure, the verifier preserves the temp XDG home and prints the paths to the saved config, `runtime-manifest.json`, `last-start.json`, and captured CLI/probe outputs.
+- If the proof fails on hostname resolution, fix that with `mullgate config hosts` (or real DNS when using a base domain), then rerun `pnpm verify:s06`.
 
 ## XDG paths and saved artifacts
 

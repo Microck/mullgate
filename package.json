@@ -11,7 +11,8 @@
     "build": "tsc --pretty false -p tsconfig.build.json",
     "typecheck": "tsc --pretty false --noEmit",
     "test": "tsx scripts/test.ts",
-    "cli": "tsx src/cli.ts"
+    "cli": "tsx src/cli.ts",
+    "verify:s06": "tsx scripts/verify-s06-release.ts"
   },
   "engines": {
     "node": ">=22.0.0"
