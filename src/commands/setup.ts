@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 
 import { ConfigStore } from '../config/store.js';
-import { runSetupFlow, type RunSetupFlowOptions, type SetupFlowResult, type SetupInputValues } from '../app/setup-runner.js';
+import { runSetupFlow, type RawSetupInputValues, type RunSetupFlowOptions, type SetupFlowResult } from '../app/setup-runner.js';
 
 const ACCOUNT_NUMBER_ENV = 'MULLGATE_ACCOUNT_NUMBER';
 const PROXY_PASSWORD_ENV = 'MULLGATE_PROXY_PASSWORD';
@@ -9,6 +9,9 @@ const PROXY_USERNAME_ENV = 'MULLGATE_PROXY_USERNAME';
 const LOCATION_ENV = 'MULLGATE_LOCATION';
 const LOCATIONS_ENV = 'MULLGATE_LOCATIONS';
 const BIND_HOST_ENV = 'MULLGATE_BIND_HOST';
+const ROUTE_BIND_IPS_ENV = 'MULLGATE_ROUTE_BIND_IPS';
+const EXPOSURE_MODE_ENV = 'MULLGATE_EXPOSURE_MODE';
+const EXPOSURE_DOMAIN_ENV = 'MULLGATE_EXPOSURE_BASE_DOMAIN';
 const SOCKS_PORT_ENV = 'MULLGATE_SOCKS_PORT';
 const HTTP_PORT_ENV = 'MULLGATE_HTTP_PORT';
 const HTTPS_PORT_ENV = 'MULLGATE_HTTPS_PORT';
@@ -21,6 +24,9 @@ const RELAYS_URL_ENV = 'MULLGATE_MULLVAD_RELAYS_URL';
 type SetupCommandOptions = {
   readonly accountNumber?: string;
   readonly bindHost?: string;
+  readonly routeBindIp?: string[];
+  readonly exposureMode?: string;
+  readonly baseDomain?: string;
   readonly socksPort?: string;
   readonly httpPort?: string;
   readonly httpsPort?: string;
@@ -41,6 +47,14 @@ export function registerSetupCommand(program: Command): void {
     .description('Run the guided Mullvad-backed setup flow and persist config plus derived runtime artifacts.')
     .option(`--account-number <digits>`, `Override ${ACCOUNT_NUMBER_ENV} or prompt for the Mullvad account number.`)
     .option(`--bind-host <host>`, `Override ${BIND_HOST_ENV} or prompt for the bind host.`)
+    .option(
+      `--route-bind-ip <ip>`,
+      `Append an explicit route bind IPv4 address. Repeat or comma-separate values for multiple routes. ${ROUTE_BIND_IPS_ENV} accepts a comma-separated ordered list.`,
+      collectLocationOption,
+      [],
+    )
+    .option(`--exposure-mode <mode>`, `Override ${EXPOSURE_MODE_ENV} with loopback, private-network, or public.`)
+    .option(`--base-domain <domain>`, `Override ${EXPOSURE_DOMAIN_ENV} for derived route hostnames like route.example.com.`)
     .option(`--socks-port <port>`, `Override ${SOCKS_PORT_ENV} or prompt for the SOCKS5 port.`)
     .option(`--http-port <port>`, `Override ${HTTP_PORT_ENV} or prompt for the HTTP port.`)
     .option(`--https-port <port>`, `Override ${HTTPS_PORT_ENV} for optional HTTPS proxy support.`)
@@ -68,9 +82,17 @@ export function registerSetupCommand(program: Command): void {
 
 function buildRunOptions(options: SetupCommandOptions, env: NodeJS.ProcessEnv, store: ConfigStore): RunSetupFlowOptions {
   const configuredLocations = readLocationInputs(options.location, env);
-  const initialValues: Partial<SetupInputValues> = {
+  const configuredRouteBindIps = readRouteBindIpInputs(options.routeBindIp, env);
+  const initialValues: Partial<RawSetupInputValues> = {
     ...(readOptionalString(options.accountNumber ?? env[ACCOUNT_NUMBER_ENV]) ? { accountNumber: readOptionalString(options.accountNumber ?? env[ACCOUNT_NUMBER_ENV]) } : {}),
     ...(readOptionalString(options.bindHost ?? env[BIND_HOST_ENV]) ? { bindHost: readOptionalString(options.bindHost ?? env[BIND_HOST_ENV]) } : {}),
+    ...(configuredRouteBindIps.length > 0 ? { routeBindIps: configuredRouteBindIps } : {}),
+    ...(readOptionalExposureMode(options.exposureMode ?? env[EXPOSURE_MODE_ENV])
+      ? { exposureMode: readOptionalExposureMode(options.exposureMode ?? env[EXPOSURE_MODE_ENV]) }
+      : {}),
+    ...(readOptionalString(options.baseDomain ?? env[EXPOSURE_DOMAIN_ENV])
+      ? { exposureBaseDomain: readOptionalString(options.baseDomain ?? env[EXPOSURE_DOMAIN_ENV]) }
+      : {}),
     ...(readOptionalNumber(options.socksPort ?? env[SOCKS_PORT_ENV]) !== undefined
       ? { socksPort: readOptionalNumber(options.socksPort ?? env[SOCKS_PORT_ENV]) }
       : {}),
@@ -158,6 +180,16 @@ function readLocationInputs(cliValues: readonly string[] | undefined, env: NodeJ
   return parseLocationEntries(env[LOCATION_ENV]);
 }
 
+function readRouteBindIpInputs(cliValues: readonly string[] | undefined, env: NodeJS.ProcessEnv): string[] {
+  const cliBindIps = (cliValues ?? []).flatMap((value) => parseLocationEntries(value));
+
+  if (cliBindIps.length > 0) {
+    return cliBindIps;
+  }
+
+  return parseLocationEntries(env[ROUTE_BIND_IPS_ENV]);
+}
+
 function parseLocationEntries(value: string | undefined): string[] {
   return (value ?? '')
     .split(',')
@@ -168,6 +200,16 @@ function parseLocationEntries(value: string | undefined): string[] {
 function readOptionalString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function readOptionalExposureMode(value: string | undefined): RawSetupInputValues['exposureMode'] | undefined {
+  const trimmed = value?.trim();
+
+  if (trimmed === 'loopback' || trimmed === 'private-network' || trimmed === 'public') {
+    return trimmed;
+  }
+
+  return undefined;
 }
 
 function readOptionalNumber(value: string | undefined): number | undefined {

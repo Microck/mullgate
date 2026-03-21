@@ -17,9 +17,12 @@ export const authConfigSchema = z.object({
   password: nonEmptyString,
 });
 
+export const exposureModeSchema = z.enum(['loopback', 'private-network', 'public']);
+
 export const exposureConfigSchema = z.object({
-  mode: z.enum(['loopback', 'private-network', 'public']),
+  mode: exposureModeSchema,
   allowLan: z.boolean(),
+  baseDomain: nonEmptyString.nullable().default(null),
 });
 
 export const locationInputSchema = z.object({
@@ -175,6 +178,8 @@ export const mullgateConfigInputSchema = z.object({
   diagnostics: diagnosticsSchema,
 });
 
+export type ExposureMode = z.infer<typeof exposureModeSchema>;
+export type ExposureConfig = z.infer<typeof exposureConfigSchema>;
 export type RoutedLocation = z.infer<typeof routedLocationSchema>;
 export type RoutedLocationInput = z.infer<typeof routedLocationInputSchema>;
 export type MullgateConfig = z.infer<typeof mullgateConfigSchema>;

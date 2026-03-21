@@ -1,5 +1,6 @@
 import { access, readFile } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+import { isIP } from 'node:net';
 import { hostname } from 'node:os';
 
 import { cancel as clackCancel, confirm, intro, isCancel, outro, password, text } from '@clack/prompts';
@@ -7,7 +8,7 @@ import { cancel as clackCancel, confirm, intro, isCancel, outro, password, text 
 import { createLocationAliasCatalog, normalizeLocationToken, resolveLocationAlias, type LocationAliasCatalog, type LocationAliasTarget } from '../domain/location-aliases.js';
 import type { MullgatePaths } from '../config/paths.js';
 import { ConfigStore, normalizeMullgateConfig } from '../config/store.js';
-import { CONFIG_VERSION, type MullgateConfig } from '../config/schema.js';
+import { CONFIG_VERSION, type ExposureMode, type MullgateConfig } from '../config/schema.js';
 import { fetchRelays, type MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
 import { provisionWireguard, type ProvisionWireguardResult } from '../mullvad/provision-wireguard.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
@@ -18,11 +19,15 @@ const DEFAULT_SOCKS_PORT = 1080;
 const DEFAULT_HTTP_PORT = 8080;
 const DEFAULT_HTTPS_PORT = 8443;
 const DEFAULT_PROXY_USERNAME = 'mullgate';
+const DEFAULT_EXPOSURE_MODE: ExposureMode = 'loopback';
 const PROMPT_CANCELLED = Symbol('setup-prompt-cancelled');
 
 export type SetupInputValues = {
   readonly accountNumber: string;
   readonly bindHost: string;
+  readonly routeBindIps: readonly [string, ...string[]];
+  readonly exposureMode: ExposureMode;
+  readonly exposureBaseDomain: string | null;
   readonly socksPort: number;
   readonly httpPort: number;
   readonly username: string;
@@ -33,6 +38,12 @@ export type SetupInputValues = {
   readonly httpsCertPath?: string;
   readonly httpsKeyPath?: string;
   readonly deviceName?: string;
+};
+
+export type RawSetupInputValues = Omit<SetupInputValues, 'routeBindIps' | 'exposureMode' | 'exposureBaseDomain'> & {
+  readonly routeBindIps?: readonly string[];
+  readonly exposureMode?: ExposureMode;
+  readonly exposureBaseDomain?: string | null;
 };
 
 export type SetupRouteMetadata = {
@@ -85,6 +96,7 @@ export type SetupFailure = {
   readonly cancelled?: false;
   readonly phase:
     | 'prompt'
+    | 'setup-validation'
     | 'https-assets'
     | 'relay-fetch'
     | 'relay-normalize'
@@ -125,7 +137,7 @@ export type HttpsAssetCheckResult =
 
 export type RunSetupFlowOptions = {
   readonly store?: ConfigStore;
-  readonly initialValues?: Partial<SetupInputValues>;
+  readonly initialValues?: Partial<RawSetupInputValues>;
   readonly interactive?: boolean;
   readonly provisioningBaseUrl?: string | URL;
   readonly relayCatalogUrl?: string | URL;
@@ -177,10 +189,28 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     };
   }
 
+  const resolvedInputs = resolveSetupInputs(promptValues.value, store.paths.configFile);
+
+  if (!resolvedInputs.ok) {
+    return {
+      ok: false,
+      phase: resolvedInputs.phase,
+      source: resolvedInputs.source,
+      exitCode: 1,
+      paths: store.paths,
+      code: resolvedInputs.code,
+      message: resolvedInputs.message,
+      ...(resolvedInputs.cause ? { cause: resolvedInputs.cause } : {}),
+      ...(resolvedInputs.artifactPath ? { artifactPath: resolvedInputs.artifactPath } : {}),
+    };
+  }
+
+  const setupInputs = resolvedInputs.value;
+
   const httpsCheck = await verifyHttpsAssets({
-    enabled: promptValues.value.httpsPort !== null || Boolean(promptValues.value.httpsCertPath || promptValues.value.httpsKeyPath),
-    certPath: promptValues.value.httpsCertPath,
-    keyPath: promptValues.value.httpsKeyPath,
+    enabled: setupInputs.httpsPort !== null || Boolean(setupInputs.httpsCertPath || setupInputs.httpsKeyPath),
+    certPath: setupInputs.httpsCertPath,
+    keyPath: setupInputs.httpsKeyPath,
   });
 
   if (!httpsCheck.ok) {
@@ -230,9 +260,12 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
   }
 
   const plannedRoutesResult = planSetupRoutes({
-    requestedLocations: promptValues.value.locations,
+    requestedLocations: setupInputs.locations,
+    routeBindIps: setupInputs.routeBindIps,
+    exposureMode: setupInputs.exposureMode,
+    exposureBaseDomain: setupInputs.exposureBaseDomain,
     aliasCatalog: aliasCatalog.value,
-    baseDeviceName: promptValues.value.deviceName ?? defaultDeviceName(),
+    baseDeviceName: setupInputs.deviceName ?? defaultDeviceName(),
   });
 
   if (!plannedRoutesResult.ok) {
@@ -253,7 +286,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
 
   for (const route of plannedRoutesResult.value) {
     const provisionResult = await provisionWireguard({
-      accountNumber: promptValues.value.accountNumber,
+      accountNumber: setupInputs.accountNumber,
       deviceName: route.deviceName,
       ...(options.provisioningBaseUrl ? { baseUrl: options.provisioningBaseUrl } : {}),
       ...(options.fetch ? { fetch: options.fetch } : {}),
@@ -282,7 +315,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
   }
 
   const initialConfig = createCanonicalConfig({
-    inputs: promptValues.value,
+    inputs: setupInputs,
     routes: provisionedRoutes,
     relayCatalog: relayResult.value,
     paths: store.paths,
@@ -383,6 +416,8 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
       `docker compose: ${store.paths.runtimeComposeFile}`,
       `validation report: ${renderResult.artifactPaths.configTestReportPath}`,
       `location: ${provisionedRoutes[0]!.alias}`,
+      `exposure: ${setupInputs.exposureMode}`,
+      `base domain: ${setupInputs.exposureBaseDomain ?? 'n/a'}`,
       `routes: ${provisionedRoutes.length}`,
       ...provisionedRoutes.flatMap((route) => [
         `${route.index + 1}. ${route.alias}`,
@@ -399,6 +434,9 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
 
 function planSetupRoutes(input: {
   requestedLocations: readonly string[];
+  routeBindIps: readonly string[];
+  exposureMode: ExposureMode;
+  exposureBaseDomain: string | null;
   aliasCatalog: LocationAliasCatalog;
   baseDeviceName: string;
 }):
@@ -419,8 +457,8 @@ function planSetupRoutes(input: {
       index,
       requested,
       alias: provisionalAlias,
-      hostname: provisionalAlias,
-      bindIp: deriveLoopbackBindIp(index),
+      hostname: deriveExposureHostname(provisionalAlias, input.routeBindIps[index]!, input.exposureBaseDomain, input.exposureMode),
+      bindIp: input.routeBindIps[index]!,
       deviceName: deriveRouteDeviceName(input.baseDeviceName, provisionalAlias, routeCount),
     } satisfies SetupRouteMetadata;
   });
@@ -447,7 +485,7 @@ function planSetupRoutes(input: {
     plannedRoutes.push({
       ...provisionalRoute,
       alias: routeLabel,
-      hostname: routeLabel,
+      hostname: deriveExposureHostname(routeLabel, provisionalRoute.bindIp, input.exposureBaseDomain, input.exposureMode),
       deviceName: deriveRouteDeviceName(input.baseDeviceName, routeLabel, routeCount),
       resolvedLocation: resolvedLocation.value,
       relayPreference: createRouteRelayPreference(provisionalRoute.requested, routeLabel, resolvedLocation.value),
@@ -633,8 +671,9 @@ function createCanonicalConfig(input: {
         password: input.inputs.password,
       },
       exposure: {
-        mode: 'loopback',
-        allowLan: false,
+        mode: input.inputs.exposureMode,
+        allowLan: input.inputs.exposureMode !== 'loopback',
+        baseDomain: input.inputs.exposureBaseDomain,
       },
       location: structuredClone(primaryRoute.relayPreference),
       https: {
@@ -675,7 +714,7 @@ function createCanonicalConfig(input: {
 
 async function collectSetupInputs(input: {
   interactive: boolean;
-  initialValues?: Partial<SetupInputValues>;
+  initialValues?: Partial<RawSetupInputValues>;
   paths: MullgatePaths;
 }): Promise<
   | typeof PROMPT_CANCELLED
@@ -789,6 +828,45 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
+  const exposureModeInput = await text({
+    message: 'Exposure mode (loopback, private-network, public)',
+    initialValue: values.exposureMode,
+    validate: validateExposureModeInput,
+  });
+
+  if (isCancel(exposureModeInput)) {
+    clackCancel('Setup cancelled.');
+    return PROMPT_CANCELLED;
+  }
+
+  const baseDomainInput = await text({
+    message: 'Base domain for derived route hostnames (optional)',
+    initialValue: values.exposureBaseDomain ?? '',
+    placeholder: 'proxy.example.com',
+    validate: validateBaseDomainInput,
+  });
+
+  if (isCancel(baseDomainInput)) {
+    clackCancel('Setup cancelled.');
+    return PROMPT_CANCELLED;
+  }
+
+  const routeBindIpInput =
+    exposureModeInput.trim() === 'loopback'
+      ? undefined
+      : await text({
+          message: 'Route bind IPs (comma-separated, ordered)',
+          initialValue: values.routeBindIps?.join(', ') ?? values.bindHost,
+          placeholder: '192.168.10.10, 192.168.10.11',
+          validate: (value) =>
+            parseBindIpList(value).length > 0 ? undefined : 'Enter at least one bind IP for non-loopback exposure.',
+        });
+
+  if (isCancel(routeBindIpInput)) {
+    clackCancel('Setup cancelled.');
+    return PROMPT_CANCELLED;
+  }
+
   const configureHttps = await confirm({
     message: 'Configure optional HTTPS certificate paths now?',
     initialValue: Boolean(values.httpsCertPath || values.httpsKeyPath || values.httpsPort !== null),
@@ -852,6 +930,9 @@ async function collectSetupInputs(input: {
     ...values,
     accountNumber: accountNumber.trim(),
     bindHost: bindHost.trim(),
+    routeBindIps: parseBindIpList(routeBindIpInput),
+    exposureMode: parseExposureMode(exposureModeInput.trim()),
+    exposureBaseDomain: normalizeBaseDomain(baseDomainInput.trim()),
     socksPort: Number(socksPort.trim()),
     httpPort: Number(httpPort.trim()),
     username: username.trim(),
@@ -862,7 +943,9 @@ async function collectSetupInputs(input: {
     httpsPort,
   });
 
-  outro(`Will provision ${finalized.locations.join(', ')} and write Mullgate config to ${input.paths.configFile}.`);
+  outro(
+    `Will provision ${finalized.locations.join(', ')} with ${finalized.exposureMode} exposure and write Mullgate config to ${input.paths.configFile}.`,
+  );
 
   return {
     ok: true,
@@ -892,13 +975,17 @@ async function saveConfigSafely(store: ConfigStore, config: MullgateConfig): Pro
   }
 }
 
-function normalizeInitialSetupValues(initialValues: Partial<SetupInputValues> | undefined): Partial<SetupInputValues> {
+function normalizeInitialSetupValues(initialValues: Partial<RawSetupInputValues> | undefined): Partial<RawSetupInputValues> {
   const normalizedLocations = parseLocationList(initialValues?.locations ?? initialValues?.location);
   const locations = (normalizedLocations.length > 0 ? normalizedLocations : ['se-gothenburg']) as [string, ...string[]];
+  const routeBindIps = parseBindIpList(initialValues?.routeBindIps ?? initialValues?.bindHost);
 
   return {
     accountNumber: initialValues?.accountNumber?.trim(),
-    bindHost: initialValues?.bindHost?.trim() || DEFAULT_BIND_HOST,
+    bindHost: initialValues?.bindHost?.trim() || routeBindIps[0] || DEFAULT_BIND_HOST,
+    routeBindIps,
+    exposureMode: initialValues?.exposureMode ?? DEFAULT_EXPOSURE_MODE,
+    exposureBaseDomain: normalizeBaseDomain(initialValues?.exposureBaseDomain),
     socksPort: initialValues?.socksPort ?? DEFAULT_SOCKS_PORT,
     httpPort: initialValues?.httpPort ?? DEFAULT_HTTP_PORT,
     username: initialValues?.username?.trim() || DEFAULT_PROXY_USERNAME,
@@ -912,13 +999,17 @@ function normalizeInitialSetupValues(initialValues: Partial<SetupInputValues> | 
   };
 }
 
-function finalizeSetupValues(values: Partial<SetupInputValues>): SetupInputValues {
+function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputValues {
   const parsedLocations = parseLocationList(values.locations ?? values.location);
   const locations = (parsedLocations.length > 0 ? parsedLocations : ['se-gothenburg']) as [string, ...string[]];
+  const routeBindIps = parseBindIpList(values.routeBindIps ?? values.bindHost);
 
   return {
     accountNumber: values.accountNumber!.trim(),
     bindHost: values.bindHost!.trim(),
+    routeBindIps: (routeBindIps.length > 0 ? routeBindIps : [values.bindHost!.trim()]) as [string, ...string[]],
+    exposureMode: values.exposureMode ?? DEFAULT_EXPOSURE_MODE,
+    exposureBaseDomain: normalizeBaseDomain(values.exposureBaseDomain),
     socksPort: values.socksPort!,
     httpPort: values.httpPort!,
     username: values.username!.trim(),
@@ -945,6 +1036,240 @@ function parseLocationList(value: readonly string[] | string | undefined): strin
   }
 
   return [];
+}
+
+function parseBindIpList(value: readonly string[] | string | undefined): string[] {
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => parseBindIpList(entry));
+  }
+
+  return [];
+}
+
+function resolveSetupInputs(
+  values: SetupInputValues,
+  artifactPath: string,
+):
+  | { readonly ok: true; readonly value: SetupInputValues }
+  | {
+      readonly ok: false;
+      readonly phase: 'setup-validation';
+      readonly source: 'input';
+      readonly code: string;
+      readonly message: string;
+      readonly cause?: string;
+      readonly artifactPath: string;
+    } {
+  const exposureBaseDomain = normalizeBaseDomain(values.exposureBaseDomain);
+
+  if (exposureBaseDomain && !isValidBaseDomain(exposureBaseDomain)) {
+    return {
+      ok: false,
+      phase: 'setup-validation',
+      source: 'input',
+      code: 'INVALID_BASE_DOMAIN',
+      message: `Base domain must be a valid DNS suffix, but received ${exposureBaseDomain}.`,
+      artifactPath,
+    };
+  }
+
+  if (values.exposureMode === 'loopback') {
+    const routeBindIps = values.locations.map((_, index) => deriveLoopbackBindIp(index)) as [string, ...string[]];
+
+    return {
+      ok: true,
+      value: {
+        ...values,
+        bindHost: routeBindIps[0],
+        routeBindIps,
+        exposureBaseDomain,
+      },
+    };
+  }
+
+  const routeCount = values.locations.length;
+  const routeBindIps = parseBindIpList(values.routeBindIps);
+
+  if (routeBindIps.length !== routeCount) {
+    return {
+      ok: false,
+      phase: 'setup-validation',
+      source: 'input',
+      code: 'BIND_IP_COUNT_MISMATCH',
+      message:
+        routeCount === 1
+          ? `Non-loopback exposure requires exactly one explicit bind IP, but received ${routeBindIps.length}.`
+          : `Non-loopback exposure requires one explicit bind IP per routed location (${routeCount} locations, ${routeBindIps.length} bind IPs).`,
+      cause:
+        routeCount === 1
+          ? 'Pass --route-bind-ip <ip> or set MULLGATE_ROUTE_BIND_IPS to a single IPv4 address.'
+          : 'Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a comma-separated ordered list.',
+      artifactPath,
+    };
+  }
+
+  const duplicates = findDuplicateValues(routeBindIps);
+
+  if (duplicates.length > 0) {
+    return {
+      ok: false,
+      phase: 'setup-validation',
+      source: 'input',
+      code: 'AMBIGUOUS_SHARED_BIND_IP',
+      message: `Non-loopback multi-route exposure requires distinct bind IPs, but found duplicates: ${duplicates.join(', ')}.`,
+      cause: 'S03 routing still dispatches by destination bind IP, so multiple remote routes cannot safely share one published IP.',
+      artifactPath,
+    };
+  }
+
+  for (const [index, bindIp] of routeBindIps.entries()) {
+    if (isIP(bindIp) !== 4) {
+      return {
+        ok: false,
+        phase: 'setup-validation',
+        source: 'input',
+        code: 'INVALID_BIND_IP',
+        message: `Route ${index + 1} bind IP must be a valid IPv4 address, but received ${bindIp}.`,
+        artifactPath,
+      };
+    }
+
+    if (values.exposureMode === 'private-network' && !isPrivateIpv4(bindIp)) {
+      return {
+        ok: false,
+        phase: 'setup-validation',
+        source: 'input',
+        code: 'UNSAFE_PRIVATE_BIND_IP',
+        message: `Private-network exposure requires RFC1918 IPv4 bind IPs, but route ${index + 1} uses ${bindIp}.`,
+        cause: 'Use 10.0.0.0/8, 172.16.0.0/12, or 192.168.0.0/16 addresses for private-network exposure.',
+        artifactPath,
+      };
+    }
+
+    if (values.exposureMode === 'public' && !isPublicExposureIpv4(bindIp)) {
+      return {
+        ok: false,
+        phase: 'setup-validation',
+        source: 'input',
+        code: 'UNSAFE_PUBLIC_BIND_IP',
+        message: `Public exposure requires publicly routable IPv4 bind IPs, but route ${index + 1} uses ${bindIp}.`,
+        cause: 'Choose a real public IPv4 address for each route or switch to private-network / loopback exposure.',
+        artifactPath,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      ...values,
+      bindHost: routeBindIps[0]!,
+      routeBindIps: routeBindIps as [string, ...string[]],
+      exposureBaseDomain,
+    },
+  };
+}
+
+function validateExposureModeInput(value: string | undefined): string | undefined {
+  const normalized = (value ?? '').trim();
+  return normalized === 'loopback' || normalized === 'private-network' || normalized === 'public'
+    ? undefined
+    : 'Enter loopback, private-network, or public.';
+}
+
+function parseExposureMode(value: string): ExposureMode {
+  if (value === 'loopback' || value === 'private-network' || value === 'public') {
+    return value;
+  }
+
+  return DEFAULT_EXPOSURE_MODE;
+}
+
+function validateBaseDomainInput(value: string | undefined): string | undefined {
+  const normalized = normalizeBaseDomain(value);
+  return !normalized || isValidBaseDomain(normalized) ? undefined : 'Enter a valid DNS suffix like proxy.example.com.';
+}
+
+function normalizeBaseDomain(value: string | null | undefined): string | null {
+  const trimmed = value?.trim().toLowerCase().replace(/\.+$/, '');
+  return trimmed ? trimmed : null;
+}
+
+function isValidBaseDomain(value: string): boolean {
+  if (value.length > 253 || value.includes('..')) {
+    return false;
+  }
+
+  const labels = value.split('.');
+
+  return (
+    labels.length >= 2 &&
+    labels.every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label)) &&
+    !/^\d+$/.test(labels.at(-1) ?? '')
+  );
+}
+
+function deriveExposureHostname(alias: string, bindIp: string, baseDomain: string | null, exposureMode: ExposureMode): string {
+  if (baseDomain) {
+    return `${alias}.${baseDomain}`;
+  }
+
+  return exposureMode === 'loopback' ? alias : bindIp;
+}
+
+function findDuplicateValues(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+
+  for (const value of values) {
+    if (seen.has(value)) {
+      duplicates.add(value);
+      continue;
+    }
+
+    seen.add(value);
+  }
+
+  return [...duplicates].sort();
+}
+
+function isPrivateIpv4(value: string): boolean {
+  const [first, second] = parseIpv4Octets(value);
+
+  return first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
+}
+
+function isPublicExposureIpv4(value: string): boolean {
+  const [first, second] = parseIpv4Octets(value);
+
+  if (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 100 && second >= 64 && second <= 127) ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 0) ||
+    (first === 192 && second === 168) ||
+    (first === 198 && (second === 18 || second === 19)) ||
+    first >= 224
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function parseIpv4Octets(value: string): [number, number, number, number] {
+  const octets = value.split('.').map((segment) => Number(segment));
+  return [octets[0]!, octets[1]!, octets[2]!, octets[3]!];
 }
 
 function chooseUniqueRouteLabel(candidate: string, usedRouteLabels: Set<string>): string {

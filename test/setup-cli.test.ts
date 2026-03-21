@@ -274,6 +274,8 @@ describe('mullgate setup CLI flow', () => {
           docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
           validation report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
           location: sweden-gothenburg
+          exposure: loopback
+          base domain: n/a
           routes: 1
           1. sweden-gothenburg
              hostname: sweden-gothenburg
@@ -437,6 +439,8 @@ relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
 docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
 validation report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
 location: sweden-gothenburg
+exposure: loopback
+base domain: n/a
 routes: 2
 1. sweden-gothenburg
    hostname: sweden-gothenburg
@@ -459,6 +463,11 @@ validation: wireproxy-binary/configtest"
         ]);
 
         expect(savedConfig.routing.locations).toHaveLength(2);
+        expect(savedConfig.setup.exposure).toEqual({
+          mode: 'loopback',
+          allowLan: false,
+          baseDomain: null,
+        });
         expect(savedConfig.routing.locations.map((location) => ({
           alias: location.alias,
           hostname: location.hostname,
@@ -531,6 +540,172 @@ routes: 2
         `);
       },
     );
+  });
+
+  it('persists a domain-backed multi-route exposure contract from the real CLI flow', async () => {
+    const env = createTempEnvironment();
+    await createFakeWireproxyBinary(env);
+
+    const provisionFixture = JSON.parse(await readTextFixture('wg-provision-response.txt')) as Record<string, unknown>;
+    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+    let provisionCount = 0;
+
+    await withJsonServer(
+      {
+        '/wg': (request) => {
+          provisionCount += 1;
+          const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
+
+          return {
+            body: JSON.stringify({
+              ...provisionFixture,
+              id: `device-${provisionCount}`,
+              pubkey: payload.pubkey,
+              name: payload.name ?? `mullgate-route-${provisionCount}`,
+              ipv4_address: `10.64.22.${20 + provisionCount}/32`,
+            }),
+          };
+        },
+        '/relays': () => ({
+          body: JSON.stringify(relayFixture),
+        }),
+      },
+      async (baseUrl) => {
+        const setupResult = await runCli(
+          [
+            'setup',
+            '--non-interactive',
+            '--device-name',
+            'mullgate-domain',
+            '--exposure-mode',
+            'private-network',
+            '--base-domain',
+            'proxy.example.com',
+            '--route-bind-ip',
+            '192.168.10.10',
+            '--route-bind-ip',
+            '192.168.10.11',
+            '--location',
+            'sweden-gothenburg',
+            '--location',
+            'austria-vienna',
+            '--mullvad-wg-url',
+            new URL('/wg', baseUrl).toString(),
+            '--mullvad-relays-url',
+            new URL('/relays', baseUrl).toString(),
+          ],
+          {
+            env: {
+              ...env,
+              MULLGATE_ACCOUNT_NUMBER: '123456789012',
+              MULLGATE_PROXY_USERNAME: 'alice',
+              MULLGATE_PROXY_PASSWORD: 'domain-secret',
+            },
+          },
+        );
+
+        expect(setupResult.status).toBe(0);
+        expect(setupResult.stderr).toBe('');
+        expect('\n' + normalizeOutput(setupResult.stdout, env)).toMatchInlineSnapshot(`
+"\nMullgate setup completed.
+phase: setup-complete
+source: guided-setup
+config: /tmp/mullgate-home/config/mullgate/config.json
+wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+validation report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
+location: sweden-gothenburg
+exposure: private-network
+base domain: proxy.example.com
+routes: 2
+1. sweden-gothenburg
+   hostname: sweden-gothenburg.proxy.example.com
+   bind ip: 192.168.10.10
+   device: mullgate-domain-sweden-gothenburg
+   tunnel ipv4: 10.64.22.21/32
+2. austria-vienna
+   hostname: austria-vienna.proxy.example.com
+   bind ip: 192.168.10.11
+   device: mullgate-domain-austria-vienna
+   tunnel ipv4: 10.64.22.22/32
+relay: se-got-wg-101
+validation: wireproxy-binary/configtest"
+`);
+
+        const savedConfig = await readSavedConfig(env);
+        const [showResult, hostsResult] = await Promise.all([runCli(['config', 'show'], { env }), runCli(['config', 'hosts'], { env })]);
+
+        expect(savedConfig.setup.exposure).toEqual({
+          mode: 'private-network',
+          allowLan: true,
+          baseDomain: 'proxy.example.com',
+        });
+        expect(savedConfig.setup.bind.host).toBe('192.168.10.10');
+        expect(savedConfig.routing.locations.map((location) => ({ hostname: location.hostname, bindIp: location.bindIp }))).toEqual([
+          { hostname: 'sweden-gothenburg.proxy.example.com', bindIp: '192.168.10.10' },
+          { hostname: 'austria-vienna.proxy.example.com', bindIp: '192.168.10.11' },
+        ]);
+        expect(showResult.stdout).toContain('proxy.example.com');
+        expect('\n' + normalizeOutput(hostsResult.stdout, env)).toMatchInlineSnapshot(`
+          "
+          Mullgate routed hosts
+          phase: inspect-config
+          source: canonical-config
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          routes: 2
+          hostname -> bind ip
+          1. sweden-gothenburg.proxy.example.com -> 192.168.10.10 (alias: sweden-gothenburg, route id: sweden-gothenburg)
+          2. austria-vienna.proxy.example.com -> 192.168.10.11 (alias: austria-vienna, route id: austria-vienna)
+
+          copy/paste hosts block
+          192.168.10.10 sweden-gothenburg.proxy.example.com
+          192.168.10.11 austria-vienna.proxy.example.com"
+        `);
+      },
+    );
+  });
+
+  it('fails clearly on invalid non-loopback bind ip input before provisioning', async () => {
+    const env = createTempEnvironment();
+
+    const setupResult = await runCli(
+      [
+        'setup',
+        '--non-interactive',
+        '--exposure-mode',
+        'private-network',
+        '--bind-host',
+        '192.168.10.10',
+        '--location',
+        'sweden-gothenburg',
+        '--location',
+        'austria-vienna',
+      ],
+      {
+        env: {
+          ...env,
+          MULLGATE_ACCOUNT_NUMBER: '123456789012',
+          MULLGATE_PROXY_USERNAME: 'alice',
+          MULLGATE_PROXY_PASSWORD: 'missing-bind-secret',
+        },
+      },
+    );
+
+    expect(setupResult.status).toBe(1);
+    expect(setupResult.stdout).toBe('');
+    expect(setupResult.stderr).not.toContain('123456789012');
+    expect(setupResult.stderr).not.toContain('missing-bind-secret');
+    expect('\n' + normalizeOutput(setupResult.stderr, env)).toMatchInlineSnapshot(`
+"\nMullgate setup failed.
+phase: setup-validation
+source: input
+code: BIND_IP_COUNT_MISMATCH
+artifact: /tmp/mullgate-home/config/mullgate/config.json
+reason: Non-loopback exposure requires one explicit bind IP per routed location (2 locations, 1 bind IPs).
+config: /tmp/mullgate-home/config/mullgate/config.json
+cause: Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a comma-separated ordered list."
+`);
   });
 
   it('reports route-aware provisioning failures without leaking secrets', async () => {

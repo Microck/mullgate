@@ -170,6 +170,10 @@ export function normalizeMullgateConfig(input: unknown): MullgateConfig {
     ...parsed,
     setup: {
       ...parsed.setup,
+      bind: {
+        ...parsed.setup.bind,
+        host: primaryLocation.bindIp,
+      },
       location: structuredClone(primaryLocation.relayPreference),
     },
     mullvad: structuredClone(primaryLocation.mullvad),
@@ -202,6 +206,13 @@ export function syncLegacyMirrorsToRouting(config: MullgateConfig): MullgateConf
 
   return normalizeMullgateConfig({
     ...config,
+    setup: {
+      ...config.setup,
+      bind: {
+        ...config.setup.bind,
+        host: firstLocation.bindIp,
+      },
+    },
     routing: {
       locations: [updatedPrimary, ...remainingLocations],
     },

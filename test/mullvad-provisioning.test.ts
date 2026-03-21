@@ -132,6 +132,7 @@ function createConfig(paths: ReturnType<typeof resolveMullgatePaths>, wireguard:
       exposure: {
         mode: 'loopback',
         allowLan: false,
+        baseDomain: null,
       },
       location: {
         requested: 'sweden-gothenburg',
@@ -663,6 +664,12 @@ Password = PROXY_PASSWORD
         ]);
 
         const savedConfig = JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
+        expect(savedConfig.setup.exposure).toEqual({
+          mode: 'loopback',
+          allowLan: false,
+          baseDomain: null,
+        });
+        expect(savedConfig.setup.bind.host).toBe('127.0.0.1');
         expect(savedConfig.routing.locations).toHaveLength(2);
         expect(savedConfig.routing.locations[0]!.mullvad.deviceName).toBe('mullgate-lab-sweden-gothenburg');
         expect(savedConfig.routing.locations[1]!.mullvad.deviceName).toBe('mullgate-lab-austria-vienna');
@@ -678,6 +685,127 @@ Password = PROXY_PASSWORD
         expect(savedConfig.mullvad.deviceName).toBe('mullgate-lab-sweden-gothenburg');
       },
     );
+  });
+
+  it('persists public direct-ip exposure with an explicit bind ip for single-route setup', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const store = new ConfigStore(paths);
+    const provisionFixture = JSON.parse(await readTextFixture('wg-provision-response.txt')) as Record<string, unknown>;
+    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+
+    await withJsonServer(
+      {
+        '/wg': (request) => {
+          const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
+
+          return {
+            body: JSON.stringify({
+              ...provisionFixture,
+              id: 'device-public',
+              pubkey: payload.pubkey,
+              name: payload.name ?? 'mullgate-public',
+              ipv4_address: '10.64.30.44/32',
+            }),
+          };
+        },
+        '/relays': () => ({
+          body: JSON.stringify(relayFixture),
+        }),
+      },
+      async (baseUrl) => {
+        const result = await runSetupFlow({
+          store,
+          interactive: false,
+          initialValues: {
+            accountNumber: '123456789012',
+            username: 'alice',
+            password: 'public-secret',
+            bindHost: '44.55.66.77',
+            exposureMode: 'public',
+            locations: ['sweden-gothenburg'] as [string, ...string[]],
+            deviceName: 'mullgate-public',
+          },
+          provisioningBaseUrl: new URL('/wg', baseUrl),
+          relayCatalogUrl: new URL('/relays', baseUrl),
+          checkedAt: '2026-03-20T18:45:30.000Z',
+          validateOptions: {
+            spawn: createSpawnStub({
+              docker: () => ({
+                status: 0,
+                stdout: 'docker wireproxy configtest ok\n',
+              }),
+            }),
+          },
+        });
+
+        expect(result.ok).toBe(true);
+
+        if (!result.ok) {
+          return;
+        }
+
+        expect(result.routes).toEqual([
+          {
+            index: 0,
+            requested: 'sweden-gothenburg',
+            alias: 'sweden-gothenburg',
+            hostname: '44.55.66.77',
+            bindIp: '44.55.66.77',
+            deviceName: 'mullgate-public',
+            publicKey: result.routes[0]!.publicKey,
+            ipv4Address: '10.64.30.44/32',
+            ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
+          },
+        ]);
+
+        const savedConfig = JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
+        expect(savedConfig.setup.exposure).toEqual({
+          mode: 'public',
+          allowLan: true,
+          baseDomain: null,
+        });
+        expect(savedConfig.setup.bind.host).toBe('44.55.66.77');
+        expect(savedConfig.routing.locations).toEqual([
+          expect.objectContaining({
+            alias: 'sweden-gothenburg',
+            hostname: '44.55.66.77',
+            bindIp: '44.55.66.77',
+          }),
+        ]);
+      },
+    );
+  });
+
+  it('fails setup validation when private-network exposure omits per-route bind ips', async () => {
+    const env = createTempEnvironment();
+    const store = new ConfigStore(resolveMullgatePaths(env));
+
+    const result = await runSetupFlow({
+      store,
+      interactive: false,
+      initialValues: {
+        accountNumber: '123456789012',
+        username: 'alice',
+        password: 'missing-bind-secret',
+        bindHost: '192.168.10.10',
+        exposureMode: 'private-network',
+        locations: ['sweden-gothenburg', 'austria-vienna'] as [string, ...string[]],
+      },
+      checkedAt: '2026-03-20T18:45:45.000Z',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      phase: 'setup-validation',
+      source: 'input',
+      exitCode: 1,
+      paths: store.paths,
+      code: 'BIND_IP_COUNT_MISMATCH',
+      message: 'Non-loopback exposure requires one explicit bind IP per routed location (2 locations, 1 bind IPs).',
+      cause: 'Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a comma-separated ordered list.',
+      artifactPath: store.paths.configFile,
+    });
   });
 
   it('returns route-specific provisioning failure metadata for the second route', async () => {

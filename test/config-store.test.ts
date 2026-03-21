@@ -49,6 +49,7 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
       exposure: {
         mode: 'loopback',
         allowLan: false,
+        baseDomain: null,
       },
       location: {
         requested: 'se-sto',
@@ -149,9 +150,19 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
   };
 }
 
-function createLegacyFixtureConfig(env: NodeJS.ProcessEnv): Omit<MullgateConfig, 'routing'> {
+function createLegacyFixtureConfig(env: NodeJS.ProcessEnv): Record<string, unknown> {
   const { routing: _routing, ...legacy } = createFixtureConfig(env);
-  return legacy;
+
+  return {
+    ...legacy,
+    setup: {
+      ...legacy.setup,
+      exposure: {
+        mode: legacy.setup.exposure.mode,
+        allowLan: legacy.setup.exposure.allowLan,
+      },
+    },
+  };
 }
 
 afterEach(async () => {
@@ -259,6 +270,7 @@ describe('mullgate config store', () => {
       },
     });
     expect(loaded.config.setup.location).toEqual(loaded.config.routing.locations[0]?.relayPreference);
+    expect(loaded.config.setup.exposure.baseDomain).toBeNull();
     expect(loaded.config.mullvad).toEqual(loaded.config.routing.locations[0]?.mullvad);
 
     await store.save(loaded.config);
@@ -300,6 +312,15 @@ describe('mullgate config store', () => {
       updatedAt: '2026-03-20T18:49:01.000Z',
       setup: {
         ...initial.setup,
+        bind: {
+          ...initial.setup.bind,
+          host: '198.51.100.1',
+        },
+        exposure: {
+          mode: 'private-network',
+          allowLan: true,
+          baseDomain: 'proxy.example.com',
+        },
         location: {
           requested: 'stale-top-level-location',
           resolvedAlias: null,
@@ -367,6 +388,14 @@ describe('mullgate config store', () => {
 
     expect(saved).toMatchObject({
       setup: {
+        bind: {
+          host: '127.0.0.10',
+        },
+        exposure: {
+          mode: 'private-network',
+          allowLan: true,
+          baseDomain: 'proxy.example.com',
+        },
         location: {
           requested: 'se-got',
           resolvedAlias: 'sweden-gothenburg',

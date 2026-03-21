@@ -36,6 +36,7 @@ function createFixtureConfig(): MullgateConfig {
       exposure: {
         mode: 'loopback',
         allowLan: false,
+        baseDomain: null,
       },
       location: {
         requested: 'sweden-gothenburg',
