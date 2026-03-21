@@ -194,6 +194,10 @@ function tryParseJson(raw: string): unknown {
   }
 }
 
+function parseFormBody(raw: string): Record<string, string> {
+  return Object.fromEntries(new URLSearchParams(raw).entries());
+}
+
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
@@ -209,7 +213,7 @@ describe('mullgate setup CLI flow', () => {
     await withJsonServer(
       {
         '/wg': (request) => {
-          const payload = request.body as { pubkey: string; name?: string };
+          const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
           return {
             body: JSON.stringify({
               ...JSON.parse(provisionFixture),
@@ -323,7 +327,7 @@ reason: Validated via wireproxy-binary/configtest."
     await withJsonServer(
       {
         '/wg': (request) => {
-          const payload = request.body as { pubkey: string; name?: string };
+          const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
           return {
             body: JSON.stringify({
               ...JSON.parse(provisionFixture),
@@ -403,7 +407,7 @@ reason: Validated via wireproxy-binary/configtest."
     await withJsonServer(
       {
         '/wg': (request) => {
-          const payload = request.body as { pubkey: string; name?: string };
+          const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
           return {
             body: JSON.stringify({
               ...JSON.parse(provisionFixture),

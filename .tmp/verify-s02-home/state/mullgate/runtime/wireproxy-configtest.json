@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "phase": "validation",
+  "source": "docker",
+  "status": "success",
+  "checkedAt": "2026-03-21T01:59:38.494Z",
+  "target": "/home/ubuntu/workspace/mullvad-proxy/.tmp/verify-s02-home/state/mullgate/runtime/wireproxy.conf",
+  "validator": "docker-wireproxy-configtest",
+  "issues": []
+}

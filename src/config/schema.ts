@@ -73,7 +73,7 @@ export const runtimeArtifactSchema = z.object({
   dockerComposePath: nonEmptyString.nullable(),
   runtimeBundle: runtimeBundleArtifactSchema,
   status: z.object({
-    phase: z.enum(['unvalidated', 'validated', 'error']),
+    phase: z.enum(['unvalidated', 'validated', 'starting', 'running', 'error']),
     lastCheckedAt: timestampString.nullable(),
     message: nonEmptyString.nullable(),
   }),
@@ -84,8 +84,12 @@ export const runtimeStartDiagnosticSchema = z.object({
   status: z.enum(['success', 'failure']),
   phase: nonEmptyString,
   source: nonEmptyString,
+  code: nonEmptyString.nullable(),
   message: nonEmptyString,
+  cause: nonEmptyString.nullable(),
   artifactPath: nonEmptyString.nullable(),
+  composeFilePath: nonEmptyString.nullable(),
+  validationSource: z.enum(['wireproxy-binary/configtest', 'docker/configtest', 'internal-syntax']).nullable(),
   command: nonEmptyString.nullable(),
 });
 
@@ -93,6 +97,8 @@ export const diagnosticsSchema = z.object({
   lastRuntimeStartReportPath: nonEmptyString,
   lastRuntimeStart: runtimeStartDiagnosticSchema.nullable(),
 });
+
+export type RuntimeStartDiagnostic = z.infer<typeof runtimeStartDiagnosticSchema>;
 
 export const guidedSetupSchema = z.object({
   source: z.literal('guided-setup'),

@@ -820,7 +820,7 @@ function readArrayProperty(value: unknown, key: string): unknown[] | null {
     : null;
 }
 
-function summarizeValidationSource(result: Awaited<ReturnType<typeof validateWireproxyConfig>>):
+export function summarizeValidationSource(result: Awaited<ReturnType<typeof validateWireproxyConfig>>):
   | 'wireproxy-binary/configtest'
   | 'docker/configtest'
   | 'internal-syntax' {

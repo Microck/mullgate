@@ -1,0 +1,13 @@
+{
+  "attemptedAt": "2026-03-21T01:59:38.494Z",
+  "status": "success",
+  "phase": "compose-launch",
+  "source": "docker-compose",
+  "code": null,
+  "message": "Docker Compose launched the Mullgate runtime bundle in detached mode.",
+  "cause": null,
+  "artifactPath": "/home/ubuntu/workspace/mullvad-proxy/.tmp/verify-s02-home/state/mullgate/runtime/docker-compose.yml",
+  "composeFilePath": "/home/ubuntu/workspace/mullvad-proxy/.tmp/verify-s02-home/state/mullgate/runtime/docker-compose.yml",
+  "validationSource": "docker/configtest",
+  "command": "docker compose --file /home/ubuntu/workspace/mullvad-proxy/.tmp/verify-s02-home/state/mullgate/runtime/docker-compose.yml up --detach"
+}

@@ -305,6 +305,7 @@ function buildDockerCompose(
     'services:',
     `  ${WIREPROXY_SERVICE}:`,
     `    image: ${WIREPROXY_IMAGE}`,
+    '    user: "0:0"',
     '    restart: unless-stopped',
     '    command:',
     '      - --config',

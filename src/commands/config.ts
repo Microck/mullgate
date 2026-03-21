@@ -5,7 +5,7 @@ import type { Command } from 'commander';
 import { formatRedactedConfig, redactConfig } from '../config/redact.js';
 import { ConfigStore, type LoadConfigResult } from '../config/store.js';
 import type { MullgateConfig } from '../config/schema.js';
-import { loadStoredRelayCatalog, verifyHttpsAssets, withRuntimeStatus } from '../app/setup-runner.js';
+import { loadStoredRelayCatalog, summarizeValidationSource, verifyHttpsAssets, withRuntimeStatus } from '../app/setup-runner.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
 import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
 
@@ -467,21 +467,6 @@ function renderValidationError(result: ConfigValidationFailure): string {
     `reason: ${result.message}`,
     ...(result.cause ? [`cause: ${result.cause}`] : []),
   ].join('\n');
-}
-
-function summarizeValidationSource(result: Awaited<ReturnType<typeof validateWireproxyConfig>>):
-  | 'wireproxy-binary/configtest'
-  | 'docker/configtest'
-  | 'internal-syntax' {
-  if (result.source === 'wireproxy-binary') {
-    return 'wireproxy-binary/configtest';
-  }
-
-  if (result.source === 'docker') {
-    return 'docker/configtest';
-  }
-
-  return 'internal-syntax';
 }
 
 function formatOutputValue(value: unknown): string {

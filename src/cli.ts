@@ -4,6 +4,7 @@ import { Command } from 'commander';
 
 import { registerConfigCommands } from './commands/config.js';
 import { registerSetupCommand } from './commands/setup.js';
+import { registerStartCommand } from './commands/start.js';
 
 export function createCli(): Command {
   const program = new Command();
@@ -14,6 +15,7 @@ export function createCli(): Command {
     .showHelpAfterError();
 
   registerSetupCommand(program);
+  registerStartCommand(program);
   registerConfigCommands(program);
 
   return program;

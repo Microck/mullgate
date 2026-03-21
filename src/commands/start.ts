@@ -1,0 +1,525 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
+import type { Command } from 'commander';
+
+import {
+  loadStoredRelayCatalog,
+  summarizeValidationSource,
+  verifyHttpsAssets,
+  withRuntimeStatus,
+} from '../app/setup-runner.js';
+import type { MullgatePaths } from '../config/paths.js';
+import { redactSensitiveText } from '../config/redact.js';
+import { ConfigStore } from '../config/store.js';
+import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
+import { startDockerRuntime, type DockerRuntimeResult, type StartDockerRuntimeOptions } from '../runtime/docker-runtime.js';
+import { renderRuntimeBundle } from '../runtime/render-runtime-bundle.js';
+import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
+import { validateWireproxyConfig, type ValidateWireproxyOptions } from '../runtime/validate-wireproxy.js';
+
+type ValidationSourceSummary = ReturnType<typeof summarizeValidationSource>;
+
+type WritableTextSink = {
+  write(chunk: string): unknown;
+};
+
+export type StartSuccess = {
+  readonly ok: true;
+  readonly phase: 'compose-launch';
+  readonly source: 'docker-compose';
+  readonly exitCode: 0;
+  readonly paths: MullgatePaths;
+  readonly config: MullgateConfig;
+  readonly report: RuntimeStartDiagnostic;
+  readonly validationSource: ValidationSourceSummary;
+  readonly composeFilePath: string;
+  readonly manifestPath: string;
+  readonly validationReportPath: string;
+  readonly summary: string;
+};
+
+export type StartFailure = {
+  readonly ok: false;
+  readonly exitCode: 1;
+  readonly phase:
+    | 'load-config'
+    | 'read-config'
+    | 'parse-config'
+    | 'https-assets'
+    | 'relay-normalize'
+    | 'artifact-render'
+    | 'validation'
+    | 'compose-detect'
+    | 'compose-launch'
+    | 'persist-config';
+  readonly source: string;
+  readonly paths: MullgatePaths;
+  readonly message: string;
+  readonly attemptedAt?: string;
+  readonly artifactPath?: string;
+  readonly cause?: string;
+  readonly code?: string | null;
+  readonly command?: string | null;
+  readonly composeFilePath?: string | null;
+  readonly validationSource?: ValidationSourceSummary | null;
+  readonly config?: MullgateConfig;
+  readonly report?: RuntimeStartDiagnostic;
+};
+
+export type StartFlowResult = StartSuccess | StartFailure;
+
+export type StartCommandDependencies = {
+  readonly store?: ConfigStore;
+  readonly checkedAt?: string;
+  readonly startRuntime?: (options: StartDockerRuntimeOptions) => Promise<DockerRuntimeResult>;
+  readonly validateOptions?: Pick<ValidateWireproxyOptions, 'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'spawn'>;
+  readonly stdout?: WritableTextSink;
+  readonly stderr?: WritableTextSink;
+};
+
+export function registerStartCommand(program: Command, dependencies: StartCommandDependencies = {}): void {
+  program
+    .command('start')
+    .description('Re-render derived runtime artifacts from saved config, validate them, and launch the Docker runtime bundle.')
+    .action(createStartCommandAction(dependencies));
+}
+
+export function createStartCommandAction(dependencies: StartCommandDependencies = {}): () => Promise<void> {
+  return async () => {
+    const result = await runStartFlow(dependencies);
+    writeStartResult(result, dependencies);
+    process.exitCode = result.exitCode;
+  };
+}
+
+export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 'stdout' | 'stderr'> = {}): Promise<StartFlowResult> {
+  const store = dependencies.store ?? new ConfigStore();
+  const loadResult = await store.load();
+
+  if (!loadResult.ok) {
+    return {
+      ok: false,
+      exitCode: 1,
+      phase: loadResult.phase,
+      source: loadResult.source,
+      paths: store.paths,
+      artifactPath: loadResult.artifactPath,
+      message: loadResult.message,
+    };
+  }
+
+  if (loadResult.source === 'empty') {
+    return {
+      ok: false,
+      exitCode: 1,
+      phase: loadResult.phase,
+      source: loadResult.source,
+      paths: store.paths,
+      artifactPath: store.paths.configFile,
+      message: loadResult.message,
+    };
+  }
+
+  const attemptedAt = dependencies.checkedAt ?? new Date().toISOString();
+  const startRuntime = dependencies.startRuntime ?? startDockerRuntime;
+  const baseConfig = synchronizeRuntimePaths(loadResult.config, store.paths);
+
+  const httpsCheck = await verifyHttpsAssets({
+    enabled: baseConfig.setup.https.enabled,
+    certPath: baseConfig.setup.https.certPath,
+    keyPath: baseConfig.setup.https.keyPath,
+  });
+
+  if (!httpsCheck.ok) {
+    return persistFailureOutcome({
+      store,
+      config: baseConfig,
+      attemptedAt,
+      phase: httpsCheck.phase,
+      source: httpsCheck.source,
+      message: httpsCheck.message,
+      cause: httpsCheck.cause,
+      artifactPath: httpsCheck.artifactPath,
+      composeFilePath: store.paths.runtimeComposeFile,
+    });
+  }
+
+  const relayCatalog = await loadStoredRelayCatalog(store.paths.provisioningCacheFile);
+
+  if (!relayCatalog.ok) {
+    return persistFailureOutcome({
+      store,
+      config: baseConfig,
+      attemptedAt,
+      phase: relayCatalog.phase,
+      source: relayCatalog.source,
+      message: relayCatalog.message,
+      cause: relayCatalog.cause,
+      artifactPath: relayCatalog.artifactPath,
+      composeFilePath: store.paths.runtimeComposeFile,
+    });
+  }
+
+  const wireproxyRender = await renderWireproxyArtifacts({
+    config: baseConfig,
+    relayCatalog: relayCatalog.value,
+    paths: store.paths,
+    generatedAt: attemptedAt,
+  });
+
+  if (!wireproxyRender.ok) {
+    return persistFailureOutcome({
+      store,
+      config: baseConfig,
+      attemptedAt,
+      phase: wireproxyRender.phase,
+      source: wireproxyRender.source,
+      code: wireproxyRender.code,
+      message: wireproxyRender.message,
+      cause: wireproxyRender.cause,
+      artifactPath: wireproxyRender.artifactPath,
+      composeFilePath: store.paths.runtimeComposeFile,
+    });
+  }
+
+  const runtimeBundle = await renderRuntimeBundle({
+    config: baseConfig,
+    paths: store.paths,
+    generatedAt: attemptedAt,
+  });
+
+  if (!runtimeBundle.ok) {
+    return persistFailureOutcome({
+      store,
+      config: baseConfig,
+      attemptedAt,
+      phase: runtimeBundle.phase,
+      source: runtimeBundle.source,
+      code: runtimeBundle.code,
+      message: runtimeBundle.message,
+      cause: runtimeBundle.cause,
+      artifactPath: runtimeBundle.artifactPath,
+      composeFilePath: store.paths.runtimeComposeFile,
+    });
+  }
+
+  const validationResult = await validateWireproxyConfig({
+    configPath: wireproxyRender.artifactPaths.wireproxyConfigPath,
+    configText: wireproxyRender.wireproxyConfig,
+    reportPath: wireproxyRender.artifactPaths.configTestReportPath,
+    checkedAt: attemptedAt,
+    ...dependencies.validateOptions,
+  });
+  const validationSource = summarizeValidationSource(validationResult);
+
+  if (!validationResult.ok) {
+    return persistFailureOutcome({
+      store,
+      config: baseConfig,
+      attemptedAt,
+      phase: validationResult.phase,
+      source: validationResult.source,
+      message: 'Rendered wireproxy config failed validation before Docker launch.',
+      cause: validationResult.cause,
+      artifactPath: validationResult.target,
+      composeFilePath: runtimeBundle.artifactPaths.dockerComposePath,
+      validationSource,
+    });
+  }
+
+  const startingConfig = withRuntimeStatus(
+    baseConfig,
+    'starting',
+    attemptedAt,
+    `Validated via ${validationSource}; launching Docker Compose from ${runtimeBundle.artifactPaths.dockerComposePath}.`,
+  );
+  const startingPersist = await persistConfigOnly(store, startingConfig);
+
+  if (!startingPersist.ok) {
+    return startingPersist;
+  }
+
+  const runtimeResult = await startRuntime({
+    composeFilePath: runtimeBundle.artifactPaths.dockerComposePath,
+    checkedAt: attemptedAt,
+    ...(dependencies.validateOptions?.dockerBinary ? { dockerBinary: dependencies.validateOptions.dockerBinary } : {}),
+  });
+
+  if (!runtimeResult.ok) {
+    return persistFailureOutcome({
+      store,
+      config: startingConfig,
+      attemptedAt,
+      phase: runtimeResult.phase,
+      source: runtimeResult.source,
+      code: runtimeResult.code,
+      message: runtimeResult.message,
+      cause: runtimeResult.cause,
+      artifactPath: runtimeResult.artifactPath,
+      command: runtimeResult.command.rendered,
+      composeFilePath: runtimeResult.composeFilePath,
+      validationSource,
+    });
+  }
+
+  const report = createRuntimeStartDiagnostic({
+    config: startingConfig,
+    attemptedAt,
+    status: 'success',
+    phase: runtimeResult.phase,
+    source: runtimeResult.source,
+    message: runtimeResult.message,
+    artifactPath: runtimeResult.composeFilePath,
+    command: runtimeResult.command.rendered,
+    composeFilePath: runtimeResult.composeFilePath,
+    validationSource,
+  });
+  const successConfig = withStartOutcome(
+    startingConfig,
+    report,
+    'running',
+    runtimeResult.checkedAt,
+    `Runtime started via ${runtimeResult.source} using ${validationSource}.`,
+  );
+  const persistSuccess = await persistStartOutcome(store, successConfig, report);
+
+  if (!persistSuccess.ok) {
+    return persistSuccess;
+  }
+
+  return {
+    ok: true,
+    phase: 'compose-launch',
+    source: 'docker-compose',
+    exitCode: 0,
+    paths: store.paths,
+    config: successConfig,
+    report,
+    validationSource,
+    composeFilePath: runtimeBundle.artifactPaths.dockerComposePath,
+    manifestPath: runtimeBundle.artifactPaths.manifestPath,
+    validationReportPath: wireproxyRender.artifactPaths.configTestReportPath,
+    summary: [
+      'Mullgate runtime started.',
+      'phase: compose-launch',
+      'source: docker-compose',
+      `attempted at: ${report.attemptedAt}`,
+      `config: ${store.paths.configFile}`,
+      `wireproxy config: ${wireproxyRender.artifactPaths.wireproxyConfigPath}`,
+      `relay cache: ${wireproxyRender.artifactPaths.relayCachePath}`,
+      `docker compose: ${runtimeBundle.artifactPaths.dockerComposePath}`,
+      `runtime manifest: ${runtimeBundle.artifactPaths.manifestPath}`,
+      `validation report: ${wireproxyRender.artifactPaths.configTestReportPath}`,
+      `start report: ${store.paths.runtimeStartDiagnosticsFile}`,
+      `validation: ${validationSource}`,
+      'runtime status: running',
+    ].join('\n'),
+  };
+}
+
+function writeStartResult(result: StartFlowResult, dependencies: Pick<StartCommandDependencies, 'stdout' | 'stderr'>): void {
+  const stdout = dependencies.stdout ?? process.stdout;
+  const stderr = dependencies.stderr ?? process.stderr;
+
+  if (result.ok) {
+    stdout.write(`${result.summary}\n`);
+    return;
+  }
+
+  const lines = [
+    'Mullgate start failed.',
+    `phase: ${result.phase}`,
+    `source: ${result.source}`,
+    ...(result.attemptedAt ? [`attempted at: ${result.attemptedAt}`] : []),
+    ...(result.code ? [`code: ${result.code}`] : []),
+    ...(result.artifactPath ? [`artifact: ${result.artifactPath}`] : []),
+    ...(result.composeFilePath ? [`docker compose: ${result.composeFilePath}`] : []),
+    ...(result.command ? [`command: ${result.command}`] : []),
+    `reason: ${result.message}`,
+    ...(result.cause ? [`cause: ${result.cause}`] : []),
+    `config: ${result.paths.configFile}`,
+    ...(result.validationSource ? [`validation: ${result.validationSource}`] : []),
+    ...(result.report ? [`start report: ${result.paths.runtimeStartDiagnosticsFile}`] : []),
+    ...(result.config ? [`runtime status: ${result.config.runtime.status.phase}`] : []),
+  ];
+
+  stderr.write(`${lines.join('\n')}\n`);
+}
+
+function synchronizeRuntimePaths(config: MullgateConfig, paths: MullgatePaths): MullgateConfig {
+  return {
+    ...config,
+    runtime: {
+      ...config.runtime,
+      sourceConfigPath: paths.configFile,
+      wireproxyConfigPath: paths.wireproxyConfigFile,
+      wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
+      relayCachePath: paths.provisioningCacheFile,
+      dockerComposePath: paths.runtimeComposeFile,
+      runtimeBundle: {
+        bundleDir: paths.runtimeBundleDir,
+        dockerComposePath: paths.runtimeComposeFile,
+        httpsSidecarConfigPath: paths.runtimeHttpsSidecarConfigFile,
+        manifestPath: paths.runtimeBundleManifestFile,
+      },
+    },
+    diagnostics: {
+      ...config.diagnostics,
+      lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
+    },
+  };
+}
+
+function withStartOutcome(
+  config: MullgateConfig,
+  report: RuntimeStartDiagnostic,
+  phase: MullgateConfig['runtime']['status']['phase'],
+  checkedAt: string,
+  message: string,
+): MullgateConfig {
+  const updated = withRuntimeStatus(config, phase, checkedAt, message);
+
+  return {
+    ...updated,
+    diagnostics: {
+      ...updated.diagnostics,
+      lastRuntimeStart: report,
+    },
+  };
+}
+
+async function persistFailureOutcome(input: {
+  readonly store: ConfigStore;
+  readonly config: MullgateConfig;
+  readonly attemptedAt: string;
+  readonly phase: StartFailure['phase'];
+  readonly source: string;
+  readonly message: string;
+  readonly cause?: string;
+  readonly code?: string | null;
+  readonly artifactPath?: string;
+  readonly command?: string | null;
+  readonly composeFilePath?: string | null;
+  readonly validationSource?: ValidationSourceSummary | null;
+}): Promise<StartFailure> {
+  const report = createRuntimeStartDiagnostic({
+    config: input.config,
+    attemptedAt: input.attemptedAt,
+    status: 'failure',
+    phase: input.phase,
+    source: input.source,
+    code: input.code ?? null,
+    message: input.message,
+    cause: input.cause,
+    artifactPath: input.artifactPath,
+    command: input.command ?? null,
+    composeFilePath: input.composeFilePath ?? null,
+    validationSource: input.validationSource ?? null,
+  });
+  const failedConfig = withStartOutcome(input.config, report, 'error', input.attemptedAt, report.message);
+  const persistResult = await persistStartOutcome(input.store, failedConfig, report);
+
+  if (!persistResult.ok) {
+    return persistResult;
+  }
+
+  return {
+    ok: false,
+    exitCode: 1,
+    phase: input.phase,
+    source: input.source,
+    paths: input.store.paths,
+    attemptedAt: input.attemptedAt,
+    message: report.message,
+    ...(report.cause ? { cause: report.cause } : {}),
+    ...(report.code ? { code: report.code } : {}),
+    ...(report.artifactPath ? { artifactPath: report.artifactPath } : {}),
+    ...(report.command ? { command: report.command } : {}),
+    ...(report.composeFilePath ? { composeFilePath: report.composeFilePath } : {}),
+    ...(report.validationSource ? { validationSource: report.validationSource } : {}),
+    config: failedConfig,
+    report,
+  };
+}
+
+async function persistStartOutcome(
+  store: ConfigStore,
+  config: MullgateConfig,
+  report: RuntimeStartDiagnostic,
+): Promise<{ ok: true } | StartFailure> {
+  try {
+    await Promise.all([store.save(config), persistStartReport(store.paths.runtimeStartDiagnosticsFile, report)]);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      exitCode: 1,
+      phase: 'persist-config',
+      source: 'filesystem',
+      paths: store.paths,
+      attemptedAt: report.attemptedAt,
+      artifactPath: store.paths.runtimeStartDiagnosticsFile,
+      message: 'Failed to persist the Mullgate runtime start diagnostics.',
+      cause: error instanceof Error ? redactSensitiveText(error.message, config) : String(error),
+      config,
+      report,
+      composeFilePath: report.composeFilePath,
+      validationSource: report.validationSource,
+    };
+  }
+}
+
+async function persistConfigOnly(store: ConfigStore, config: MullgateConfig): Promise<{ ok: true } | StartFailure> {
+  try {
+    await store.save(config);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      exitCode: 1,
+      phase: 'persist-config',
+      source: 'filesystem',
+      paths: store.paths,
+      message: 'Failed to persist the updated Mullgate runtime status.',
+      artifactPath: store.paths.configFile,
+      cause: error instanceof Error ? redactSensitiveText(error.message, config) : String(error),
+      config,
+      ...(config.diagnostics.lastRuntimeStart ? { report: config.diagnostics.lastRuntimeStart } : {}),
+    };
+  }
+}
+
+async function persistStartReport(reportPath: string, report: RuntimeStartDiagnostic): Promise<void> {
+  await mkdir(path.dirname(reportPath), { recursive: true, mode: 0o700 });
+  await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+}
+
+function createRuntimeStartDiagnostic(input: {
+  readonly config: MullgateConfig;
+  readonly attemptedAt: string;
+  readonly status: RuntimeStartDiagnostic['status'];
+  readonly phase: string;
+  readonly source: string;
+  readonly code?: string | null;
+  readonly message: string;
+  readonly cause?: string;
+  readonly artifactPath?: string;
+  readonly command?: string | null;
+  readonly composeFilePath?: string | null;
+  readonly validationSource?: ValidationSourceSummary | null;
+}): RuntimeStartDiagnostic {
+  return {
+    attemptedAt: input.attemptedAt,
+    status: input.status,
+    phase: input.phase,
+    source: input.source,
+    code: input.code ?? null,
+    message: redactSensitiveText(input.message, input.config),
+    cause: input.cause ? redactSensitiveText(input.cause, input.config) : null,
+    artifactPath: input.artifactPath ?? null,
+    composeFilePath: input.composeFilePath ?? null,
+    validationSource: input.validationSource ?? null,
+    command: input.command ? redactSensitiveText(input.command, input.config) : null,
+  };
+}

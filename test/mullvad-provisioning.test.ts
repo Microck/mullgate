@@ -215,6 +215,10 @@ function tryParseJson(raw: string): unknown {
   }
 }
 
+function parseFormBody(raw: string): Record<string, string> {
+  return Object.fromEntries(new URLSearchParams(raw).entries());
+}
+
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
@@ -362,8 +366,8 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
     await withJsonServer(
       {
         '/wg': (request) => {
-          requests.provision = request.body;
-          const parsedBody = request.body as { pubkey: string; name?: string };
+          requests.provision = parseFormBody(request.rawBody);
+          const parsedBody = requests.provision as { pubkey: string; name?: string };
 
           return {
             body: JSON.stringify({
@@ -498,6 +502,44 @@ Password = PROXY_PASSWORD
   \"issues\": []
 }"
 `);
+      },
+    );
+  });
+  it('accepts the plain-text assigned address that Mullvad currently documents for router setup', async () => {
+    await withJsonServer(
+      {
+        '/wg': () => ({
+          body: '10.64.12.34/32\n',
+          contentType: 'text/plain',
+        }),
+      },
+      async (baseUrl) => {
+        const provisionResult = await provisionWireguard({
+          accountNumber: '123456789012',
+          deviceName: 'mullgate-router',
+          baseUrl: new URL('/wg', baseUrl),
+          checkedAt: '2026-03-20T18:32:30.000Z',
+          generateKeyPair: () => ({
+            publicKey: 'PUBLIC_KEY_FOR_PLAINTEXT_CASE=',
+            privateKey: 'PRIVATE_KEY_FOR_PLAINTEXT_CASE=',
+          }),
+        });
+
+        expect(provisionResult).toMatchObject({
+          ok: true,
+          phase: 'wireguard-provision',
+          source: 'mullvad-wg-endpoint',
+          endpoint: new URL('/wg', baseUrl).toString(),
+          checkedAt: '2026-03-20T18:32:30.000Z',
+          value: {
+            deviceName: 'mullgate-router',
+            publicKey: 'PUBLIC_KEY_FOR_PLAINTEXT_CASE=',
+            ipv4Address: '10.64.12.34/32',
+            interfaceAddresses: ['10.64.12.34/32'],
+            hijackDns: false,
+            ports: [],
+          },
+        });
       },
     );
   });

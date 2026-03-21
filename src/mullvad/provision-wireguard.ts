@@ -150,17 +150,18 @@ export async function provisionWireguard(options: ProvisionWireguardOptions): Pr
   let response: Response;
 
   try {
+    const body = new URLSearchParams({
+      account: accountNumber,
+      pubkey: keyPair.publicKey,
+      ...(options.deviceName ? { name: options.deviceName } : {}),
+    });
+
     response = await fetchImpl(endpoint, {
       method: 'POST',
       headers: {
         accept: 'application/json',
-        'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        account: accountNumber,
-        pubkey: keyPair.publicKey,
-        ...(options.deviceName ? { name: options.deviceName } : {}),
-      }),
+      body,
       ...(options.signal ? { signal: options.signal } : {}),
     });
   } catch (error) {
@@ -180,9 +181,15 @@ export async function provisionWireguard(options: ProvisionWireguardOptions): Pr
   const parsedBody = rawBody.length > 0 ? tryParseJson(rawBody) : null;
 
   if (!response.ok) {
-    const parsedApiError = parsedBody ? apiErrorResponseSchema.safeParse(parsedBody) : null;
+    const parsedApiError = parsedBody && typeof parsedBody === 'object' ? apiErrorResponseSchema.safeParse(parsedBody) : null;
     const apiPayload = parsedApiError?.success ? parsedApiError.data : undefined;
-    const cause = (apiPayload?.detail ?? apiPayload?.error ?? apiPayload?.message ?? response.statusText) || `HTTP ${response.status}`;
+    const cause =
+      (typeof parsedBody === 'string' ? parsedBody.trim() : undefined) ||
+      apiPayload?.detail ||
+      apiPayload?.error ||
+      apiPayload?.message ||
+      response.statusText ||
+      `HTTP ${response.status}`;
 
     return createProvisionFailure({
       phase: 'wireguard-provision',
@@ -207,6 +214,39 @@ export async function provisionWireguard(options: ProvisionWireguardOptions): Pr
       message: 'Mullvad returned an empty provisioning response.',
       retryable: false,
     });
+  }
+
+  if (typeof parsedBody === 'string') {
+    const assignedIpv4 = parseAssignedAddress(parsedBody);
+
+    if (!assignedIpv4) {
+      return createProvisionFailure({
+        phase: 'wireguard-provision',
+        source: 'mullvad-wg-endpoint',
+        endpoint,
+        checkedAt,
+        code: 'INVALID_RESPONSE',
+        message: 'Mullvad returned a plain-text provisioning response that did not include an address.',
+        cause: parsedBody.trim(),
+        retryable: false,
+      });
+    }
+
+    return {
+      ok: true,
+      phase: 'wireguard-provision',
+      source: 'mullvad-wg-endpoint',
+      endpoint,
+      checkedAt,
+      value: createProvisionedWireguardDevice({
+        ...(options.deviceName ? { deviceName: options.deviceName } : {}),
+        publicKey: keyPair.publicKey,
+        privateKey: keyPair.privateKey,
+        ipv4Address: assignedIpv4,
+        hijackDns: false,
+        ports: [],
+      }),
+    };
   }
 
   const parsedDevice = provisionedDeviceResponseSchema.safeParse(parsedBody);
@@ -332,12 +372,21 @@ function createProvisionFailure(input: {
   };
 }
 
-function tryParseJson(rawBody: string): unknown | null {
+function tryParseJson(rawBody: string): unknown {
   try {
     return JSON.parse(rawBody) as unknown;
   } catch {
-    return null;
+    return rawBody;
   }
+}
+
+function parseAssignedAddress(rawBody: string): string | null {
+  const candidate = rawBody
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+
+  return candidate ?? null;
 }
 
 function base64UrlToBase64(value: string): string {
