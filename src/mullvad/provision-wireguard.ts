@@ -282,7 +282,7 @@ function createProvisionedWireguardDevice(input: {
       publicKey: input.publicKey,
       privateKey: input.privateKey,
       ipv4Address: input.ipv4Address,
-      ...(input.ipv6Address ? { ipv6Address: input.ipv6Address } : {}),
+      ipv6Address: input.ipv6Address ?? null,
       gatewayIpv4: null,
       gatewayIpv6: null,
       dnsServers: [DEFAULT_DNS_SERVER],

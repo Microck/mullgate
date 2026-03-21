@@ -139,6 +139,7 @@ describe('mullgate config store', () => {
         "cache dir: ${resolveMullgatePaths(env).appCacheDir}",
         "wireproxy config: ${resolveMullgatePaths(env).wireproxyConfigFile}",
         "wireproxy configtest report: ${resolveMullgatePaths(env).wireproxyConfigTestReportFile}",
+        "docker compose: ${resolveMullgatePaths(env).dockerComposePath}",
         "relay cache: ${resolveMullgatePaths(env).provisioningCacheFile} (missing)",
       ]
     `);

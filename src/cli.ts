@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 
 import { registerConfigCommands } from './commands/config.js';
+import { registerSetupCommand } from './commands/setup.js';
 
 export function createCli(): Command {
   const program = new Command();
@@ -12,6 +13,7 @@ export function createCli(): Command {
     .description('CLI-first Mullvad proxy provisioning and config management')
     .showHelpAfterError();
 
+  registerSetupCommand(program);
   registerConfigCommands(program);
 
   return program;
