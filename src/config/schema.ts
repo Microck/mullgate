@@ -129,7 +129,11 @@ export const runtimeStartDiagnosticSchema = z.object({
   cause: nonEmptyString.nullable(),
   artifactPath: nonEmptyString.nullable(),
   composeFilePath: nonEmptyString.nullable(),
-  validationSource: z.enum(['wireproxy-binary/configtest', 'docker/configtest', 'internal-syntax']).nullable(),
+  validationSource: nonEmptyString.nullable(),
+  routeId: nonEmptyString.nullable(),
+  routeHostname: nonEmptyString.nullable(),
+  routeBindIp: nonEmptyString.nullable(),
+  serviceName: nonEmptyString.nullable(),
   command: nonEmptyString.nullable(),
 });
 

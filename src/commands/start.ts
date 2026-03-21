@@ -14,14 +14,42 @@ import { redactSensitiveText } from '../config/redact.js';
 import { ConfigStore } from '../config/store.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
 import { startDockerRuntime, type DockerRuntimeResult, type StartDockerRuntimeOptions } from '../runtime/docker-runtime.js';
-import { renderRuntimeBundle } from '../runtime/render-runtime-bundle.js';
-import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
+import { renderRuntimeBundle, type RuntimeBundleManifest } from '../runtime/render-runtime-bundle.js';
+import { renderWireproxyArtifacts, type RenderedWireproxyRoute } from '../runtime/render-wireproxy.js';
 import { validateWireproxyConfig, type ValidateWireproxyOptions } from '../runtime/validate-wireproxy.js';
 
-type ValidationSourceSummary = ReturnType<typeof summarizeValidationSource>;
+type ValidationSourceSummary = string;
 
 type WritableTextSink = {
   write(chunk: string): unknown;
+};
+
+type RouteDiagnosticContext = {
+  readonly routeId?: string | null;
+  readonly routeHostname?: string | null;
+  readonly routeBindIp?: string | null;
+  readonly serviceName?: string | null;
+};
+
+type RouteValidationSuccess = {
+  readonly ok: true;
+  readonly validationSource: ValidationSourceSummary;
+  readonly reportPath: string;
+};
+
+type RouteValidationFailure = {
+  readonly ok: false;
+  readonly phase: 'validation';
+  readonly source: string;
+  readonly message: string;
+  readonly cause: string;
+  readonly artifactPath: string;
+  readonly validationSource: ValidationSourceSummary;
+  readonly routeId: string;
+  readonly routeHostname: string;
+  readonly routeBindIp: string;
+  readonly serviceName: string;
+  readonly reportPath: string;
 };
 
 export type StartSuccess = {
@@ -63,6 +91,10 @@ export type StartFailure = {
   readonly command?: string | null;
   readonly composeFilePath?: string | null;
   readonly validationSource?: ValidationSourceSummary | null;
+  readonly routeId?: string | null;
+  readonly routeHostname?: string | null;
+  readonly routeBindIp?: string | null;
+  readonly serviceName?: string | null;
   readonly config?: MullgateConfig;
   readonly report?: RuntimeStartDiagnostic;
 };
@@ -180,6 +212,10 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
       cause: wireproxyRender.cause,
       artifactPath: wireproxyRender.artifactPath,
       composeFilePath: store.paths.runtimeComposeFile,
+      routeId: wireproxyRender.routeId,
+      routeHostname: wireproxyRender.routeHostname,
+      routeBindIp: wireproxyRender.routeBindIp,
+      serviceName: wireproxyRender.serviceName,
     });
   }
 
@@ -204,14 +240,7 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
     });
   }
 
-  const validationResult = await validateWireproxyConfig({
-    configPath: wireproxyRender.artifactPaths.wireproxyConfigPath,
-    configText: wireproxyRender.wireproxyConfig,
-    reportPath: wireproxyRender.artifactPaths.configTestReportPath,
-    checkedAt: attemptedAt,
-    ...dependencies.validateOptions,
-  });
-  const validationSource = summarizeValidationSource(validationResult);
+  const validationResult = await validateRenderedRoutes(wireproxyRender.routes, attemptedAt, dependencies.validateOptions);
 
   if (!validationResult.ok) {
     return persistFailureOutcome({
@@ -220,11 +249,15 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
       attemptedAt,
       phase: validationResult.phase,
       source: validationResult.source,
-      message: 'Rendered wireproxy config failed validation before Docker launch.',
+      message: validationResult.message,
       cause: validationResult.cause,
-      artifactPath: validationResult.target,
+      artifactPath: validationResult.artifactPath,
       composeFilePath: runtimeBundle.artifactPaths.dockerComposePath,
-      validationSource,
+      validationSource: validationResult.validationSource,
+      routeId: validationResult.routeId,
+      routeHostname: validationResult.routeHostname,
+      routeBindIp: validationResult.routeBindIp,
+      serviceName: validationResult.serviceName,
     });
   }
 
@@ -232,7 +265,7 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
     baseConfig,
     'starting',
     attemptedAt,
-    `Validated via ${validationSource}; launching Docker Compose from ${runtimeBundle.artifactPaths.dockerComposePath}.`,
+    `Validated ${wireproxyRender.routes.length} route configs via ${validationResult.validationSource}; launching Docker Compose from ${runtimeBundle.artifactPaths.dockerComposePath}.`,
   );
   const startingPersist = await persistConfigOnly(store, startingConfig);
 
@@ -247,6 +280,13 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
   });
 
   if (!runtimeResult.ok) {
+    const inferredRoute = inferRouteDiagnosticContext(startingConfig, runtimeBundle.manifest, [
+      runtimeResult.message,
+      runtimeResult.cause,
+      runtimeResult.command.rendered,
+      runtimeResult.artifactPath,
+    ]);
+
     return persistFailureOutcome({
       store,
       config: startingConfig,
@@ -259,7 +299,8 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
       artifactPath: runtimeResult.artifactPath,
       command: runtimeResult.command.rendered,
       composeFilePath: runtimeResult.composeFilePath,
-      validationSource,
+      validationSource: validationResult.validationSource,
+      ...inferredRoute,
     });
   }
 
@@ -273,14 +314,14 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
     artifactPath: runtimeResult.composeFilePath,
     command: runtimeResult.command.rendered,
     composeFilePath: runtimeResult.composeFilePath,
-    validationSource,
+    validationSource: validationResult.validationSource,
   });
   const successConfig = withStartOutcome(
     startingConfig,
     report,
     'running',
     runtimeResult.checkedAt,
-    `Runtime started via ${runtimeResult.source} using ${validationSource}.`,
+    `Runtime started via ${runtimeResult.source} using ${validationResult.validationSource}.`,
   );
   const persistSuccess = await persistStartOutcome(store, successConfig, report);
 
@@ -296,23 +337,23 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
     paths: store.paths,
     config: successConfig,
     report,
-    validationSource,
+    validationSource: validationResult.validationSource,
     composeFilePath: runtimeBundle.artifactPaths.dockerComposePath,
     manifestPath: runtimeBundle.artifactPaths.manifestPath,
-    validationReportPath: wireproxyRender.artifactPaths.configTestReportPath,
+    validationReportPath: validationResult.reportPath,
     summary: [
       'Mullgate runtime started.',
       'phase: compose-launch',
       'source: docker-compose',
       `attempted at: ${report.attemptedAt}`,
+      `routes: ${wireproxyRender.routes.length}`,
       `config: ${store.paths.configFile}`,
-      `wireproxy config: ${wireproxyRender.artifactPaths.wireproxyConfigPath}`,
+      `primary wireproxy config: ${wireproxyRender.artifactPaths.wireproxyConfigPath}`,
       `relay cache: ${wireproxyRender.artifactPaths.relayCachePath}`,
       `docker compose: ${runtimeBundle.artifactPaths.dockerComposePath}`,
       `runtime manifest: ${runtimeBundle.artifactPaths.manifestPath}`,
-      `validation report: ${wireproxyRender.artifactPaths.configTestReportPath}`,
-      `start report: ${store.paths.runtimeStartDiagnosticsFile}`,
-      `validation: ${validationSource}`,
+      `validation report: ${validationResult.reportPath}`,
+      `validation: ${validationResult.validationSource}`,
       'runtime status: running',
     ].join('\n'),
   };
@@ -333,6 +374,10 @@ function writeStartResult(result: StartFlowResult, dependencies: Pick<StartComma
     `source: ${result.source}`,
     ...(result.attemptedAt ? [`attempted at: ${result.attemptedAt}`] : []),
     ...(result.code ? [`code: ${result.code}`] : []),
+    ...(result.routeId ? [`route id: ${result.routeId}`] : []),
+    ...(result.routeHostname ? [`route hostname: ${result.routeHostname}`] : []),
+    ...(result.routeBindIp ? [`route bind ip: ${result.routeBindIp}`] : []),
+    ...(result.serviceName ? [`service: ${result.serviceName}`] : []),
     ...(result.artifactPath ? [`artifact: ${result.artifactPath}`] : []),
     ...(result.composeFilePath ? [`docker compose: ${result.composeFilePath}`] : []),
     ...(result.command ? [`command: ${result.command}`] : []),
@@ -389,6 +434,98 @@ function withStartOutcome(
   };
 }
 
+async function validateRenderedRoutes(
+  routes: readonly RenderedWireproxyRoute[],
+  checkedAt: string,
+  validateOptions?: StartCommandDependencies['validateOptions'],
+): Promise<RouteValidationSuccess | RouteValidationFailure> {
+  const validationSources: string[] = [];
+  let primaryReportPath = routes[0]!.artifactPaths.configTestReportPath;
+
+  for (const route of routes) {
+    const result = await validateWireproxyConfig({
+      configPath: route.artifactPaths.wireproxyConfigPath,
+      configText: route.wireproxyConfig,
+      reportPath: route.artifactPaths.configTestReportPath,
+      checkedAt,
+      ...validateOptions,
+    });
+    const validationSource = summarizeValidationSource(result);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        phase: result.phase,
+        source: result.source,
+        message: 'Rendered wireproxy config failed validation before Docker launch.',
+        cause: result.cause,
+        artifactPath: result.target,
+        validationSource,
+        routeId: route.routeId,
+        routeHostname: route.routeHostname,
+        routeBindIp: route.routeBindIp,
+        serviceName: route.serviceName,
+        reportPath: result.reportPath ?? route.artifactPaths.configTestReportPath,
+      };
+    }
+
+    primaryReportPath = result.reportPath ?? route.artifactPaths.configTestReportPath;
+    validationSources.push(validationSource);
+  }
+
+  return {
+    ok: true,
+    validationSource: summarizeValidationSources(validationSources, routes.length),
+    reportPath: primaryReportPath,
+  };
+}
+
+function summarizeValidationSources(sources: readonly string[], routeCount: number): string {
+  const uniqueSources = [...new Set(sources)];
+  const sourceSummary = uniqueSources.length === 1 ? uniqueSources[0]! : uniqueSources.join(', ');
+  return routeCount === 1 ? sourceSummary : `${sourceSummary} (${routeCount} routes)`;
+}
+
+function inferRouteDiagnosticContext(
+  config: MullgateConfig,
+  manifest: RuntimeBundleManifest,
+  values: readonly (string | null | undefined)[],
+): RouteDiagnosticContext {
+  // Compose launch errors often surface only the failing service name or mounted route config path, so match those
+  // strings back to the rendered manifest before persisting last-start.json/stderr.
+  const haystack = values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0).join('\n');
+
+  const matches = manifest.routes.filter((route) => {
+    if (!haystack) {
+      return false;
+    }
+
+    return [
+      route.routeId,
+      route.hostname,
+      route.bindIp,
+      route.services.wireproxy.name,
+      route.services.backends.socks5,
+      route.services.backends.http,
+      route.services.backends.https,
+      route.wireproxyConfigPath,
+    ].some((candidate) => typeof candidate === 'string' && haystack.includes(candidate));
+  });
+
+  const selected = matches.length === 1 ? matches[0] : matches.length === 0 && config.routing.locations.length === 1 ? manifest.routes[0] : null;
+
+  if (!selected) {
+    return {};
+  }
+
+  return {
+    routeId: selected.routeId,
+    routeHostname: selected.hostname,
+    routeBindIp: selected.bindIp,
+    serviceName: selected.services.wireproxy.name,
+  };
+}
+
 async function persistFailureOutcome(input: {
   readonly store: ConfigStore;
   readonly config: MullgateConfig;
@@ -402,6 +539,10 @@ async function persistFailureOutcome(input: {
   readonly command?: string | null;
   readonly composeFilePath?: string | null;
   readonly validationSource?: ValidationSourceSummary | null;
+  readonly routeId?: string | null;
+  readonly routeHostname?: string | null;
+  readonly routeBindIp?: string | null;
+  readonly serviceName?: string | null;
 }): Promise<StartFailure> {
   const report = createRuntimeStartDiagnostic({
     config: input.config,
@@ -416,6 +557,10 @@ async function persistFailureOutcome(input: {
     command: input.command ?? null,
     composeFilePath: input.composeFilePath ?? null,
     validationSource: input.validationSource ?? null,
+    routeId: input.routeId ?? null,
+    routeHostname: input.routeHostname ?? null,
+    routeBindIp: input.routeBindIp ?? null,
+    serviceName: input.serviceName ?? null,
   });
   const failedConfig = withStartOutcome(input.config, report, 'error', input.attemptedAt, report.message);
   const persistResult = await persistStartOutcome(input.store, failedConfig, report);
@@ -438,6 +583,10 @@ async function persistFailureOutcome(input: {
     ...(report.command ? { command: report.command } : {}),
     ...(report.composeFilePath ? { composeFilePath: report.composeFilePath } : {}),
     ...(report.validationSource ? { validationSource: report.validationSource } : {}),
+    ...(report.routeId ? { routeId: report.routeId } : {}),
+    ...(report.routeHostname ? { routeHostname: report.routeHostname } : {}),
+    ...(report.routeBindIp ? { routeBindIp: report.routeBindIp } : {}),
+    ...(report.serviceName ? { serviceName: report.serviceName } : {}),
     config: failedConfig,
     report,
   };
@@ -466,6 +615,10 @@ async function persistStartOutcome(
       report,
       composeFilePath: report.composeFilePath,
       validationSource: report.validationSource,
+      routeId: report.routeId,
+      routeHostname: report.routeHostname,
+      routeBindIp: report.routeBindIp,
+      serviceName: report.serviceName,
     };
   }
 }
@@ -508,6 +661,10 @@ function createRuntimeStartDiagnostic(input: {
   readonly command?: string | null;
   readonly composeFilePath?: string | null;
   readonly validationSource?: ValidationSourceSummary | null;
+  readonly routeId?: string | null;
+  readonly routeHostname?: string | null;
+  readonly routeBindIp?: string | null;
+  readonly serviceName?: string | null;
 }): RuntimeStartDiagnostic {
   return {
     attemptedAt: input.attemptedAt,
@@ -520,6 +677,10 @@ function createRuntimeStartDiagnostic(input: {
     artifactPath: input.artifactPath ?? null,
     composeFilePath: input.composeFilePath ?? null,
     validationSource: input.validationSource ?? null,
+    routeId: input.routeId ?? null,
+    routeHostname: input.routeHostname ?? null,
+    routeBindIp: input.routeBindIp ?? null,
+    serviceName: input.serviceName ?? null,
     command: input.command ? redactSensitiveText(input.command, input.config) : null,
   };
 }

@@ -23,6 +23,35 @@ export type MullgatePaths = {
   readonly dockerComposePath: string;
 };
 
+export type RouteWireproxyPaths = {
+  readonly wireproxyConfigPath: string;
+  readonly configTestReportPath: string;
+};
+
+export function resolveRouteWireproxyConfigPath(
+  paths: Pick<MullgatePaths, 'runtimeDir'>,
+  wireproxyConfigFile: string,
+): string {
+  return path.join(paths.runtimeDir, wireproxyConfigFile);
+}
+
+export function resolveRouteWireproxyConfigTestReportPath(
+  paths: Pick<MullgatePaths, 'runtimeDir'>,
+  routeId: string,
+): string {
+  return path.join(paths.runtimeDir, `wireproxy-${routeId}-configtest.json`);
+}
+
+export function resolveRouteWireproxyPaths(
+  paths: Pick<MullgatePaths, 'runtimeDir'>,
+  runtime: { readonly routeId: string; readonly wireproxyConfigFile: string },
+): RouteWireproxyPaths {
+  return {
+    wireproxyConfigPath: resolveRouteWireproxyConfigPath(paths, runtime.wireproxyConfigFile),
+    configTestReportPath: resolveRouteWireproxyConfigTestReportPath(paths, runtime.routeId),
+  };
+}
+
 export function resolveMullgatePaths(env: NodeJS.ProcessEnv = process.env): MullgatePaths {
   const home = env.HOME?.trim() || homedir();
   const configHome = resolveBaseDir(env.XDG_CONFIG_HOME, path.join(home, '.config'));

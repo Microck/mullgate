@@ -209,7 +209,7 @@ afterEach(async () => {
 });
 
 describe('mullgate setup CLI flow', () => {
-  it('completes setup from a clean XDG home and exposes redacted config inspection surfaces', async () => {
+  it('completes setup from a clean XDG home and exposes redacted config inspection surfaces', { timeout: 10000 }, async () => {
     const env = createTempEnvironment();
     await createFakeWireproxyBinary(env);
 

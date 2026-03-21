@@ -2,14 +2,13 @@ import { chmod, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import { REDACTED } from '../config/redact.js';
-import type { MullgatePaths } from '../config/paths.js';
-import type { MullgateConfig } from '../config/schema.js';
+import { resolveRouteWireproxyPaths, type MullgatePaths } from '../config/paths.js';
+import type { MullgateConfig, RoutedLocation } from '../config/schema.js';
 
 const CONTAINER_BIND_HOST = '0.0.0.0';
 const WIREPROXY_IMAGE = 'backplane/wireproxy:20260320';
-const WIREPROXY_SERVICE = 'wireproxy';
 const HAPROXY_IMAGE = 'haproxytech/haproxy-alpine:3.0.19';
-const HAPROXY_SERVICE = 'https-sidecar';
+const ROUTING_LAYER_SERVICE = 'routing-layer';
 const HAPROXY_CONFIG_CONTAINER_PATH = '/usr/local/etc/haproxy/haproxy.cfg';
 const HAPROXY_CERT_INPUT_PATH = '/run/mullgate/tls-input/cert.pem';
 const HAPROXY_KEY_INPUT_PATH = '/run/mullgate/tls-input/key.pem';
@@ -17,8 +16,13 @@ const HAPROXY_COMBINED_PEM_PATH = '/run/mullgate/tls/haproxy.pem';
 const HAPROXY_TLS_TMPFS_PATH = '/run/mullgate/tls';
 const WIREPROXY_CONFIG_CONTAINER_PATH = '/etc/wireproxy/wireproxy.conf';
 
+type RuntimeProtocol = 'socks5' | 'http' | 'https';
+
 export type RuntimeEndpoint = {
-  readonly protocol: 'socks5' | 'http' | 'https';
+  readonly routeId: string;
+  readonly hostname: string;
+  readonly bindIp: string;
+  readonly protocol: RuntimeProtocol;
   readonly host: string;
   readonly port: number;
   readonly containerHost: '0.0.0.0';
@@ -28,32 +32,27 @@ export type RuntimeEndpoint = {
     readonly password: typeof REDACTED;
   };
   readonly proxyUrl: string;
+  readonly bindUrl: string;
 };
 
 export type RuntimeBundleManifest = {
   readonly generatedAt: string;
   readonly source: 'canonical-config';
-  readonly topology: 'wireproxy-haproxy-sidecar';
-  readonly bindHost: string;
-  readonly wireproxyConfigPath: string;
+  readonly topology: 'multi-route-wireproxy-haproxy';
   readonly relayCachePath: string;
   readonly images: {
     readonly wireproxy: string;
-    readonly httpsSidecar: string;
+    readonly routingLayer: string;
   };
   readonly services: {
-    readonly wireproxy: {
-      readonly internalListeners: {
+    readonly routingLayer: {
+      readonly name: string;
+      readonly listeners: {
         readonly socks5: string;
         readonly http: string;
+        readonly https: string | null;
       };
       readonly publishedPorts: string[];
-    };
-    readonly httpsSidecar: {
-      readonly enabled: boolean;
-      readonly internalListener: string | null;
-      readonly publishedPort: string | null;
-      readonly forwardsTo: string | null;
       readonly mountPaths: {
         readonly haproxyConfigPath: string;
         readonly certPath: string | null;
@@ -62,6 +61,29 @@ export type RuntimeBundleManifest = {
       };
     };
   };
+  readonly routes: readonly {
+    readonly routeId: string;
+    readonly alias: string;
+    readonly hostname: string;
+    readonly bindIp: string;
+    readonly wireproxyConfigPath: string;
+    readonly configTestReportPath: string;
+    readonly services: {
+      readonly wireproxy: {
+        readonly name: string;
+        readonly internalListeners: {
+          readonly socks5: string;
+          readonly http: string;
+        };
+      };
+      readonly backends: {
+        readonly socks5: string;
+        readonly http: string;
+        readonly https: string | null;
+      };
+    };
+    readonly publishedEndpoints: readonly RuntimeEndpoint[];
+  }[];
   readonly publishedEndpoints: readonly RuntimeEndpoint[];
 };
 
@@ -220,23 +242,36 @@ function resolveHttpsRuntime(config: MullgateConfig): ResolvedHttpsRuntime {
   };
 }
 
-function buildPublishedEndpoints(config: MullgateConfig, https: Extract<ResolvedHttpsRuntime, { ok: true }>): RuntimeEndpoint[] {
-  const endpoints: RuntimeEndpoint[] = [
-    createEndpoint(config, 'socks5', config.setup.bind.socksPort),
-    createEndpoint(config, 'http', config.setup.bind.httpPort),
-  ];
+function buildPublishedEndpoints(
+  config: MullgateConfig,
+  https: Extract<ResolvedHttpsRuntime, { ok: true }>,
+): RuntimeEndpoint[] {
+  return config.routing.locations.flatMap((route) => {
+    const endpoints: RuntimeEndpoint[] = [
+      createEndpoint(config, route, 'socks5', config.setup.bind.socksPort),
+      createEndpoint(config, route, 'http', config.setup.bind.httpPort),
+    ];
 
-  if (https.enabled) {
-    endpoints.push(createEndpoint(config, 'https', https.port));
-  }
+    if (https.enabled) {
+      endpoints.push(createEndpoint(config, route, 'https', https.port));
+    }
 
-  return endpoints;
+    return endpoints;
+  });
 }
 
-function createEndpoint(config: MullgateConfig, protocol: RuntimeEndpoint['protocol'], port: number): RuntimeEndpoint {
+function createEndpoint(
+  config: MullgateConfig,
+  route: RoutedLocation,
+  protocol: RuntimeEndpoint['protocol'],
+  port: number,
+): RuntimeEndpoint {
   return {
+    routeId: route.runtime.routeId,
+    hostname: route.hostname,
+    bindIp: route.bindIp,
     protocol,
-    host: config.setup.bind.host,
+    host: route.hostname,
     port,
     containerHost: CONTAINER_BIND_HOST,
     containerPort: port,
@@ -244,7 +279,8 @@ function createEndpoint(config: MullgateConfig, protocol: RuntimeEndpoint['proto
       username: config.setup.auth.username,
       password: REDACTED,
     },
-    proxyUrl: `${protocol}://${encodeURIComponent(config.setup.auth.username)}:${REDACTED}@${config.setup.bind.host}:${port}`,
+    proxyUrl: `${protocol}://${encodeURIComponent(config.setup.auth.username)}:${REDACTED}@${route.hostname}:${port}`,
+    bindUrl: `${protocol}://${encodeURIComponent(config.setup.auth.username)}:${REDACTED}@${route.bindIp}:${port}`,
   };
 }
 
@@ -255,33 +291,53 @@ function buildRuntimeBundleManifest(
   https: Extract<ResolvedHttpsRuntime, { ok: true }>,
   publishedEndpoints: readonly RuntimeEndpoint[],
 ): RuntimeBundleManifest {
+  const routeManifests = config.routing.locations.map((route) => {
+    const artifactPaths = resolveRouteWireproxyPaths(paths, route.runtime);
+    const routeEndpoints = publishedEndpoints.filter((endpoint) => endpoint.routeId === route.runtime.routeId);
+
+    return {
+      routeId: route.runtime.routeId,
+      alias: route.alias,
+      hostname: route.hostname,
+      bindIp: route.bindIp,
+      wireproxyConfigPath: artifactPaths.wireproxyConfigPath,
+      configTestReportPath: artifactPaths.configTestReportPath,
+      services: {
+        wireproxy: {
+          name: route.runtime.wireproxyServiceName,
+          internalListeners: {
+            socks5: `${CONTAINER_BIND_HOST}:${config.setup.bind.socksPort}`,
+            http: `${CONTAINER_BIND_HOST}:${config.setup.bind.httpPort}`,
+          },
+        },
+        backends: {
+          socks5: `${route.runtime.haproxyBackendName}-socks5`,
+          http: `${route.runtime.haproxyBackendName}-http`,
+          https: https.enabled ? `${route.runtime.haproxyBackendName}-https` : null,
+        },
+      },
+      publishedEndpoints: routeEndpoints,
+    };
+  });
+
   return {
     generatedAt,
     source: 'canonical-config',
-    topology: 'wireproxy-haproxy-sidecar',
-    bindHost: config.setup.bind.host,
-    wireproxyConfigPath: paths.wireproxyConfigFile,
+    topology: 'multi-route-wireproxy-haproxy',
     relayCachePath: paths.provisioningCacheFile,
     images: {
       wireproxy: WIREPROXY_IMAGE,
-      httpsSidecar: HAPROXY_IMAGE,
+      routingLayer: HAPROXY_IMAGE,
     },
     services: {
-      wireproxy: {
-        internalListeners: {
+      routingLayer: {
+        name: ROUTING_LAYER_SERVICE,
+        listeners: {
           socks5: `${CONTAINER_BIND_HOST}:${config.setup.bind.socksPort}`,
           http: `${CONTAINER_BIND_HOST}:${config.setup.bind.httpPort}`,
+          https: https.enabled ? `${CONTAINER_BIND_HOST}:${https.port}` : null,
         },
-        publishedPorts: [
-          `${config.setup.bind.host}:${config.setup.bind.socksPort}:${config.setup.bind.socksPort}`,
-          `${config.setup.bind.host}:${config.setup.bind.httpPort}:${config.setup.bind.httpPort}`,
-        ],
-      },
-      httpsSidecar: {
-        enabled: https.enabled,
-        internalListener: https.enabled ? `${CONTAINER_BIND_HOST}:${https.port}` : null,
-        publishedPort: https.enabled ? `${config.setup.bind.host}:${https.port}:${https.port}` : null,
-        forwardsTo: https.enabled ? `${WIREPROXY_SERVICE}:${config.setup.bind.httpPort}` : null,
+        publishedPorts: buildPublishedPorts(config, https),
         mountPaths: {
           haproxyConfigPath: paths.runtimeHttpsSidecarConfigFile,
           certPath: https.enabled ? https.certPath : null,
@@ -290,6 +346,7 @@ function buildRuntimeBundleManifest(
         },
       },
     },
+    routes: routeManifests,
     publishedEndpoints,
   };
 }
@@ -303,55 +360,89 @@ function buildDockerCompose(
     '# Generated by Mullgate. Derived artifact; edit canonical config instead.',
     'name: mullgate',
     'services:',
-    `  ${WIREPROXY_SERVICE}:`,
-    `    image: ${WIREPROXY_IMAGE}`,
-    '    user: "0:0"',
+    `  ${ROUTING_LAYER_SERVICE}:`,
+    `    image: ${HAPROXY_IMAGE}`,
     '    restart: unless-stopped',
-    '    command:',
-    '      - --config',
-    `      - ${WIREPROXY_CONFIG_CONTAINER_PATH}`,
-    '    volumes:',
-    `      - ${paths.wireproxyConfigFile}:${WIREPROXY_CONFIG_CONTAINER_PATH}:ro`,
-    '    ports:',
-    `      - "${config.setup.bind.host}:${config.setup.bind.socksPort}:${config.setup.bind.socksPort}"`,
-    `      - "${config.setup.bind.host}:${config.setup.bind.httpPort}:${config.setup.bind.httpPort}"`,
+    '    depends_on:',
+    ...config.routing.locations.map((route) => `      - ${route.runtime.wireproxyServiceName}`),
   ];
 
   if (https.enabled) {
     lines.push(
-      `  ${HAPROXY_SERVICE}:`,
-      `    image: ${HAPROXY_IMAGE}`,
-      '    restart: unless-stopped',
-      '    depends_on:',
-      `      - ${WIREPROXY_SERVICE}`,
       '    entrypoint:',
       '      - /bin/sh',
       '      - -ec',
-      // The combined PEM is constructed inside the container so the rendered artifacts never persist TLS private key material.
       `      - cat ${HAPROXY_CERT_INPUT_PATH} ${HAPROXY_KEY_INPUT_PATH} > ${HAPROXY_COMBINED_PEM_PATH} && exec haproxy -W -db -f ${HAPROXY_CONFIG_CONTAINER_PATH}`,
       '    tmpfs:',
       `      - ${HAPROXY_TLS_TMPFS_PATH}`,
-      '    volumes:',
-      `      - ${paths.runtimeHttpsSidecarConfigFile}:${HAPROXY_CONFIG_CONTAINER_PATH}:ro`,
+    );
+  } else {
+    lines.push(
+      '    command:',
+      '      - haproxy',
+      '      - -W',
+      '      - -db',
+      '      - -f',
+      `      - ${HAPROXY_CONFIG_CONTAINER_PATH}`,
+    );
+  }
+
+  lines.push(
+    '    volumes:',
+    `      - ${paths.runtimeHttpsSidecarConfigFile}:${HAPROXY_CONFIG_CONTAINER_PATH}:ro`,
+  );
+
+  if (https.enabled) {
+    lines.push(
       `      - ${https.certPath}:${HAPROXY_CERT_INPUT_PATH}:ro`,
       `      - ${https.keyPath}:${HAPROXY_KEY_INPUT_PATH}:ro`,
-      '    ports:',
-      `      - "${config.setup.bind.host}:${https.port}:${https.port}"`,
+    );
+  }
+
+  lines.push('    ports:', ...buildPublishedPorts(config, https).map((port) => `      - "${port}"`));
+
+  for (const route of config.routing.locations) {
+    const artifactPaths = resolveRouteWireproxyPaths(paths, route.runtime);
+    lines.push(
+      `  ${route.runtime.wireproxyServiceName}:`,
+      `    image: ${WIREPROXY_IMAGE}`,
+      '    user: "0:0"',
+      '    restart: unless-stopped',
+      '    command:',
+      '      - --config',
+      `      - ${WIREPROXY_CONFIG_CONTAINER_PATH}`,
+      '    volumes:',
+      `      - ${artifactPaths.wireproxyConfigPath}:${WIREPROXY_CONFIG_CONTAINER_PATH}:ro`,
     );
   }
 
   return `${lines.join('\n')}\n`;
 }
 
+function buildPublishedPorts(
+  config: MullgateConfig,
+  https: Extract<ResolvedHttpsRuntime, { ok: true }>,
+): string[] {
+  const ports: string[] = [];
+
+  for (const route of config.routing.locations) {
+    ports.push(`${route.bindIp}:${config.setup.bind.socksPort}:${config.setup.bind.socksPort}`);
+    ports.push(`${route.bindIp}:${config.setup.bind.httpPort}:${config.setup.bind.httpPort}`);
+
+    if (https.enabled) {
+      ports.push(`${route.bindIp}:${https.port}:${https.port}`);
+    }
+  }
+
+  return ports;
+}
+
 function buildHttpsSidecarConfig(
   config: MullgateConfig,
   https: Extract<ResolvedHttpsRuntime, { ok: true }>,
 ): string {
-  if (!https.enabled) {
-    return '# HTTPS proxy is disabled in the canonical config.\n';
-  }
-
-  return [
+  const primaryRoute = config.routing.locations[0]!;
+  const lines = [
     '# Generated by Mullgate. Derived artifact; edit canonical config instead.',
     'global',
     '  log stdout format raw local0',
@@ -363,14 +454,60 @@ function buildHttpsSidecarConfig(
     '  timeout client 1m',
     '  timeout server 1m',
     '',
-    'frontend https_proxy',
-    `  bind ${CONTAINER_BIND_HOST}:${https.port} ssl crt ${HAPROXY_COMBINED_PEM_PATH}`,
-    '  default_backend wireproxy_http',
+    'frontend socks5_proxy',
+    `  bind ${CONTAINER_BIND_HOST}:${config.setup.bind.socksPort}`,
+    ...buildRouteSelectionRules(config.routing.locations, 'socks5'),
+    `  default_backend ${primaryRoute.runtime.haproxyBackendName}-socks5`,
     '',
-    'backend wireproxy_http',
-    `  server wireproxy ${WIREPROXY_SERVICE}:${config.setup.bind.httpPort} check`,
+    'frontend http_proxy',
+    `  bind ${CONTAINER_BIND_HOST}:${config.setup.bind.httpPort}`,
+    ...buildRouteSelectionRules(config.routing.locations, 'http'),
+    `  default_backend ${primaryRoute.runtime.haproxyBackendName}-http`,
     '',
-  ].join('\n');
+  ];
+
+  if (https.enabled) {
+    lines.push(
+      'frontend https_proxy',
+      `  bind ${CONTAINER_BIND_HOST}:${https.port} ssl crt ${HAPROXY_COMBINED_PEM_PATH}`,
+      ...buildRouteSelectionRules(config.routing.locations, 'https'),
+      `  default_backend ${primaryRoute.runtime.haproxyBackendName}-https`,
+      '',
+    );
+  }
+
+  for (const route of config.routing.locations) {
+    lines.push(
+      `backend ${route.runtime.haproxyBackendName}-socks5`,
+      `  server ${route.runtime.routeId} ${route.runtime.wireproxyServiceName}:${config.setup.bind.socksPort} check`,
+      '',
+      `backend ${route.runtime.haproxyBackendName}-http`,
+      `  server ${route.runtime.routeId} ${route.runtime.wireproxyServiceName}:${config.setup.bind.httpPort} check`,
+      '',
+    );
+
+    if (https.enabled) {
+      lines.push(
+        `backend ${route.runtime.haproxyBackendName}-https`,
+        `  server ${route.runtime.routeId} ${route.runtime.wireproxyServiceName}:${config.setup.bind.httpPort} check`,
+        '',
+      );
+    }
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+function buildRouteSelectionRules(routes: readonly RoutedLocation[], protocol: RuntimeProtocol): string[] {
+  // SOCKS5 does not preserve the requested proxy hostname end-to-end, so the front door must dispatch by the
+  // published destination bind IP that the operator mapped from hostname -> bind IP during setup/config inspection.
+  return routes.flatMap((route) => {
+    const aclName = `route_${route.runtime.routeId.replace(/[^a-zA-Z0-9]/g, '_')}_${protocol}`;
+    return [
+      `  acl ${aclName} dst ${route.bindIp}`,
+      `  use_backend ${route.runtime.haproxyBackendName}-${protocol} if ${aclName}`,
+    ];
+  });
 }
 
 async function ensureDirectory(directoryPath: string): Promise<void> {

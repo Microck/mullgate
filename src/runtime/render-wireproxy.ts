@@ -2,8 +2,12 @@ import { chmod, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import { createLocationAliasCatalog, resolveLocationAlias, type LocationAliasTarget } from '../domain/location-aliases.js';
-import type { MullgatePaths } from '../config/paths.js';
-import type { MullgateConfig } from '../config/schema.js';
+import {
+  resolveRouteWireproxyPaths,
+  type MullgatePaths,
+  type RouteWireproxyPaths,
+} from '../config/paths.js';
+import type { MullgateConfig, RoutedLocation } from '../config/schema.js';
 import type { MullvadRelay, MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
 
 const DEFAULT_ALLOWED_IPS = '0.0.0.0/0, ::/0';
@@ -11,6 +15,22 @@ const DEFAULT_KEEPALIVE_SECONDS = 25;
 const DEFAULT_MULLVAD_DNS = '10.64.0.1';
 const DEFAULT_WIREGUARD_PORT = 51820;
 const CONTAINER_BIND_HOST = '0.0.0.0';
+
+export type WireproxyRouteIdentity = {
+  readonly routeId: string;
+  readonly routeAlias: string;
+  readonly routeHostname: string;
+  readonly routeBindIp: string;
+  readonly serviceName: string;
+  readonly backendName: string;
+};
+
+export type RenderedWireproxyRoute = WireproxyRouteIdentity & {
+  readonly selectedRelay: MullvadRelay;
+  readonly selectedTarget: LocationAliasTarget | null;
+  readonly wireproxyConfig: string;
+  readonly artifactPaths: RouteWireproxyPaths;
+};
 
 export type RenderedWireproxyArtifacts = {
   readonly wireproxyConfigPath: string;
@@ -26,6 +46,7 @@ export type RenderWireproxySuccess = {
   selectedRelay: MullvadRelay;
   selectedTarget: LocationAliasTarget | null;
   wireproxyConfig: string;
+  routes: readonly RenderedWireproxyRoute[];
   artifactPaths: RenderedWireproxyArtifacts;
 };
 
@@ -38,6 +59,11 @@ export type RenderWireproxyFailure = {
   message: string;
   cause?: string;
   artifactPath?: string;
+  routeId?: string;
+  routeAlias?: string;
+  routeHostname?: string;
+  routeBindIp?: string;
+  serviceName?: string;
 };
 
 export type RenderWireproxyResult = RenderWireproxySuccess | RenderWireproxyFailure;
@@ -51,46 +77,58 @@ export type RenderWireproxyOptions = {
 
 export function planWireproxyArtifacts(options: RenderWireproxyOptions): RenderWireproxyResult {
   const checkedAt = options.generatedAt ?? new Date().toISOString();
-  const wireguard = options.config.mullvad.wireguard;
+  const routes: RenderedWireproxyRoute[] = [];
 
-  if (!wireguard.publicKey || !wireguard.privateKey || !wireguard.ipv4Address) {
-    return {
-      ok: false,
-      phase: 'artifact-render',
-      source: 'canonical-config',
-      checkedAt,
-      code: 'MISSING_WIREGUARD',
-      message: 'Cannot render wireproxy artifacts before Mullvad WireGuard credentials are fully provisioned.',
-      artifactPath: options.paths.configFile,
-    };
+  for (const route of options.config.routing.locations) {
+    if (!route.mullvad.wireguard.publicKey || !route.mullvad.wireguard.privateKey || !route.mullvad.wireguard.ipv4Address) {
+      return {
+        ok: false,
+        phase: 'artifact-render',
+        source: 'canonical-config',
+        checkedAt,
+        code: 'MISSING_WIREGUARD',
+        message: `Cannot render wireproxy artifacts for route ${route.runtime.routeId} before Mullvad WireGuard credentials are fully provisioned.`,
+        artifactPath: options.paths.configFile,
+        ...describeRoute(route),
+      };
+    }
+
+    const selectedTargetResult = resolveConfiguredLocation(route, options.relayCatalog.relays);
+
+    if (!selectedTargetResult.ok) {
+      return {
+        ok: false,
+        phase: 'artifact-render',
+        source: selectedTargetResult.source,
+        checkedAt,
+        code: 'NO_MATCHING_RELAY',
+        message: `No relay from the cached Mullvad catalog matched route ${route.runtime.routeId}.`,
+        ...(selectedTargetResult.cause ? { cause: selectedTargetResult.cause } : {}),
+        artifactPath: selectedTargetResult.artifactPath,
+        ...describeRoute(route),
+      };
+    }
+
+    routes.push({
+      ...describeRoute(route),
+      selectedRelay: selectedTargetResult.value.relay,
+      selectedTarget: selectedTargetResult.value.target,
+      wireproxyConfig: buildWireproxyConfig(options.config, route, selectedTargetResult.value.relay, checkedAt),
+      artifactPaths: resolveRouteWireproxyPaths(options.paths, route.runtime),
+    });
   }
 
-  const selectedTargetResult = resolveConfiguredLocation(options.config, options.relayCatalog.relays);
-
-  if (!selectedTargetResult.ok) {
-    return {
-      ok: false,
-      phase: 'artifact-render',
-      source: selectedTargetResult.source,
-      checkedAt,
-      code: 'NO_MATCHING_RELAY',
-      message: selectedTargetResult.message,
-      ...(selectedTargetResult.cause ? { cause: selectedTargetResult.cause } : {}),
-      artifactPath: selectedTargetResult.artifactPath,
-    };
-  }
-
-  const selectedRelay = selectedTargetResult.value.relay;
-  const wireproxyConfig = buildWireproxyConfig(options.config, selectedRelay, checkedAt);
+  const primaryRoute = routes[0]!;
 
   return {
     ok: true,
     phase: 'artifact-render',
     source: 'canonical-config',
     checkedAt,
-    selectedRelay,
-    selectedTarget: selectedTargetResult.value.target,
-    wireproxyConfig,
+    selectedRelay: primaryRoute.selectedRelay,
+    selectedTarget: primaryRoute.selectedTarget,
+    wireproxyConfig: primaryRoute.wireproxyConfig,
+    routes,
     artifactPaths: {
       wireproxyConfigPath: options.paths.wireproxyConfigFile,
       relayCachePath: options.paths.provisioningCacheFile,
@@ -112,8 +150,16 @@ export async function renderWireproxyArtifacts(options: RenderWireproxyOptions):
     await ensureDirectory(options.paths.appCacheDir);
 
     await writeFileAtomic(planned.artifactPaths.wireproxyConfigPath, planned.wireproxyConfig, 0o600);
+
+    for (const route of planned.routes) {
+      await writeFileAtomic(route.artifactPaths.wireproxyConfigPath, route.wireproxyConfig, 0o600);
+    }
+
     await writeFileAtomic(planned.artifactPaths.relayCachePath, `${JSON.stringify(options.relayCatalog, null, 2)}\n`, 0o600);
   } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    const failingRoute = planned.routes.find((route) => route.artifactPaths.wireproxyConfigPath.includes('.tmp')) ?? null;
+
     return {
       ok: false,
       phase: 'artifact-render',
@@ -121,21 +167,50 @@ export async function renderWireproxyArtifacts(options: RenderWireproxyOptions):
       checkedAt: planned.checkedAt,
       code: 'WRITE_FAILED',
       message: 'Failed to persist derived wireproxy artifacts under the Mullgate XDG directories.',
-      cause: error instanceof Error ? error.message : String(error),
+      cause,
       artifactPath: options.paths.runtimeDir,
+      ...(failingRoute ? describeRenderedRoute(failingRoute) : {}),
     };
   }
 
   return planned;
 }
 
-function buildWireproxyConfig(config: MullgateConfig, relay: MullvadRelay, generatedAt: string): string {
-  const wireguard = config.mullvad.wireguard;
+function describeRoute(route: RoutedLocation): WireproxyRouteIdentity {
+  return {
+    routeId: route.runtime.routeId,
+    routeAlias: route.alias,
+    routeHostname: route.hostname,
+    routeBindIp: route.bindIp,
+    serviceName: route.runtime.wireproxyServiceName,
+    backendName: route.runtime.haproxyBackendName,
+  };
+}
+
+function describeRenderedRoute(route: RenderedWireproxyRoute): WireproxyRouteIdentity {
+  return {
+    routeId: route.routeId,
+    routeAlias: route.routeAlias,
+    routeHostname: route.routeHostname,
+    routeBindIp: route.routeBindIp,
+    serviceName: route.serviceName,
+    backendName: route.backendName,
+  };
+}
+
+function buildWireproxyConfig(
+  config: MullgateConfig,
+  route: RoutedLocation,
+  relay: MullvadRelay,
+  generatedAt: string,
+): string {
+  const wireguard = route.mullvad.wireguard;
   const dnsServers = wireguard.dnsServers.length > 0 ? wireguard.dnsServers : [DEFAULT_MULLVAD_DNS];
   const interfaceAddresses = [wireguard.ipv4Address, wireguard.ipv6Address].filter((value): value is string => Boolean(value));
   const lines = [
     '# Generated by Mullgate. Derived artifact; edit canonical config instead.',
     `# Generated at ${generatedAt}`,
+    `# Route ${route.runtime.routeId} (${route.hostname} -> ${route.bindIp})`,
     '',
     '[Interface]',
     `Address = ${interfaceAddresses.join(', ')}`,
@@ -163,12 +238,12 @@ function buildWireproxyConfig(config: MullgateConfig, relay: MullvadRelay, gener
 }
 
 function resolveConfiguredLocation(
-  config: MullgateConfig,
+  route: RoutedLocation,
   relays: readonly MullvadRelay[],
 ):
   | { ok: true; value: { relay: MullvadRelay; target: LocationAliasTarget | null } }
   | { ok: false; source: 'canonical-config' | 'relay-catalog' | 'user-input'; message: string; cause?: string; artifactPath?: string } {
-  const directRelay = findDirectRelayMatch(relays, config);
+  const directRelay = findDirectRelayMatch(relays, route);
 
   if (directRelay) {
     return {
@@ -188,7 +263,7 @@ function resolveConfiguredLocation(
     };
   }
 
-  const aliasInput = config.setup.location.resolvedAlias ?? config.setup.location.hostnameLabel ?? config.setup.location.requested;
+  const aliasInput = route.relayPreference.resolvedAlias ?? route.relayPreference.hostnameLabel ?? route.relayPreference.requested;
   const catalogResult = createLocationAliasCatalog(relays);
 
   if (!catalogResult.ok) {
@@ -206,21 +281,21 @@ function resolveConfiguredLocation(
     return {
       ok: false,
       source: resolvedAlias.source,
-      message: 'No relay from the cached Mullvad catalog matched the saved location preference.',
+      message: 'No relay from the cached Mullvad catalog matched the saved route preference.',
       cause: resolvedAlias.message,
       artifactPath: aliasInput,
     };
   }
 
   const candidateRelays = relays.filter((relay) => relayMatchesTarget(relay, resolvedAlias.value));
-  const constrainedRelays = applyRelayConstraints(candidateRelays, config);
+  const constrainedRelays = applyRelayConstraints(candidateRelays, route);
   const selectedRelay = choosePreferredRelay(constrainedRelays);
 
   if (!selectedRelay) {
     return {
       ok: false,
       source: 'canonical-config',
-      message: 'No relay from the cached Mullvad catalog matched the saved location preference.',
+      message: 'No relay from the cached Mullvad catalog matched the saved route preference.',
       cause: `Resolved alias ${resolvedAlias.alias} but no active relay satisfied the saved constraints.`,
       artifactPath: aliasInput,
     };
@@ -235,27 +310,27 @@ function resolveConfiguredLocation(
   };
 }
 
-function findDirectRelayMatch(relays: readonly MullvadRelay[], config: MullgateConfig): MullvadRelay | null {
-  const location = config.setup.location;
-  const constrained = applyRelayConstraints(relays, config);
+function findDirectRelayMatch(relays: readonly MullvadRelay[], route: RoutedLocation): MullvadRelay | null {
+  const constrained = applyRelayConstraints(relays, route);
+  const hostnameCandidates = [route.hostname, route.relayPreference.hostnameLabel].filter(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0,
+  );
 
-  if (location.hostnameLabel) {
-    const exactRelay = constrained.find(
-      (relay) => relay.hostname === location.hostnameLabel || relay.fqdn === location.hostnameLabel,
-    );
+  for (const hostname of hostnameCandidates) {
+    const exactRelay = constrained.find((relay) => relay.hostname === hostname || relay.fqdn === hostname);
 
     if (exactRelay) {
       return exactRelay;
     }
   }
 
-  if (location.country || location.city) {
+  if (route.relayPreference.country || route.relayPreference.city) {
     const matchingRelays = constrained.filter((relay) => {
-      if (location.country && relay.location.countryCode !== location.country) {
+      if (route.relayPreference.country && relay.location.countryCode !== route.relayPreference.country) {
         return false;
       }
 
-      if (location.city && relay.location.cityCode !== location.city) {
+      if (route.relayPreference.city && relay.location.cityCode !== route.relayPreference.city) {
         return false;
       }
 
@@ -280,8 +355,8 @@ function relayMatchesTarget(relay: MullvadRelay, target: LocationAliasTarget): b
   return relay.hostname === target.hostname;
 }
 
-function applyRelayConstraints(relays: readonly MullvadRelay[], config: MullgateConfig): MullvadRelay[] {
-  const providers = new Set(config.mullvad.relayConstraints.providers.map((provider) => provider.toLowerCase()));
+function applyRelayConstraints(relays: readonly MullvadRelay[], route: RoutedLocation): MullvadRelay[] {
+  const providers = new Set(route.mullvad.relayConstraints.providers.map((provider) => provider.toLowerCase()));
 
   return relays.filter((relay) => {
     if (providers.size > 0 && (!relay.provider || !providers.has(relay.provider.toLowerCase()))) {
