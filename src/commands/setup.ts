@@ -7,6 +7,7 @@ const ACCOUNT_NUMBER_ENV = 'MULLGATE_ACCOUNT_NUMBER';
 const PROXY_PASSWORD_ENV = 'MULLGATE_PROXY_PASSWORD';
 const PROXY_USERNAME_ENV = 'MULLGATE_PROXY_USERNAME';
 const LOCATION_ENV = 'MULLGATE_LOCATION';
+const LOCATIONS_ENV = 'MULLGATE_LOCATIONS';
 const BIND_HOST_ENV = 'MULLGATE_BIND_HOST';
 const SOCKS_PORT_ENV = 'MULLGATE_SOCKS_PORT';
 const HTTP_PORT_ENV = 'MULLGATE_HTTP_PORT';
@@ -25,7 +26,7 @@ type SetupCommandOptions = {
   readonly httpsPort?: string;
   readonly username?: string;
   readonly password?: string;
-  readonly location?: string;
+  readonly location?: string[];
   readonly httpsCertPath?: string;
   readonly httpsKeyPath?: string;
   readonly deviceName?: string;
@@ -45,7 +46,12 @@ export function registerSetupCommand(program: Command): void {
     .option(`--https-port <port>`, `Override ${HTTPS_PORT_ENV} for optional HTTPS proxy support.`)
     .option(`--username <name>`, `Override ${PROXY_USERNAME_ENV} or prompt for the proxy username.`)
     .option(`--password <secret>`, `Override ${PROXY_PASSWORD_ENV} or prompt for the proxy password.`)
-    .option(`--location <alias>`, `Override ${LOCATION_ENV} or prompt for the preferred Mullvad location alias.`)
+    .option(
+      `--location <alias>`,
+      `Append a routed Mullvad location alias. Repeat or comma-separate values for multiple routes. ${LOCATION_ENV} stays shorthand for route 1; ${LOCATIONS_ENV} accepts a comma-separated ordered list.`,
+      collectLocationOption,
+      [],
+    )
     .option(`--https-cert-path <path>`, `Override ${HTTPS_CERT_ENV} for optional HTTPS certificate validation.`)
     .option(`--https-key-path <path>`, `Override ${HTTPS_KEY_ENV} for optional HTTPS key validation.`)
     .option(`--device-name <name>`, `Override ${DEVICE_NAME_ENV} for the Mullvad device label.`)
@@ -61,6 +67,7 @@ export function registerSetupCommand(program: Command): void {
 }
 
 function buildRunOptions(options: SetupCommandOptions, env: NodeJS.ProcessEnv, store: ConfigStore): RunSetupFlowOptions {
+  const configuredLocations = readLocationInputs(options.location, env);
   const initialValues: Partial<SetupInputValues> = {
     ...(readOptionalString(options.accountNumber ?? env[ACCOUNT_NUMBER_ENV]) ? { accountNumber: readOptionalString(options.accountNumber ?? env[ACCOUNT_NUMBER_ENV]) } : {}),
     ...(readOptionalString(options.bindHost ?? env[BIND_HOST_ENV]) ? { bindHost: readOptionalString(options.bindHost ?? env[BIND_HOST_ENV]) } : {}),
@@ -75,7 +82,9 @@ function buildRunOptions(options: SetupCommandOptions, env: NodeJS.ProcessEnv, s
       : {}),
     ...(readOptionalString(options.username ?? env[PROXY_USERNAME_ENV]) ? { username: readOptionalString(options.username ?? env[PROXY_USERNAME_ENV]) } : {}),
     ...(readOptionalString(options.password ?? env[PROXY_PASSWORD_ENV]) ? { password: readOptionalString(options.password ?? env[PROXY_PASSWORD_ENV]) } : {}),
-    ...(readOptionalString(options.location ?? env[LOCATION_ENV]) ? { location: readOptionalString(options.location ?? env[LOCATION_ENV]) } : {}),
+    ...(configuredLocations.length > 0
+      ? { locations: configuredLocations as [string, ...string[]], location: configuredLocations[0] }
+      : {}),
     ...(readOptionalString(options.httpsCertPath ?? env[HTTPS_CERT_ENV])
       ? { httpsCertPath: readOptionalString(options.httpsCertPath ?? env[HTTPS_CERT_ENV]) }
       : {}),
@@ -108,6 +117,17 @@ function writeSetupResult(result: SetupFlowResult): void {
     result.cancelled ? 'Mullgate setup cancelled.' : 'Mullgate setup failed.',
     `phase: ${result.phase}`,
     `source: ${result.source}`,
+    ...('code' in result && result.code ? [`code: ${result.code}`] : []),
+    ...('route' in result && result.route
+      ? [
+          `route: ${result.route.index + 1}`,
+          `route alias: ${result.route.alias}`,
+          `requested alias: ${result.route.requested}`,
+          `hostname: ${result.route.hostname}`,
+          `bind ip: ${result.route.bindIp}`,
+          `device: ${result.route.deviceName}`,
+        ]
+      : []),
     ...('artifactPath' in result && result.artifactPath ? [`artifact: ${result.artifactPath}`] : []),
     ...('endpoint' in result && result.endpoint ? [`endpoint: ${result.endpoint}`] : []),
     `reason: ${result.message}`,
@@ -116,6 +136,33 @@ function writeSetupResult(result: SetupFlowResult): void {
   ];
 
   process.stderr.write(`${lines.join('\n')}\n`);
+}
+
+function collectLocationOption(value: string, previous: string[] = []): string[] {
+  return [...previous, ...parseLocationEntries(value)];
+}
+
+function readLocationInputs(cliValues: readonly string[] | undefined, env: NodeJS.ProcessEnv): string[] {
+  const cliLocations = (cliValues ?? []).flatMap((value) => parseLocationEntries(value));
+
+  if (cliLocations.length > 0) {
+    return cliLocations;
+  }
+
+  const envLocations = parseLocationEntries(env[LOCATIONS_ENV]);
+
+  if (envLocations.length > 0) {
+    return envLocations;
+  }
+
+  return parseLocationEntries(env[LOCATION_ENV]);
+}
+
+function parseLocationEntries(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
 }
 
 function readOptionalString(value: string | undefined): string | undefined {

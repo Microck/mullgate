@@ -8,7 +8,9 @@ import path, { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createLocationAliasCatalog, resolveLocationAlias } from '../src/domain/location-aliases.js';
+import { ConfigStore } from '../src/config/store.js';
 import { resolveMullgatePaths } from '../src/config/paths.js';
+import { runSetupFlow } from '../src/app/setup-runner.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../src/config/schema.js';
 import { fetchRelays, normalizeRelayPayload } from '../src/mullvad/fetch-relays.js';
 import { provisionWireguard } from '../src/mullvad/provision-wireguard.js';
@@ -533,6 +535,7 @@ Password = PROXY_PASSWORD
       },
     );
   });
+
   it('accepts the plain-text assigned address that Mullvad currently documents for router setup', async () => {
     await withJsonServer(
       {
@@ -567,6 +570,183 @@ Password = PROXY_PASSWORD
             hijackDns: false,
             ports: [],
           },
+        });
+      },
+    );
+  });
+
+  it('persists multi-route setup state with distinct Mullvad device data', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const store = new ConfigStore(paths);
+    const provisionFixture = JSON.parse(await readTextFixture('wg-provision-response.txt')) as Record<string, unknown>;
+    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+    const provisionedNames: string[] = [];
+    let provisionCount = 0;
+
+    await withJsonServer(
+      {
+        '/wg': (request) => {
+          provisionCount += 1;
+          const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
+          provisionedNames.push(payload.name ?? '<missing>');
+
+          return {
+            body: JSON.stringify({
+              ...provisionFixture,
+              id: `device-${provisionCount}`,
+              pubkey: payload.pubkey,
+              name: payload.name ?? `mullgate-route-${provisionCount}`,
+              ipv4_address: `10.64.12.${33 + provisionCount}/32`,
+            }),
+          };
+        },
+        '/relays': () => ({
+          body: JSON.stringify(relayFixture),
+        }),
+      },
+      async (baseUrl) => {
+        const result = await runSetupFlow({
+          store,
+          interactive: false,
+          initialValues: {
+            accountNumber: '123456789012',
+            username: 'alice',
+            password: 'multi-route-secret',
+            locations: ['sweden-gothenburg', 'austria-vienna'] as [string, ...string[]],
+            deviceName: 'mullgate-lab',
+          },
+          provisioningBaseUrl: new URL('/wg', baseUrl),
+          relayCatalogUrl: new URL('/relays', baseUrl),
+          checkedAt: '2026-03-20T18:45:00.000Z',
+          validateOptions: {
+            spawn: createSpawnStub({
+              docker: () => ({
+                status: 0,
+                stdout: 'docker wireproxy configtest ok\n',
+              }),
+            }),
+          },
+        });
+
+        expect(result.ok).toBe(true);
+
+        if (!result.ok) {
+          return;
+        }
+
+        expect(provisionedNames).toEqual(['mullgate-lab-sweden-gothenburg', 'mullgate-lab-austria-vienna']);
+        expect(result.routes).toEqual([
+          {
+            index: 0,
+            requested: 'sweden-gothenburg',
+            alias: 'sweden-gothenburg',
+            hostname: 'sweden-gothenburg',
+            bindIp: '127.0.0.1',
+            deviceName: 'mullgate-lab-sweden-gothenburg',
+            publicKey: result.routes[0]!.publicKey,
+            ipv4Address: '10.64.12.34/32',
+            ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
+          },
+          {
+            index: 1,
+            requested: 'austria-vienna',
+            alias: 'austria-vienna',
+            hostname: 'austria-vienna',
+            bindIp: '127.0.0.2',
+            deviceName: 'mullgate-lab-austria-vienna',
+            publicKey: result.routes[1]!.publicKey,
+            ipv4Address: '10.64.12.35/32',
+            ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
+          },
+        ]);
+
+        const savedConfig = JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
+        expect(savedConfig.routing.locations).toHaveLength(2);
+        expect(savedConfig.routing.locations[0]!.mullvad.deviceName).toBe('mullgate-lab-sweden-gothenburg');
+        expect(savedConfig.routing.locations[1]!.mullvad.deviceName).toBe('mullgate-lab-austria-vienna');
+        expect(savedConfig.routing.locations[0]!.bindIp).toBe('127.0.0.1');
+        expect(savedConfig.routing.locations[1]!.bindIp).toBe('127.0.0.2');
+        expect(savedConfig.routing.locations[0]!.mullvad.wireguard.publicKey).not.toBe(
+          savedConfig.routing.locations[1]!.mullvad.wireguard.publicKey,
+        );
+        expect(savedConfig.routing.locations[0]!.mullvad.wireguard.ipv4Address).toBe('10.64.12.34/32');
+        expect(savedConfig.routing.locations[1]!.mullvad.wireguard.ipv4Address).toBe('10.64.12.35/32');
+        expect(savedConfig.setup.location.requested).toBe('sweden-gothenburg');
+        expect(savedConfig.setup.location.resolvedAlias).toBe('sweden-gothenburg');
+        expect(savedConfig.mullvad.deviceName).toBe('mullgate-lab-sweden-gothenburg');
+      },
+    );
+  });
+
+  it('returns route-specific provisioning failure metadata for the second route', async () => {
+    const env = createTempEnvironment();
+    const store = new ConfigStore(resolveMullgatePaths(env));
+    const provisionFixture = JSON.parse(await readTextFixture('wg-provision-response.txt')) as Record<string, unknown>;
+    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+    let provisionCount = 0;
+
+    await withJsonServer(
+      {
+        '/wg': (request) => {
+          provisionCount += 1;
+          const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
+
+          if (provisionCount === 2) {
+            return {
+              status: 500,
+              body: JSON.stringify({ detail: `account 123456789012 for ${payload.name ?? 'missing-device'} failed upstream` }),
+            };
+          }
+
+          return {
+            body: JSON.stringify({
+              ...provisionFixture,
+              id: 'device-1',
+              pubkey: payload.pubkey,
+              name: payload.name ?? 'mullgate-lab-sweden-gothenburg',
+              ipv4_address: '10.64.12.34/32',
+            }),
+          };
+        },
+        '/relays': () => ({
+          body: JSON.stringify(relayFixture),
+        }),
+      },
+      async (baseUrl) => {
+        const result = await runSetupFlow({
+          store,
+          interactive: false,
+          initialValues: {
+            accountNumber: '123456789012',
+            username: 'alice',
+            password: 'route-2-secret',
+            locations: ['sweden-gothenburg', 'austria-vienna'] as [string, ...string[]],
+            deviceName: 'mullgate-lab',
+          },
+          provisioningBaseUrl: new URL('/wg', baseUrl),
+          relayCatalogUrl: new URL('/relays', baseUrl),
+          checkedAt: '2026-03-20T18:46:00.000Z',
+        });
+
+        expect(result).toEqual({
+          ok: false,
+          phase: 'wireguard-provision',
+          source: 'mullvad-wg-endpoint',
+          exitCode: 1,
+          paths: store.paths,
+          code: 'HTTP_ERROR',
+          endpoint: new URL('/wg', baseUrl).toString(),
+          route: {
+            index: 1,
+            requested: 'austria-vienna',
+            alias: 'austria-vienna',
+            hostname: 'austria-vienna',
+            bindIp: '127.0.0.2',
+            deviceName: 'mullgate-lab-austria-vienna',
+          },
+          message: 'Provisioning failed for routed location austria-vienna (austria-vienna -> 127.0.0.2).',
+          cause: 'account [redacted-account] for mullgate-lab-austria-vienna failed upstream',
         });
       },
     );

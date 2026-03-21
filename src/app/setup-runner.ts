@@ -4,7 +4,7 @@ import { hostname } from 'node:os';
 
 import { cancel as clackCancel, confirm, intro, isCancel, outro, password, text } from '@clack/prompts';
 
-import { createLocationAliasCatalog, resolveLocationAlias, type LocationAliasTarget } from '../domain/location-aliases.js';
+import { createLocationAliasCatalog, normalizeLocationToken, resolveLocationAlias, type LocationAliasCatalog, type LocationAliasTarget } from '../domain/location-aliases.js';
 import type { MullgatePaths } from '../config/paths.js';
 import { ConfigStore, normalizeMullgateConfig } from '../config/store.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../config/schema.js';
@@ -27,11 +27,27 @@ export type SetupInputValues = {
   readonly httpPort: number;
   readonly username: string;
   readonly password: string;
+  readonly locations: readonly [string, ...string[]];
   readonly location: string;
   readonly httpsPort: number | null;
   readonly httpsCertPath?: string;
   readonly httpsKeyPath?: string;
   readonly deviceName?: string;
+};
+
+export type SetupRouteMetadata = {
+  readonly index: number;
+  readonly requested: string;
+  readonly alias: string;
+  readonly hostname: string;
+  readonly bindIp: string;
+  readonly deviceName: string;
+};
+
+export type SetupSuccessRoute = SetupRouteMetadata & {
+  readonly publicKey: string;
+  readonly ipv4Address: string;
+  readonly ipv6Address?: string;
 };
 
 export type SetupSuccess = {
@@ -41,6 +57,7 @@ export type SetupSuccess = {
   readonly exitCode: 0;
   readonly paths: MullgatePaths;
   readonly config: MullgateConfig;
+  readonly routes: readonly SetupSuccessRoute[];
   readonly selectedLocation: LocationAliasTarget;
   readonly selectedRelayHostname: string;
   readonly relayCatalog: MullvadRelayCatalog;
@@ -82,9 +99,11 @@ export type SetupFailure = {
   readonly exitCode: 1;
   readonly paths: MullgatePaths;
   readonly message: string;
+  readonly code?: string;
   readonly cause?: string;
   readonly endpoint?: string;
   readonly artifactPath?: string;
+  readonly route?: SetupRouteMetadata;
   readonly config?: MullgateConfig;
 };
 
@@ -113,6 +132,16 @@ export type RunSetupFlowOptions = {
   readonly fetch?: typeof globalThis.fetch;
   readonly validateOptions?: Pick<ValidateWireproxyOptions, 'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'spawn'>;
   readonly checkedAt?: string;
+};
+
+type PlannedSetupRoute = SetupRouteMetadata & {
+  readonly resolvedLocation: LocationAliasTarget;
+  readonly relayPreference: MullgateConfig['setup']['location'];
+  readonly routeId: string;
+};
+
+type ProvisionedSetupRoute = PlannedSetupRoute & {
+  readonly provisioning: Extract<ProvisionWireguardResult, { ok: true }>;
 };
 
 export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<SetupFlowResult> {
@@ -200,46 +229,62 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     };
   }
 
-  const resolvedLocation = resolveLocationAlias(aliasCatalog.value, promptValues.value.location);
+  const plannedRoutesResult = planSetupRoutes({
+    requestedLocations: promptValues.value.locations,
+    aliasCatalog: aliasCatalog.value,
+    baseDeviceName: promptValues.value.deviceName ?? defaultDeviceName(),
+  });
 
-  if (!resolvedLocation.ok) {
+  if (!plannedRoutesResult.ok) {
     return {
       ok: false,
-      phase: resolvedLocation.phase,
-      source: resolvedLocation.source,
+      phase: plannedRoutesResult.phase,
+      source: plannedRoutesResult.source,
       exitCode: 1,
       paths: store.paths,
-      message: resolvedLocation.message,
-      ...(resolvedLocation.alias ? { artifactPath: resolvedLocation.alias } : {}),
+      code: plannedRoutesResult.code,
+      message: plannedRoutesResult.message,
+      ...(plannedRoutesResult.artifactPath ? { artifactPath: plannedRoutesResult.artifactPath } : {}),
+      ...(plannedRoutesResult.route ? { route: plannedRoutesResult.route } : {}),
     };
   }
 
-  const provisionResult = await provisionWireguard({
-    accountNumber: promptValues.value.accountNumber,
-    ...(promptValues.value.deviceName ? { deviceName: promptValues.value.deviceName } : {}),
-    ...(options.provisioningBaseUrl ? { baseUrl: options.provisioningBaseUrl } : {}),
-    ...(options.fetch ? { fetch: options.fetch } : {}),
-    checkedAt: options.checkedAt,
-  });
+  const provisionedRoutes: ProvisionedSetupRoute[] = [];
 
-  if (!provisionResult.ok) {
-    return {
-      ok: false,
-      phase: provisionResult.phase,
-      source: provisionResult.source,
-      exitCode: 1,
-      paths: store.paths,
-      endpoint: provisionResult.endpoint,
-      message: provisionResult.message,
-      ...(provisionResult.cause ? { cause: provisionResult.cause } : {}),
-    };
+  for (const route of plannedRoutesResult.value) {
+    const provisionResult = await provisionWireguard({
+      accountNumber: promptValues.value.accountNumber,
+      deviceName: route.deviceName,
+      ...(options.provisioningBaseUrl ? { baseUrl: options.provisioningBaseUrl } : {}),
+      ...(options.fetch ? { fetch: options.fetch } : {}),
+      checkedAt: options.checkedAt,
+    });
+
+    if (!provisionResult.ok) {
+      return {
+        ok: false,
+        phase: provisionResult.phase,
+        source: provisionResult.source,
+        exitCode: 1,
+        paths: store.paths,
+        code: provisionResult.code,
+        endpoint: provisionResult.endpoint,
+        route: summarizeSetupRoute(route),
+        message: `Provisioning failed for routed location ${route.alias} (${route.hostname} -> ${route.bindIp}).`,
+        cause: formatProvisioningCause(provisionResult),
+      };
+    }
+
+    provisionedRoutes.push({
+      ...route,
+      provisioning: provisionResult,
+    });
   }
 
   const initialConfig = createCanonicalConfig({
     inputs: promptValues.value,
-    resolvedLocation: resolvedLocation.value,
+    routes: provisionedRoutes,
     relayCatalog: relayResult.value,
-    provisionResult,
     paths: store.paths,
     checkedAt: options.checkedAt,
   });
@@ -318,7 +363,8 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     exitCode: 0,
     paths: store.paths,
     config: finalConfig,
-    selectedLocation: renderResult.selectedTarget ?? resolvedLocation.value,
+    routes: provisionedRoutes.map(toSetupSuccessRoute),
+    selectedLocation: renderResult.selectedTarget ?? provisionedRoutes[0]!.resolvedLocation,
     selectedRelayHostname: renderResult.selectedRelay.hostname,
     relayCatalog: relayResult.value,
     configPath: store.paths.configFile,
@@ -336,11 +382,107 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
       `relay cache: ${renderResult.artifactPaths.relayCachePath}`,
       `docker compose: ${store.paths.runtimeComposeFile}`,
       `validation report: ${renderResult.artifactPaths.configTestReportPath}`,
-      `location: ${resolvedLocation.alias}`,
+      `location: ${provisionedRoutes[0]!.alias}`,
+      `routes: ${provisionedRoutes.length}`,
+      ...provisionedRoutes.flatMap((route) => [
+        `${route.index + 1}. ${route.alias}`,
+        `   hostname: ${route.hostname}`,
+        `   bind ip: ${route.bindIp}`,
+        `   device: ${route.deviceName}`,
+        `   tunnel ipv4: ${route.provisioning.value.ipv4Address}`,
+      ]),
       `relay: ${renderResult.selectedRelay.hostname}`,
       `validation: ${summarizeValidationSource(validationResult)}`,
     ].join('\n'),
   };
+}
+
+function planSetupRoutes(input: {
+  requestedLocations: readonly string[];
+  aliasCatalog: LocationAliasCatalog;
+  baseDeviceName: string;
+}):
+  | { readonly ok: true; readonly value: readonly PlannedSetupRoute[] }
+  | {
+      readonly ok: false;
+      readonly phase: SetupFailure['phase'];
+      readonly source: string;
+      readonly code: string;
+      readonly message: string;
+      readonly artifactPath?: string;
+      readonly route: SetupRouteMetadata;
+    } {
+  const routeCount = input.requestedLocations.length;
+  const provisionalRoutes = input.requestedLocations.map((requested, index) => {
+    const provisionalAlias = normalizeLocationToken(requested) || `route-${index + 1}`;
+    return {
+      index,
+      requested,
+      alias: provisionalAlias,
+      hostname: provisionalAlias,
+      bindIp: deriveLoopbackBindIp(index),
+      deviceName: deriveRouteDeviceName(input.baseDeviceName, provisionalAlias, routeCount),
+    } satisfies SetupRouteMetadata;
+  });
+  const usedRouteLabels = new Set<string>();
+  const plannedRoutes: PlannedSetupRoute[] = [];
+
+  for (const provisionalRoute of provisionalRoutes) {
+    const resolvedLocation = resolveLocationAlias(input.aliasCatalog, provisionalRoute.requested);
+
+    if (!resolvedLocation.ok) {
+      return {
+        ok: false,
+        phase: resolvedLocation.phase,
+        source: resolvedLocation.source,
+        code: resolvedLocation.code,
+        message: resolvedLocation.message,
+        ...(resolvedLocation.alias ? { artifactPath: resolvedLocation.alias } : {}),
+        route: provisionalRoute,
+      };
+    }
+
+    const routeLabel = chooseUniqueRouteLabel(deriveCanonicalRouteLabel(resolvedLocation.value), usedRouteLabels);
+
+    plannedRoutes.push({
+      ...provisionalRoute,
+      alias: routeLabel,
+      hostname: routeLabel,
+      deviceName: deriveRouteDeviceName(input.baseDeviceName, routeLabel, routeCount),
+      resolvedLocation: resolvedLocation.value,
+      relayPreference: createRouteRelayPreference(provisionalRoute.requested, routeLabel, resolvedLocation.value),
+      routeId: routeLabel,
+    });
+  }
+
+  return {
+    ok: true,
+    value: plannedRoutes,
+  };
+}
+
+function summarizeSetupRoute(route: SetupRouteMetadata): SetupRouteMetadata {
+  return {
+    index: route.index,
+    requested: route.requested,
+    alias: route.alias,
+    hostname: route.hostname,
+    bindIp: route.bindIp,
+    deviceName: route.deviceName,
+  };
+}
+
+function toSetupSuccessRoute(route: ProvisionedSetupRoute): SetupSuccessRoute {
+  return {
+    ...summarizeSetupRoute(route),
+    publicKey: route.provisioning.value.publicKey,
+    ipv4Address: route.provisioning.value.ipv4Address,
+    ...(route.provisioning.value.ipv6Address ? { ipv6Address: route.provisioning.value.ipv6Address } : {}),
+  };
+}
+
+function formatProvisioningCause(result: Extract<ProvisionWireguardResult, { ok: false }>): string {
+  return result.cause ?? result.message;
 }
 
 export function withRuntimeStatus(
@@ -444,14 +586,35 @@ export async function loadStoredRelayCatalog(relayCachePath: string): Promise<
 
 function createCanonicalConfig(input: {
   inputs: SetupInputValues;
-  resolvedLocation: LocationAliasTarget;
+  routes: readonly ProvisionedSetupRoute[];
   relayCatalog: MullvadRelayCatalog;
-  provisionResult: Extract<ProvisionWireguardResult, { ok: true }>;
   paths: MullgatePaths;
   checkedAt?: string;
 }): MullgateConfig {
   const timestamp = input.checkedAt ?? new Date().toISOString();
   const httpsEnabled = input.inputs.httpsPort !== null || Boolean(input.inputs.httpsCertPath || input.inputs.httpsKeyPath);
+  const primaryRoute = input.routes[0]!;
+  const routingLocations = input.routes.map((route) => ({
+    alias: route.alias,
+    hostname: route.hostname,
+    bindIp: route.bindIp,
+    relayPreference: structuredClone(route.relayPreference),
+    mullvad: {
+      accountNumber: input.inputs.accountNumber,
+      deviceName: route.deviceName,
+      lastProvisionedAt: route.provisioning.checkedAt,
+      relayConstraints: {
+        providers: [],
+      },
+      wireguard: route.provisioning.value.toConfigValue(),
+    },
+    runtime: {
+      routeId: route.routeId,
+      wireproxyServiceName: `wireproxy-${route.routeId}`,
+      haproxyBackendName: `route-${route.routeId}`,
+      wireproxyConfigFile: `wireproxy-${route.routeId}.conf`,
+    },
+  }));
 
   return normalizeMullgateConfig({
     version: CONFIG_VERSION,
@@ -473,29 +636,16 @@ function createCanonicalConfig(input: {
         mode: 'loopback',
         allowLan: false,
       },
-      location: {
-        requested: input.inputs.location,
-        ...(input.resolvedLocation.kind !== 'relay' ? { country: input.resolvedLocation.countryCode } : { country: input.resolvedLocation.countryCode }),
-        ...(input.resolvedLocation.kind === 'city' || input.resolvedLocation.kind === 'relay'
-          ? { city: input.resolvedLocation.cityCode }
-          : {}),
-        ...(input.resolvedLocation.kind === 'relay' ? { hostnameLabel: input.resolvedLocation.hostname } : {}),
-        resolvedAlias: normalizeResolvedAlias(input.inputs.location),
-      },
+      location: structuredClone(primaryRoute.relayPreference),
       https: {
         enabled: httpsEnabled,
         ...(input.inputs.httpsCertPath ? { certPath: input.inputs.httpsCertPath } : {}),
         ...(input.inputs.httpsKeyPath ? { keyPath: input.inputs.httpsKeyPath } : {}),
       },
     },
-    mullvad: {
-      accountNumber: input.inputs.accountNumber,
-      deviceName: input.inputs.deviceName ?? defaultDeviceName(),
-      lastProvisionedAt: timestamp,
-      relayConstraints: {
-        providers: [],
-      },
-      wireguard: input.provisionResult.value.toConfigValue(),
+    mullvad: structuredClone(routingLocations[0]!.mullvad),
+    routing: {
+      locations: routingLocations,
     },
     runtime: {
       backend: 'wireproxy',
@@ -533,13 +683,14 @@ async function collectSetupInputs(input: {
   | { readonly ok: false; readonly source: 'input'; readonly message: string; readonly artifactPath?: string }
 > {
   const values = normalizeInitialSetupValues(input.initialValues);
+  const configuredLocations = values.locations ?? ['se-gothenburg'];
 
   if (!input.interactive) {
     const missing = [
       ['account number', values.accountNumber],
       ['proxy username', values.username],
       ['proxy password', values.password],
-      ['location alias', values.location],
+      ['location alias', configuredLocations.length > 0 ? configuredLocations.join(', ') : undefined],
     ].filter(([, value]) => !value || value.trim().length === 0);
 
     if (missing.length > 0) {
@@ -625,14 +776,15 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
-  const location = await text({
-    message: 'Preferred Mullvad location alias',
-    initialValue: values.location,
-    placeholder: 'se-gothenburg',
-    validate: (value) => ((value ?? '').trim().length > 0 ? undefined : 'Enter a country, city, or relay alias.'),
+  const locationAliases = await text({
+    message: 'Mullvad route aliases (comma-separated, ordered)',
+    initialValue: configuredLocations.join(', '),
+    placeholder: 'sweden-gothenburg, austria-vienna',
+    validate: (value) =>
+      parseLocationList(value).length > 0 ? undefined : 'Enter at least one country, city, or relay alias.',
   });
 
-  if (isCancel(location)) {
+  if (isCancel(locationAliases)) {
     clackCancel('Setup cancelled.');
     return PROMPT_CANCELLED;
   }
@@ -704,13 +856,13 @@ async function collectSetupInputs(input: {
     httpPort: Number(httpPort.trim()),
     username: username.trim(),
     password: proxyPassword.trim(),
-    location: location.trim(),
+    locations: parseLocationList(locationAliases) as [string, ...string[]],
     httpsCertPath,
     httpsKeyPath,
     httpsPort,
   });
 
-  outro(`Will provision ${finalized.location} and write Mullgate config to ${input.paths.configFile}.`);
+  outro(`Will provision ${finalized.locations.join(', ')} and write Mullgate config to ${input.paths.configFile}.`);
 
   return {
     ok: true,
@@ -741,6 +893,9 @@ async function saveConfigSafely(store: ConfigStore, config: MullgateConfig): Pro
 }
 
 function normalizeInitialSetupValues(initialValues: Partial<SetupInputValues> | undefined): Partial<SetupInputValues> {
+  const normalizedLocations = parseLocationList(initialValues?.locations ?? initialValues?.location);
+  const locations = (normalizedLocations.length > 0 ? normalizedLocations : ['se-gothenburg']) as [string, ...string[]];
+
   return {
     accountNumber: initialValues?.accountNumber?.trim(),
     bindHost: initialValues?.bindHost?.trim() || DEFAULT_BIND_HOST,
@@ -748,7 +903,8 @@ function normalizeInitialSetupValues(initialValues: Partial<SetupInputValues> | 
     httpPort: initialValues?.httpPort ?? DEFAULT_HTTP_PORT,
     username: initialValues?.username?.trim() || DEFAULT_PROXY_USERNAME,
     password: initialValues?.password,
-    location: initialValues?.location?.trim() || 'se-gothenburg',
+    locations,
+    location: locations[0],
     httpsPort: initialValues?.httpsPort ?? null,
     httpsCertPath: initialValues?.httpsCertPath?.trim(),
     httpsKeyPath: initialValues?.httpsKeyPath?.trim(),
@@ -757,6 +913,9 @@ function normalizeInitialSetupValues(initialValues: Partial<SetupInputValues> | 
 }
 
 function finalizeSetupValues(values: Partial<SetupInputValues>): SetupInputValues {
+  const parsedLocations = parseLocationList(values.locations ?? values.location);
+  const locations = (parsedLocations.length > 0 ? parsedLocations : ['se-gothenburg']) as [string, ...string[]];
+
   return {
     accountNumber: values.accountNumber!.trim(),
     bindHost: values.bindHost!.trim(),
@@ -764,11 +923,78 @@ function finalizeSetupValues(values: Partial<SetupInputValues>): SetupInputValue
     httpPort: values.httpPort!,
     username: values.username!.trim(),
     password: values.password!.trim(),
-    location: values.location!.trim(),
+    locations,
+    location: locations[0],
     httpsPort: values.httpsPort ?? null,
     ...(values.httpsCertPath ? { httpsCertPath: values.httpsCertPath.trim() } : {}),
     ...(values.httpsKeyPath ? { httpsKeyPath: values.httpsKeyPath.trim() } : {}),
     ...(values.deviceName ? { deviceName: values.deviceName.trim() } : {}),
+  };
+}
+
+function parseLocationList(value: readonly string[] | string | undefined): string[] {
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => parseLocationList(entry));
+  }
+
+  return [];
+}
+
+function chooseUniqueRouteLabel(candidate: string, usedRouteLabels: Set<string>): string {
+  const baseCandidate = normalizeLocationToken(candidate) || 'route';
+  let resolvedCandidate = baseCandidate;
+  let suffix = 2;
+
+  while (usedRouteLabels.has(resolvedCandidate)) {
+    resolvedCandidate = `${baseCandidate}-${suffix}`;
+    suffix += 1;
+  }
+
+  usedRouteLabels.add(resolvedCandidate);
+  return resolvedCandidate;
+}
+
+function deriveCanonicalRouteLabel(target: LocationAliasTarget): string {
+  if (target.kind === 'country') {
+    return normalizeLocationToken(target.countryName) || target.countryCode;
+  }
+
+  if (target.kind === 'city') {
+    return `${normalizeLocationToken(target.countryName)}-${normalizeLocationToken(target.cityName)}`;
+  }
+
+  return normalizeLocationToken(target.hostname);
+}
+
+function deriveLoopbackBindIp(index: number): string {
+  const thirdOctet = Math.floor(index / 254);
+  const fourthOctet = (index % 254) + 1;
+
+  return `127.0.${thirdOctet}.${fourthOctet}`;
+}
+
+function deriveRouteDeviceName(baseDeviceName: string, routeLabel: string, routeCount: number): string {
+  return routeCount > 1 ? `${baseDeviceName}-${routeLabel}` : baseDeviceName;
+}
+
+function createRouteRelayPreference(
+  requestedAlias: string,
+  canonicalAlias: string,
+  target: LocationAliasTarget,
+): MullgateConfig['setup']['location'] {
+  return {
+    requested: requestedAlias,
+    country: target.countryCode,
+    ...(target.kind === 'city' || target.kind === 'relay' ? { city: target.cityCode } : {}),
+    ...(target.kind === 'relay' ? { hostnameLabel: target.hostname } : {}),
+    resolvedAlias: canonicalAlias,
   };
 }
 
@@ -842,10 +1068,6 @@ function validatePortInput(value: string | undefined): string | undefined {
 
 function defaultDeviceName(): string {
   return `mullgate-${hostname().split('.')[0] || 'host'}`;
-}
-
-function normalizeResolvedAlias(value: string): string {
-  return value.trim().toLowerCase();
 }
 
 function isInteractiveTerminal(): boolean {
