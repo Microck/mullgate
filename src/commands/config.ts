@@ -96,7 +96,7 @@ export type ExposureCommandOptions = {
 };
 
 export function registerConfigCommands(program: Command): void {
-  const config = program.command('config').description('Inspect saved Mullgate configuration and derived paths.');
+  const config = program.command('config').description('Inspect or update saved Mullgate configuration and derived paths.');
 
   config
     .command('path')
