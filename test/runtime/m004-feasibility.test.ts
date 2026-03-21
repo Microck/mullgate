@@ -3,7 +3,6 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { normalizeRelayPayload } from '../../src/mullvad/fetch-relays.js';
 import {
   FEASIBILITY_ARTIFACT_VERSION,
   FEASIBILITY_PROOF_MODEL,
@@ -17,11 +16,14 @@ import {
   type FeasibilityProbeObservation,
   type HostRouteSnapshot,
 } from '../../src/m004/feasibility-contract.js';
+import { runFeasibilityVerifier } from '../../src/m004/feasibility-runner.js';
+import { normalizeRelayPayload } from '../../src/mullvad/fetch-relays.js';
 
-const fixturesDir = path.join(process.cwd(), 'test/fixtures/mullvad');
+const fixturesDir = path.join(process.cwd(), 'test/fixtures');
+const mullvadFixturesDir = path.join(fixturesDir, 'mullvad');
 
 async function readJsonFixture<T>(name: string): Promise<T> {
-  const raw = await readFile(path.join(fixturesDir, name), 'utf8');
+  const raw = await readFile(path.join(mullvadFixturesDir, name), 'utf8');
   return JSON.parse(raw) as T;
 }
 
@@ -581,141 +583,37 @@ describe('m004 feasibility contract', () => {
     expect(serialized).not.toContain('alice');
     expect(serialized).not.toContain('BEGIN PRIVATE KEY');
     expect(serialized).toContain('at-vie-wg-socks5-001.relays.mullvad.net');
-    expect('\\n' + serialized).toMatchInlineSnapshot(`
-      "\\n{
-        "schemaVersion": 1,
-        "generatedAt": "2026-03-21T19:02:00.000Z",
-        "topology": {
-          "proofModel": "single-entry-shared-socks-exits",
-          "entryIdentity": {
-            "mullvadWireguardDeviceCount": 1,
-            "deviceName": "mullgate-m004-feasibility",
-            "relayHostname": "se-got-wg-101",
-            "relayFqdn": "se-got-wg-101.relays.mullvad.net",
-            "endpointIpv4": "146.70.10.10",
-            "endpointIpv6": "2a03:1b20:5:f011::a",
-            "publicKey": "public-entry-key",
-            "accountNumber": "[redacted]",
-            "wireguardPrivateKey": "[redacted]",
-            "location": {
-              "countryCode": "se",
-              "countryName": "Sweden",
-              "cityCode": "got",
-              "cityName": "Gothenburg"
-            }
-          },
-          "logicalExits": [
-            {
-              "logicalExitId": "exit-1",
-              "relayHostname": "at-vie-wg-001",
-              "relayFqdn": "at-vie-wg-001.relays.mullvad.net",
-              "endpointIpv4": "146.70.111.84",
-              "publicKey": "relay-public-key-1",
-              "socksHostname": "at-vie-wg-socks5-001.relays.mullvad.net",
-              "socksPort": 1080,
-              "source": "www-relays-all",
-              "location": {
-                "countryCode": "at",
-                "countryName": "Austria",
-                "cityCode": "vie",
-                "cityName": "Vienna"
-              }
-            },
-            {
-              "logicalExitId": "exit-2",
-              "relayHostname": "se-sto-wg-001",
-              "relayFqdn": "se-sto-wg-001.relays.mullvad.net",
-              "endpointIpv4": "146.70.82.18",
-              "publicKey": "relay-public-key-2",
-              "socksHostname": "se-sto-wg-socks5-001.relays.mullvad.net",
-              "socksPort": 1080,
-              "source": "www-relays-all",
-              "location": {
-                "countryCode": "se",
-                "countryName": "Sweden",
-                "cityCode": "sto",
-                "cityName": "Stockholm"
-              }
-            }
-          ]
-        },
-        "relaySelection": {
-          "requestedCount": 2,
-          "availableCount": 2,
-          "candidateCount": 3,
-          "missingMetadataCount": 0,
-          "selectedRelayHostnames": [
-            "at-vie-wg-001",
-            "se-sto-wg-001"
-          ]
-        },
-        "prerequisiteFailures": [],
-        "routeCheck": {
-          "before": {
-            "checkedAt": "2026-03-21T19:00:00.000Z",
-            "targetIp": "1.1.1.1",
-            "command": "ip route get 1.1.1.1",
-            "normalizedRoute": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000",
-            "stdout": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000\\n",
-            "stderr": ""
-          },
-          "after": {
-            "checkedAt": "2026-03-21T19:03:00.000Z",
-            "targetIp": "1.1.1.1",
-            "command": "ip route get 1.1.1.1",
-            "normalizedRoute": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000",
-            "stdout": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000\\n",
-            "stderr": ""
-          },
-          "unchanged": true
-        },
-        "probes": [
-          {
-            "ok": true,
-            "logicalExitId": "exit-1",
-            "targetUrl": "https://am.i.mullvad.net/json",
-            "proxyUrl": "[redacted]",
-            "startedAt": "2026-03-21T19:01:00.000Z",
-            "completedAt": "2026-03-21T19:01:01.250Z",
-            "durationMs": 1250,
-            "stdoutArtifactPath": "/tmp/exit-1-stdout.txt",
-            "stderrArtifactPath": "/tmp/exit-1-stderr.txt",
-            "observedExit": {
-              "ip": "185.65.134.10",
-              "country": "Austria",
-              "city": "Vienna"
-            }
-          },
-          {
-            "ok": false,
-            "logicalExitId": "exit-2",
-            "targetUrl": "https://am.i.mullvad.net/json",
-            "proxyUrl": "[redacted]",
-            "startedAt": "2026-03-21T19:01:00.000Z",
-            "completedAt": "2026-03-21T19:01:02.000Z",
-            "durationMs": 2000,
-            "code": "PROBE_FAILED",
-            "message": "Probe for exit-2 failed while using account [redacted] and [redacted]",
-            "stdoutArtifactPath": "/tmp/exit-2-stdout.txt",
-            "stderrArtifactPath": "/tmp/exit-2-stderr.txt"
-          }
-        ],
-        "summary": {
-          "requestedLogicalExitCount": 2,
-          "successfulProbeCount": 1,
-          "failedProbeCount": 1,
-          "distinctObservedExitCount": 1,
-          "routeUnchanged": true,
-          "collapsedLogicalExitIds": []
-        },
-        "verdict": {
-          "status": "fail",
-          "reason": "probe-failure",
-          "phase": "probe-execution",
-          "stopReason": "probe-failure",
-          "summary": "At least one logical exit probe failed before the verifier could compare distinct exits."
-        }
-      }"
-    `);
+  });
+
+  it('replays a collapsed-exit fixture into the summary bundle without requiring live Mullvad access', async () => {
+    const outputRoot = path.join(process.cwd(), '.tmp', 'vitest-m004-fixture');
+    const result = await runFeasibilityVerifier({
+      targetUrl: 'https://am.i.mullvad.net/json',
+      routeCheckIp: '1.1.1.1',
+      logicalExitCount: 2,
+      outputRoot,
+      keepTempHome: false,
+      fixturePath: path.join(fixturesDir, 'm004', 'feasibility-collapsed-exit.json'),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.preservedWorkspace).toBe(true);
+    expect(result.artifact.verdict).toEqual({
+      status: 'fail',
+      reason: 'collapsed-exits',
+      phase: 'summary',
+      stopReason: 'collapsed-exits',
+      summary: 'Two or more logical exits resolved to the same observed exit, so the shared-entry topology did not prove distinct exits.',
+    });
+
+    const summaryJson = await readFile(result.summaryJsonPath, 'utf8');
+    const summaryText = await readFile(result.summaryTextPath, 'utf8');
+
+    expect(summaryJson).toContain('"status": "fail"');
+    expect(summaryJson).toContain('"reason": "collapsed-exits"');
+    expect(summaryText).toContain('M004 feasibility verdict: FAIL');
+    expect(summaryText).toContain('distinct observed exits: 1');
+    expect(summaryText).toContain('exit-1: relay=at-vie-wg-001, observed=185.65.134.10 Austria/Vienna');
+    expect(summaryText).toContain('exit-2: relay=se-got-wg-101, observed=185.65.134.10 Austria/Vienna');
   });
 });

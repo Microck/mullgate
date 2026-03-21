@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-03-21T23:10:00.000Z",
+  "topology": {
+    "proofModel": "single-entry-shared-socks-exits",
+    "entryIdentity": {
+      "mullvadWireguardDeviceCount": 1,
+      "deviceName": "mullgate-m004-feasibility",
+      "relayHostname": "se-got-wg-101",
+      "relayFqdn": "se-got-wg-101.relays.mullvad.net",
+      "endpointIpv4": "146.70.40.2",
+      "endpointIpv6": "2a03:1b20:5:f011::a01f",
+      "publicKey": "entry-public-key",
+      "location": {
+        "countryCode": "se",
+        "countryName": "Sweden",
+        "cityCode": "got",
+        "cityName": "Gothenburg"
+      }
+    },
+    "logicalExits": [
+      {
+        "logicalExitId": "exit-1",
+        "relayHostname": "at-vie-wg-001",
+        "relayFqdn": "at-vie-wg-001.relays.mullvad.net",
+        "endpointIpv4": "146.70.116.98",
+        "endpointIpv6": "2001:ac8:29:84::a01f",
+        "publicKey": "relay-public-key-1",
+        "socksHostname": "at-vie-wg-socks5-001.relays.mullvad.net",
+        "socksPort": 1080,
+        "source": "www-relays-all",
+        "location": {
+          "countryCode": "at",
+          "countryName": "Austria",
+          "cityCode": "vie",
+          "cityName": "Vienna"
+        }
+      },
+      {
+        "logicalExitId": "exit-2",
+        "relayHostname": "se-got-wg-101",
+        "relayFqdn": "se-got-wg-101.relays.mullvad.net",
+        "endpointIpv4": "146.70.40.2",
+        "endpointIpv6": "2a03:1b20:5:f011::a01f",
+        "publicKey": "relay-public-key-2",
+        "socksHostname": "se-got-wg-socks5-101.relays.mullvad.net",
+        "socksPort": 1080,
+        "source": "www-relays-all",
+        "location": {
+          "countryCode": "se",
+          "countryName": "Sweden",
+          "cityCode": "got",
+          "cityName": "Gothenburg"
+        }
+      }
+    ]
+  },
+  "relaySelection": {
+    "requestedCount": 2,
+    "availableCount": 2,
+    "candidateCount": 3,
+    "missingMetadataCount": 0,
+    "selectedRelayHostnames": [
+      "at-vie-wg-001",
+      "se-got-wg-101"
+    ]
+  },
+  "prerequisiteFailures": [],
+  "routeCheck": {
+    "before": {
+      "checkedAt": "2026-03-21T23:05:00.000Z",
+      "targetIp": "1.1.1.1",
+      "command": "ip route get 1.1.1.1",
+      "normalizedRoute": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000",
+      "stdout": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000\n",
+      "stderr": ""
+    },
+    "after": {
+      "checkedAt": "2026-03-21T23:08:00.000Z",
+      "targetIp": "1.1.1.1",
+      "command": "ip route get 1.1.1.1",
+      "normalizedRoute": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000",
+      "stdout": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000\n",
+      "stderr": ""
+    },
+    "unchanged": true
+  },
+  "probes": [
+    {
+      "ok": true,
+      "logicalExitId": "exit-1",
+      "targetUrl": "https://am.i.mullvad.net/json",
+      "proxyUrl": "[redacted]",
+      "startedAt": "2026-03-21T23:06:00.000Z",
+      "completedAt": "2026-03-21T23:06:01.100Z",
+      "durationMs": 1100,
+      "stdoutArtifactPath": "/tmp/exit-1.stdout.txt",
+      "stderrArtifactPath": "/tmp/exit-1.stderr.txt",
+      "observedExit": {
+        "ip": "185.65.134.10",
+        "country": "Austria",
+        "city": "Vienna"
+      }
+    },
+    {
+      "ok": true,
+      "logicalExitId": "exit-2",
+      "targetUrl": "https://am.i.mullvad.net/json",
+      "proxyUrl": "[redacted]",
+      "startedAt": "2026-03-21T23:06:00.000Z",
+      "completedAt": "2026-03-21T23:06:01.400Z",
+      "durationMs": 1400,
+      "stdoutArtifactPath": "/tmp/exit-2.stdout.txt",
+      "stderrArtifactPath": "/tmp/exit-2.stderr.txt",
+      "observedExit": {
+        "ip": "185.65.134.10",
+        "country": "Austria",
+        "city": "Vienna"
+      }
+    }
+  ],
+  "summary": {
+    "requestedLogicalExitCount": 2,
+    "successfulProbeCount": 2,
+    "failedProbeCount": 0,
+    "distinctObservedExitCount": 1,
+    "routeUnchanged": true,
+    "collapsedLogicalExitIds": [
+      "exit-1",
+      "exit-2"
+    ]
+  },
+  "verdict": {
+    "status": "fail",
+    "reason": "collapsed-exits",
+    "phase": "summary",
+    "stopReason": "collapsed-exits",
+    "summary": "Two or more logical exits resolved to the same observed exit, so the shared-entry topology did not prove distinct exits."
+  }
+}
