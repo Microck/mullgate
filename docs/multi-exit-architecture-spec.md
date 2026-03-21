@@ -1,0 +1,294 @@
+# Multi-Exit Architecture Spec
+
+## Status
+
+Proposed specification for the next milestone after M001.
+
+This document is intended as the handoff artifact for the next GSD milestone. It explains why the current Mullgate architecture does not scale to 10+ simultaneous country-specific proxies on a single Mullvad account, and it defines the research and implementation direction for an alternative design based on **one Mullvad WireGuard tunnel plus multiple Mullvad SOCKS5-based exit paths**.
+
+## Why this spec exists
+
+M001 proved that Mullgate can be built as a CLI-first, Docker-first, hostname-selected proxy product using Mullvad-backed WireGuard provisioning and per-route runtime backends.
+
+However, the live acceptance work in S07 exposed a hard product constraint:
+
+- Mullvad allows **up to 5 WireGuard keys/devices per account**.
+- The current Mullgate design provisions **one Mullvad WireGuard device per configured route/location**.
+- Therefore, the current model does not scale to a target use case like **10 simultaneous country-specific proxies on one Mullvad account**.
+
+This is not just a verification blocker. It is an architectural limit in the current runtime model.
+
+## Problem statement
+
+The current architecture ties each country/location route to its own upstream Mullvad WireGuard identity.
+
+That means:
+
+- 1 location = 1 Mullvad WireGuard key/device
+- 2 locations = 2 Mullvad WireGuard keys/devices
+- 10 locations = 10 Mullvad WireGuard keys/devices
+
+Because Mullvad caps WireGuard keys per account, the current design prevents one-account deployments with many simultaneous country-specific exits.
+
+This breaks an important user goal:
+
+- expose many local proxy endpoints
+- choose country/location by proxy hostname
+- use them concurrently for scraping or other automation workloads
+- avoid buying and coordinating many Mullvad accounts when possible
+
+## Goal of the next milestone
+
+Determine whether Mullgate can be redesigned so that:
+
+- **one Mullvad WireGuard tunnel** is used as the upstream entry path
+- multiple local proxy endpoints are still exposed concurrently
+- each local endpoint maps to a different **Mullvad SOCKS5 relay / exit path**
+- the product preserves:
+  - CLI-only operation
+  - hostname-selected routing semantics
+  - SOCKS5, HTTP, and HTTPS local proxy support
+  - standalone proxy behavior without taking over host routing
+
+## Non-goals
+
+This milestone should **not** attempt to:
+
+- bypass Mullvad account/device limits through unsupported or deceptive means
+- falsify multiple-country support without proving distinct exits
+- preserve the current per-route WireGuard-backend runtime if it blocks the target goal
+- redesign Windows/macOS support before the Linux feasibility is proven
+- optimize for public shared-proxy hosting
+
+## Current architecture summary
+
+The existing Mullgate runtime is built around these ideas:
+
+- canonical routed config in `routing.locations[]`
+- one rendered backend per configured route
+- one Mullvad-provisioned WireGuard identity per route
+- routing by destination bind IP so hostname-selected behavior works consistently across SOCKS5, HTTP, and HTTPS
+- a Docker-first runtime bundle that wires together the local proxy surfaces and the per-route upstream backends
+
+This design is coherent and correct for a small number of routes, but it scales linearly with Mullvad device usage.
+
+## Proposed architecture direction
+
+### High-level idea
+
+Replace the current "one Mullvad WireGuard identity per route" model with:
+
+- **one shared Mullvad WireGuard entry tunnel**
+- **many local proxy entrypoints**
+- **many logical exit selections** implemented by chaining traffic to chosen Mullvad SOCKS5 relay targets from inside that WireGuard-connected environment
+
+### Intended outcome
+
+The product should still feel like:
+
+- `se.example` → Sweden proxy
+- `jp.example` → Japan proxy
+- `us-nyc.example` → New York proxy
+
+But internally, those routes would no longer require separate Mullvad WireGuard devices if the upstream exit-selection mechanism can be implemented on top of a single entry tunnel.
+
+## Critical feasibility questions
+
+The next milestone must answer these before any broad refactor is approved.
+
+### 1. Can one WireGuard-connected Mullvad node access many Mullvad SOCKS5 exits concurrently?
+
+We need proof that one active Mullvad WireGuard tunnel can reach multiple Mullvad SOCKS5 relay paths at the same time and that these can be driven deterministically from local routing logic.
+
+### 2. Do different relay selections actually produce different exit geographies?
+
+The product promise depends on route A and route B producing observably different countries/cities/IPs. This must be verified against real Mullvad-backed traffic, not assumed from hostnames.
+
+### 3. Can hostname-selected routing remain truthful across SOCKS5, HTTP, and HTTPS?
+
+The current architecture uses destination bind IPs because SOCKS5 does not reliably preserve the original hostname in-band for routing decisions. The next design must still provide one truthful selection mechanism across all supported proxy protocols.
+
+### 4. Can local HTTP and HTTPS proxy support survive a SOCKS5-based upstream design?
+
+Even if Mullvad upstream selection works over SOCKS5 relay chaining, the user-facing product still needs local SOCKS5, HTTP, and HTTPS surfaces unless a decision is made to narrow the contract.
+
+### 5. What are the performance, concurrency, and failure-mode tradeoffs?
+
+We need evidence on:
+
+- latency overhead
+- failure isolation
+- relay saturation/shared fate
+- whether one entry tunnel becomes a bottleneck
+- whether 10+ concurrent countries is operationally realistic
+
+### 6. Is this actually a fit for scraping?
+
+The milestone should explicitly test whether the resulting topology is good enough for the intended workload, not merely technically possible.
+
+## Functional requirements for the new architecture
+
+If the feasibility work succeeds, the resulting implementation should satisfy all of the following.
+
+### Local proxy behavior
+
+- Mullgate exposes many local proxy endpoints concurrently.
+- Users can select the desired country/location by hostname or equivalent stable local entrypoint naming.
+- Local proxy endpoints remain authenticated by default.
+- The host machine’s default routing remains unchanged.
+
+### Protocol support
+
+- Local SOCKS5 support remains available.
+- Local HTTP support remains available.
+- Local HTTPS-capable proxy support remains available, or any narrowing must be an explicit product decision with migration/documentation updates.
+
+### CLI and config behavior
+
+- Setup remains CLI-only.
+- Config remains inspectable and editable through Mullgate.
+- The new runtime topology is represented in a clear canonical config model.
+- Operators can inspect which local endpoint maps to which upstream relay/exit behavior.
+
+### Diagnostics and observability
+
+- `mullgate status` must show the new runtime topology truthfully.
+- `mullgate doctor` must explain relay-chain failures and upstream reachability failures clearly.
+- Runtime manifests must expose enough information for future agents to inspect route-to-exit behavior.
+- Failure artifacts must remain secret-safe.
+
+## Suggested milestone structure
+
+This should be treated as a **new milestone**, not as a patch to M001/S07.
+
+### Phase 1 — Research
+
+Create a research slice that answers the feasibility questions using:
+
+- official Mullvad documentation
+- inspection of Mullvad SOCKS5 and multihop behavior
+- small runnable experiments
+- real exit verification where needed
+
+#### Deliverables
+
+- research artifact summarizing what is possible, impossible, and still unknown
+- a decision on whether the one-entry/many-exit architecture is viable enough to pursue
+
+### Phase 2 — Feasibility spike
+
+Build the smallest possible real prototype that proves or disproves the core claim:
+
+> one Mullvad WireGuard tunnel can power multiple local country-specific proxy exits concurrently
+
+#### Minimum spike success criteria
+
+- one WireGuard entry tunnel comes up successfully
+- at least 2–3 local logical routes can be selected concurrently
+- those routes produce distinct observed exit results
+- host routing does not change globally
+- the spike does not require one Mullvad key per route
+
+#### Minimum spike artifacts
+
+- runnable verifier script
+- proof logs / summary
+- probe results with exit IP/country/city
+- explicit notes on what did and did not work
+
+### Phase 3 — Architecture decision
+
+If the spike succeeds, record a decision that supersedes the current per-route WireGuard-backend assumptions.
+
+If the spike fails, record that clearly and stop before broad runtime/config churn.
+
+### Phase 4 — Product redesign roadmap
+
+Only after a successful feasibility spike should the project begin:
+
+- config redesign
+- runtime redesign
+- CLI workflow changes
+- doc and verifier rewrites
+- migration planning from current route-per-key architecture
+
+## Suggested first slice for the next milestone
+
+### Slice title
+
+**Feasibility: one-entry tunnel with many logical exits**
+
+### Slice objective
+
+Prove whether one active Mullvad WireGuard connection can support multiple concurrent, country-distinct local proxy routes via Mullvad SOCKS5 relay chaining.
+
+### Slice verification target
+
+A real verifier should demonstrate:
+
+- one upstream WireGuard key only
+- multiple local entrypoints
+- distinct exit results for multiple routes
+- no host default-route takeover
+
+### Done when
+
+One of these is true:
+
+1. **PASS** — the architecture works well enough to justify a full redesign roadmap
+2. **FAIL** — the architecture cannot support truthful multi-country local endpoints well enough, and the project should not pursue it
+
+Either outcome is valid if it is evidenced.
+
+## Suggested research questions for the next agent
+
+The next milestone should start by answering these concretely:
+
+1. Which Mullvad SOCKS5 relay surfaces are officially supported and how are they selected?
+2. Can multiple relay selections be used simultaneously from one WireGuard-connected runtime?
+3. Does relay selection correspond cleanly to country/city expectations?
+4. How should local hostname-selected routing map to the new upstream selection mechanism?
+5. Can the current protocol contract (SOCKS5 + HTTP + HTTPS) remain intact under this topology?
+6. Which current decisions and requirements would need to be revised if this architecture is adopted?
+
+## Risks
+
+### Product risk
+
+The new model may turn out to be technically possible but operationally weak for scraping workloads.
+
+### Architecture risk
+
+The current route-selection and bind-IP design may not translate cleanly to SOCKS5-based upstream exit chaining.
+
+### Verification risk
+
+Distinct relay hostnames may not guarantee distinct end-exit behavior in practice.
+
+### Complexity risk
+
+The redesign may increase operational complexity enough to hurt the low-friction self-hoster story.
+
+## What the next milestone should not assume
+
+The next milestone must **not** assume that:
+
+- Mullvad SOCKS5 relays automatically solve 10-country concurrency
+- router-style fan-out alone gives many simultaneous country exits
+- a SOCKS5-based upstream model automatically preserves current HTTPS behavior
+- the current config/runtime model can be reused unchanged
+
+These must all be proven.
+
+## Recommended immediate GSD action
+
+The next operator should:
+
+1. create a new milestone for this architecture investigation
+2. start with a research slice, not implementation
+3. create a feasibility spike as the first executable slice
+4. only begin broad refactoring after the spike proves the model works
+
+## One-sentence handoff
+
+M001 exposed that Mullgate’s current one-route-per-WireGuard-key design cannot scale to many simultaneous country proxies on one Mullvad account; the next milestone should investigate and, if viable, redesign the product around **one Mullvad WireGuard entry tunnel plus multiple Mullvad SOCKS5-based logical exits**.

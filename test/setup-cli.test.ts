@@ -370,7 +370,7 @@ reason: Validated via wireproxy-binary/configtest."
     );
   });
 
-  it('saves two routed locations from the real CLI flow with deterministic route metadata', async () => {
+  it('saves two routed locations from the real CLI flow with deterministic route metadata', { timeout: 10000 }, async () => {
     const env = createTempEnvironment();
     await createFakeWireproxyBinary(env);
 

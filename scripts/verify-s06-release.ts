@@ -777,8 +777,8 @@ function assertStatusOutput(output: string, context: VerificationContext, manife
     'phase: running',
     `config: ${context.paths.configFile}`,
     `runtime dir: ${context.paths.runtimeDir}`,
-    `runtime manifest: present (${context.paths.runtimeBundleManifestFile})`,
-    `last start report: present (${context.paths.runtimeStartDiagnosticsFile})`,
+    `runtime manifest: ${context.paths.runtimeBundleManifestFile} (present)`,
+    `last start report: ${context.paths.runtimeStartDiagnosticsFile} (present)`,
   ];
 
   for (const entry of expected) {

@@ -687,6 +687,94 @@ Password = PROXY_PASSWORD
     );
   });
 
+  it('retries a throttled second-route Mullvad provisioning call and still persists the multi-route setup', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const store = new ConfigStore(paths);
+    const provisionFixture = JSON.parse(await readTextFixture('wg-provision-response.txt')) as Record<string, unknown>;
+    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+    const attemptsByDevice = new Map<string, number>();
+
+    await withJsonServer(
+      {
+        '/wg': (request) => {
+          const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
+          const deviceName = payload.name ?? '<missing>';
+          const attempt = (attemptsByDevice.get(deviceName) ?? 0) + 1;
+          attemptsByDevice.set(deviceName, attempt);
+
+          if (deviceName === 'mullgate-lab-austria-vienna' && attempt === 1) {
+            return {
+              status: 429,
+              body: 'Request was throttled. Expected available in 1 second.',
+              contentType: 'text/plain',
+            };
+          }
+
+          const ipv4Address = deviceName === 'mullgate-lab-sweden-gothenburg' ? '10.64.12.34/32' : '10.64.12.35/32';
+
+          return {
+            body: JSON.stringify({
+              ...provisionFixture,
+              id: `${deviceName}-attempt-${attempt}`,
+              pubkey: payload.pubkey,
+              name: deviceName,
+              ipv4_address: ipv4Address,
+            }),
+          };
+        },
+        '/relays': () => ({
+          body: JSON.stringify(relayFixture),
+        }),
+      },
+      async (baseUrl) => {
+        const startedAt = Date.now();
+        const result = await runSetupFlow({
+          store,
+          interactive: false,
+          initialValues: {
+            accountNumber: '123456789012',
+            username: 'alice',
+            password: 'multi-route-secret',
+            locations: ['sweden-gothenburg', 'austria-vienna'] as [string, ...string[]],
+            deviceName: 'mullgate-lab',
+          },
+          provisioningBaseUrl: new URL('/wg', baseUrl),
+          relayCatalogUrl: new URL('/relays', baseUrl),
+          checkedAt: '2026-03-20T18:45:00.000Z',
+          validateOptions: {
+            spawn: createSpawnStub({
+              docker: () => ({
+                status: 0,
+                stdout: 'docker wireproxy configtest ok\n',
+              }),
+            }),
+          },
+        });
+        const elapsedMs = Date.now() - startedAt;
+
+        expect(result.ok).toBe(true);
+
+        if (!result.ok) {
+          return;
+        }
+
+        expect(attemptsByDevice.get('mullgate-lab-sweden-gothenburg')).toBe(1);
+        expect(attemptsByDevice.get('mullgate-lab-austria-vienna')).toBe(2);
+        expect(elapsedMs).toBeGreaterThanOrEqual(900);
+        expect(result.routes.map((route) => route.deviceName)).toEqual([
+          'mullgate-lab-sweden-gothenburg',
+          'mullgate-lab-austria-vienna',
+        ]);
+
+        const savedConfig = JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
+        expect(savedConfig.routing.locations).toHaveLength(2);
+        expect(savedConfig.routing.locations[1]!.mullvad.deviceName).toBe('mullgate-lab-austria-vienna');
+        expect(savedConfig.routing.locations[1]!.mullvad.wireguard.ipv4Address).toBe('10.64.12.35/32');
+      },
+    );
+  });
+
   it('persists public direct-ip exposure with an explicit bind ip for single-route setup', async () => {
     const env = createTempEnvironment();
     const paths = resolveMullgatePaths(env);
@@ -909,6 +997,11 @@ describe('failure metadata and redaction', () => {
           status: 500,
           body: JSON.stringify({ detail: 'account 123456789012 failed upstream' }),
         }),
+        '/wg-throttled': () => ({
+          status: 429,
+          body: 'Request was throttled. Expected available in 3600 seconds.',
+          contentType: 'text/plain',
+        }),
         '/bad-relays': () => ({
           body: '{"countries":"definitely-not-an-array"}',
         }),
@@ -935,6 +1028,30 @@ describe('failure metadata and redaction', () => {
           cause: 'account [redacted-account] failed upstream',
           statusCode: 500,
           retryable: true,
+        });
+
+        const throttledFailure = await provisionWireguard({
+          accountNumber: '123456789012',
+          baseUrl: new URL('/wg-throttled', baseUrl),
+          checkedAt: '2026-03-20T18:41:30.000Z',
+          generateKeyPair: () => ({
+            publicKey: 'PUBLIC_KEY_FOR_THROTTLE_CASE=',
+            privateKey: 'PRIVATE_KEY_FOR_THROTTLE_CASE=',
+          }),
+        });
+
+        expect(throttledFailure).toEqual({
+          ok: false,
+          phase: 'wireguard-provision',
+          source: 'mullvad-wg-endpoint',
+          endpoint: new URL('/wg-throttled', baseUrl).toString(),
+          checkedAt: '2026-03-20T18:41:30.000Z',
+          code: 'HTTP_ERROR',
+          message: 'Mullvad rejected the WireGuard provisioning request (HTTP 429).',
+          cause: 'Request was throttled. Expected available in 3600 seconds.',
+          statusCode: 429,
+          retryable: true,
+          retryAfterMs: 3_600_000,
         });
 
         const relayFailure = await fetchRelays({

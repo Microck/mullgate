@@ -56,6 +56,7 @@ export type ProvisionWireguardFailure = {
   cause?: string;
   statusCode?: number;
   retryable: boolean;
+  retryAfterMs?: number;
 };
 
 export type ProvisionedWireguardDeviceView = {
@@ -183,13 +184,16 @@ export async function provisionWireguard(options: ProvisionWireguardOptions): Pr
   if (!response.ok) {
     const parsedApiError = parsedBody && typeof parsedBody === 'object' ? apiErrorResponseSchema.safeParse(parsedBody) : null;
     const apiPayload = parsedApiError?.success ? parsedApiError.data : undefined;
+    const plainTextBody = typeof parsedBody === 'string' ? parsedBody.trim() : null;
     const cause =
-      (typeof parsedBody === 'string' ? parsedBody.trim() : undefined) ||
+      plainTextBody ||
       apiPayload?.detail ||
       apiPayload?.error ||
       apiPayload?.message ||
       response.statusText ||
       `HTTP ${response.status}`;
+
+    const retryAfterMs = readRetryAfterMs(response, cause);
 
     return createProvisionFailure({
       phase: 'wireguard-provision',
@@ -200,7 +204,8 @@ export async function provisionWireguard(options: ProvisionWireguardOptions): Pr
       message: `Mullvad rejected the WireGuard provisioning request (HTTP ${response.status}).`,
       cause,
       statusCode: response.status,
-      retryable: response.status >= 500,
+      retryable: isRetryableProvisioningResponse({ statusCode: response.status, cause }),
+      ...(retryAfterMs !== null ? { retryAfterMs } : {}),
     });
   }
 
@@ -357,6 +362,7 @@ function createProvisionFailure(input: {
   cause?: string;
   statusCode?: number;
   retryable: boolean;
+  retryAfterMs?: number;
 }): ProvisionWireguardFailure {
   return {
     ok: false,
@@ -368,6 +374,7 @@ function createProvisionFailure(input: {
     message: sanitizeText(input.message),
     ...(input.cause ? { cause: sanitizeText(input.cause) } : {}),
     ...(input.statusCode !== undefined ? { statusCode: input.statusCode } : {}),
+    ...(input.retryAfterMs !== undefined ? { retryAfterMs: input.retryAfterMs } : {}),
     retryable: input.retryable,
   };
 }
@@ -387,6 +394,40 @@ function parseAssignedAddress(rawBody: string): string | null {
     .find((line) => line.length > 0);
 
   return candidate ?? null;
+}
+
+function isRetryableProvisioningResponse(input: { statusCode: number; cause: string }): boolean {
+  if (input.statusCode >= 500 || input.statusCode === 429) {
+    return true;
+  }
+
+  return /\bthrottled\b|\bretry\b|\btry again\b/i.test(input.cause);
+}
+
+function readRetryAfterMs(response: Response, cause: string): number | null {
+  const retryAfterHeader = response.headers.get('retry-after');
+
+  if (retryAfterHeader) {
+    const parsedSeconds = Number(retryAfterHeader.trim());
+
+    if (Number.isFinite(parsedSeconds) && parsedSeconds >= 0) {
+      return parsedSeconds * 1_000;
+    }
+  }
+
+  const retryAfterMatch = cause.match(/expected available in\s+(\d+)\s+seconds?/i);
+
+  if (!retryAfterMatch) {
+    return null;
+  }
+
+  const parsedSeconds = Number(retryAfterMatch[1]);
+
+  if (!Number.isFinite(parsedSeconds) || parsedSeconds < 0) {
+    return null;
+  }
+
+  return parsedSeconds * 1_000;
 }
 
 function base64UrlToBase64(value: string): string {

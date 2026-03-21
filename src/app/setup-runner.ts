@@ -24,6 +24,8 @@ const DEFAULT_HTTP_PORT = 8080;
 const DEFAULT_HTTPS_PORT = 8443;
 const DEFAULT_PROXY_USERNAME = 'mullgate';
 const DEFAULT_EXPOSURE_MODE: ExposureMode = 'loopback';
+const PROVISION_RETRY_LIMIT = 3;
+const PROVISION_RETRY_FALLBACK_DELAY_MS = 1_500;
 const PROMPT_CANCELLED = Symbol('setup-prompt-cancelled');
 
 export type SetupInputValues = {
@@ -289,11 +291,11 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
   const provisionedRoutes: ProvisionedSetupRoute[] = [];
 
   for (const route of plannedRoutesResult.value) {
-    const provisionResult = await provisionWireguard({
+    const provisionResult = await provisionRouteWithRetries({
       accountNumber: setupInputs.accountNumber,
-      deviceName: route.deviceName,
-      ...(options.provisioningBaseUrl ? { baseUrl: options.provisioningBaseUrl } : {}),
-      ...(options.fetch ? { fetch: options.fetch } : {}),
+      route,
+      provisioningBaseUrl: options.provisioningBaseUrl,
+      fetch: options.fetch,
       checkedAt: options.checkedAt,
     });
 
@@ -512,6 +514,76 @@ function summarizeSetupRoute(route: SetupRouteMetadata): SetupRouteMetadata {
     bindIp: route.bindIp,
     deviceName: route.deviceName,
   };
+}
+
+async function provisionRouteWithRetries(input: {
+  accountNumber: string;
+  route: PlannedSetupRoute;
+  provisioningBaseUrl?: string | URL;
+  fetch?: typeof globalThis.fetch;
+  checkedAt?: string;
+}): Promise<ProvisionWireguardResult> {
+  let attempt = 0;
+  let lastResult: ProvisionWireguardResult | null = null;
+
+  while (attempt < PROVISION_RETRY_LIMIT) {
+    attempt += 1;
+    const provisionResult = await provisionWireguard({
+      accountNumber: input.accountNumber,
+      deviceName: input.route.deviceName,
+      ...(input.provisioningBaseUrl ? { baseUrl: input.provisioningBaseUrl } : {}),
+      ...(input.fetch ? { fetch: input.fetch } : {}),
+      checkedAt: input.checkedAt,
+    });
+
+    if (provisionResult.ok) {
+      return provisionResult;
+    }
+
+    lastResult = provisionResult;
+
+    if (!provisionResult.retryable || !shouldRetryProvisioningFailure(provisionResult) || attempt >= PROVISION_RETRY_LIMIT) {
+      return provisionResult;
+    }
+
+    const retryDelayMs = provisionResult.retryAfterMs ?? PROVISION_RETRY_FALLBACK_DELAY_MS;
+    await delay(retryDelayMs);
+  }
+
+  return lastResult ?? {
+    ok: false,
+    phase: 'wireguard-provision',
+    source: 'mullvad-wg-endpoint',
+    endpoint: new URL(input.provisioningBaseUrl ?? 'https://api.mullvad.net/wg').toString(),
+    checkedAt: input.checkedAt ?? new Date().toISOString(),
+    code: 'NETWORK_ERROR',
+    message: `Provisioning failed for routed location ${input.route.alias}.`,
+    cause: 'Provisioning retries exhausted without a recorded Mullvad response.',
+    retryable: true,
+  };
+}
+
+async function delay(milliseconds: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+function shouldRetryProvisioningFailure(result: Extract<ProvisionWireguardResult, { ok: false }>): boolean {
+  if (result.code === 'NETWORK_ERROR') {
+    return true;
+  }
+
+  if (result.code !== 'HTTP_ERROR') {
+    return false;
+  }
+
+  if (result.statusCode === 429) {
+    return true;
+  }
+
+  const cause = result.cause ?? '';
+  return /\bthrottled\b|\bretry\b|\btry again\b/i.test(cause);
 }
 
 function toSetupSuccessRoute(route: ProvisionedSetupRoute): SetupSuccessRoute {
