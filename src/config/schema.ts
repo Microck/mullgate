@@ -57,6 +57,13 @@ export const mullvadProvisioningSchema = z.object({
   }),
 });
 
+export const runtimeBundleArtifactSchema = z.object({
+  bundleDir: nonEmptyString,
+  dockerComposePath: nonEmptyString,
+  httpsSidecarConfigPath: nonEmptyString,
+  manifestPath: nonEmptyString,
+});
+
 export const runtimeArtifactSchema = z.object({
   backend: z.enum(['wireproxy']),
   sourceConfigPath: nonEmptyString,
@@ -64,11 +71,27 @@ export const runtimeArtifactSchema = z.object({
   wireproxyConfigTestReportPath: nonEmptyString,
   relayCachePath: nonEmptyString,
   dockerComposePath: nonEmptyString.nullable(),
+  runtimeBundle: runtimeBundleArtifactSchema,
   status: z.object({
     phase: z.enum(['unvalidated', 'validated', 'error']),
     lastCheckedAt: timestampString.nullable(),
     message: nonEmptyString.nullable(),
   }),
+});
+
+export const runtimeStartDiagnosticSchema = z.object({
+  attemptedAt: timestampString,
+  status: z.enum(['success', 'failure']),
+  phase: nonEmptyString,
+  source: nonEmptyString,
+  message: nonEmptyString,
+  artifactPath: nonEmptyString.nullable(),
+  command: nonEmptyString.nullable(),
+});
+
+export const diagnosticsSchema = z.object({
+  lastRuntimeStartReportPath: nonEmptyString,
+  lastRuntimeStart: runtimeStartDiagnosticSchema.nullable(),
 });
 
 export const guidedSetupSchema = z.object({
@@ -87,6 +110,7 @@ export const mullgateConfigSchema = z.object({
   setup: guidedSetupSchema,
   mullvad: mullvadProvisioningSchema,
   runtime: runtimeArtifactSchema,
+  diagnostics: diagnosticsSchema,
 });
 
 export type MullgateConfig = z.infer<typeof mullgateConfigSchema>;

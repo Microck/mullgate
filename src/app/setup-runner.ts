@@ -324,7 +324,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     configPath: store.paths.configFile,
     relayCachePath: renderResult.artifactPaths.relayCachePath,
     wireproxyConfigPath: renderResult.artifactPaths.wireproxyConfigPath,
-    dockerComposePath: renderResult.artifactPaths.dockerComposePath,
+    dockerComposePath: store.paths.runtimeComposeFile,
     validationReportPath: renderResult.artifactPaths.configTestReportPath,
     validationSource: summarizeValidationSource(validationResult),
     summary: [
@@ -334,7 +334,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
       `config: ${store.paths.configFile}`,
       `wireproxy config: ${renderResult.artifactPaths.wireproxyConfigPath}`,
       `relay cache: ${renderResult.artifactPaths.relayCachePath}`,
-      `docker compose: ${renderResult.artifactPaths.dockerComposePath}`,
+      `docker compose: ${store.paths.runtimeComposeFile}`,
       `validation report: ${renderResult.artifactPaths.configTestReportPath}`,
       `location: ${resolvedLocation.alias}`,
       `relay: ${renderResult.selectedRelay.hostname}`,
@@ -504,11 +504,21 @@ function createCanonicalConfig(input: {
       wireproxyConfigTestReportPath: input.paths.wireproxyConfigTestReportFile,
       relayCachePath: input.paths.provisioningCacheFile,
       dockerComposePath: input.paths.dockerComposePath,
+      runtimeBundle: {
+        bundleDir: input.paths.runtimeBundleDir,
+        dockerComposePath: input.paths.runtimeComposeFile,
+        httpsSidecarConfigPath: input.paths.runtimeHttpsSidecarConfigFile,
+        manifestPath: input.paths.runtimeBundleManifestFile,
+      },
       status: {
         phase: 'unvalidated',
         lastCheckedAt: null,
         message: `Saved relay catalog from ${input.relayCatalog.source}; waiting for validation.`,
       },
+    },
+    diagnostics: {
+      lastRuntimeStartReportPath: input.paths.runtimeStartDiagnosticsFile,
+      lastRuntimeStart: null,
     },
   };
 }

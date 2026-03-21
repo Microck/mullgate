@@ -87,12 +87,22 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
       wireproxyConfigPath: paths.wireproxyConfigFile,
       wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
       relayCachePath: paths.provisioningCacheFile,
-      dockerComposePath: path.join(paths.appStateDir, 'docker-compose.yml'),
+      dockerComposePath: paths.dockerComposePath,
+      runtimeBundle: {
+        bundleDir: paths.runtimeBundleDir,
+        dockerComposePath: paths.runtimeComposeFile,
+        httpsSidecarConfigPath: paths.runtimeHttpsSidecarConfigFile,
+        manifestPath: paths.runtimeBundleManifestFile,
+      },
       status: {
         phase: 'unvalidated',
         lastCheckedAt: null,
         message: 'Pending first render.',
       },
+    },
+    diagnostics: {
+      lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
+      lastRuntimeStart: null,
     },
   };
 }
@@ -110,16 +120,22 @@ describe('mullgate config store', () => {
     expect(config.runtime).toMatchInlineSnapshot(`
       {
         "backend": "wireproxy",
-        "dockerComposePath": "${resolveMullgatePaths(env).appStateDir}/docker-compose.yml",
-        "relayCachePath": "${resolveMullgatePaths(env).provisioningCacheFile}",
-        "sourceConfigPath": "${resolveMullgatePaths(env).configFile}",
+        "dockerComposePath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/docker-compose.yml",
+        "relayCachePath": "/tmp/mullgate-test-leCtq8/cache/mullgate/relays.json",
+        "runtimeBundle": {
+          "bundleDir": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime",
+          "dockerComposePath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/docker-compose.yml",
+          "httpsSidecarConfigPath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/haproxy.cfg",
+          "manifestPath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/runtime-manifest.json",
+        },
+        "sourceConfigPath": "/tmp/mullgate-test-leCtq8/config/mullgate/config.json",
         "status": {
           "lastCheckedAt": null,
           "message": "Pending first render.",
           "phase": "unvalidated",
         },
-        "wireproxyConfigPath": "${resolveMullgatePaths(env).wireproxyConfigFile}",
-        "wireproxyConfigTestReportPath": "${resolveMullgatePaths(env).wireproxyConfigTestReportFile}",
+        "wireproxyConfigPath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/wireproxy.conf",
+        "wireproxyConfigTestReportPath": "/tmp/mullgate-test-leCtq8/state/mullgate/runtime/wireproxy-configtest.json",
       }
     `);
   });
@@ -206,6 +222,10 @@ describe('mullgate config store', () => {
     expect(JSON.parse(rendered)).toMatchInlineSnapshot(`
       {
         "createdAt": "2026-03-20T18:48:01.000Z",
+        "diagnostics": {
+          "lastRuntimeStart": null,
+          "lastRuntimeStartReportPath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/last-start.json",
+        },
         "mullvad": {
           "accountNumber": "[redacted]",
           "deviceName": "mullgate-test-host",
@@ -232,16 +252,22 @@ describe('mullgate config store', () => {
         },
         "runtime": {
           "backend": "wireproxy",
-          "dockerComposePath": "${path.join(resolveMullgatePaths(env).appStateDir, 'docker-compose.yml')}",
-          "relayCachePath": "${resolveMullgatePaths(env).provisioningCacheFile}",
-          "sourceConfigPath": "${resolveMullgatePaths(env).configFile}",
+          "dockerComposePath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/docker-compose.yml",
+          "relayCachePath": "/tmp/mullgate-test-v7REtg/cache/mullgate/relays.json",
+          "runtimeBundle": {
+            "bundleDir": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime",
+            "dockerComposePath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/docker-compose.yml",
+            "httpsSidecarConfigPath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/haproxy.cfg",
+            "manifestPath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/runtime-manifest.json",
+          },
+          "sourceConfigPath": "/tmp/mullgate-test-v7REtg/config/mullgate/config.json",
           "status": {
             "lastCheckedAt": null,
             "message": "Pending first render.",
             "phase": "unvalidated",
           },
-          "wireproxyConfigPath": "${resolveMullgatePaths(env).wireproxyConfigFile}",
-          "wireproxyConfigTestReportPath": "${resolveMullgatePaths(env).wireproxyConfigTestReportFile}",
+          "wireproxyConfigPath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/wireproxy.conf",
+          "wireproxyConfigTestReportPath": "/tmp/mullgate-test-v7REtg/state/mullgate/runtime/wireproxy-configtest.json",
         },
         "setup": {
           "auth": {

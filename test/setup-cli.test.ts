@@ -252,18 +252,19 @@ describe('mullgate setup CLI flow', () => {
         expect(setupResult.status).toBe(0);
         expect(setupResult.stderr).toBe('');
         expect('\n' + normalizeOutput(setupResult.stdout, env)).toMatchInlineSnapshot(`
-"\nMullgate setup completed.
-phase: setup-complete
-source: guided-setup
-config: /tmp/mullgate-home/config/mullgate/config.json
-wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-docker compose: /tmp/mullgate-home/state/mullgate/docker-compose.yml
-validation report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
-location: sweden-gothenburg
-relay: se-got-wg-101
-validation: wireproxy-binary/configtest"
-`);
+          "
+          Mullgate setup completed.
+          phase: setup-complete
+          source: guided-setup
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+          relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+          docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+          validation report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
+          location: sweden-gothenburg
+          relay: se-got-wg-101
+          validation: wireproxy-binary/configtest"
+        `);
 
         const [pathResult, showResult, getPasswordResult, getLocationResult, validateResult] = await Promise.all([
           runCli(['config', 'path'], { env }),
@@ -285,17 +286,18 @@ validation: wireproxy-binary/configtest"
         expect(getPasswordResult.stdout.trim()).toBe('[redacted]');
         expect(getLocationResult.stdout.trim()).toBe('sweden-gothenburg');
         expect('\n' + normalizeOutput(pathResult.stdout, env)).toMatchInlineSnapshot(`
-"\nMullgate path report
-phase: resolve-paths
-source: xdg
-config file: /tmp/mullgate-home/config/mullgate/config.json (present)
-state dir: /tmp/mullgate-home/state/mullgate
-cache dir: /tmp/mullgate-home/cache/mullgate
-wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-wireproxy configtest report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
-docker compose: /tmp/mullgate-home/state/mullgate/docker-compose.yml
-relay cache: /tmp/mullgate-home/cache/mullgate/relays.json (present)"
-`);
+          "
+          Mullgate path report
+          phase: resolve-paths
+          source: xdg
+          config file: /tmp/mullgate-home/config/mullgate/config.json (present)
+          state dir: /tmp/mullgate-home/state/mullgate
+          cache dir: /tmp/mullgate-home/cache/mullgate
+          wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+          wireproxy configtest report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
+          docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+          relay cache: /tmp/mullgate-home/cache/mullgate/relays.json (present)"
+        `);
         expect('\n' + normalizeOutput(validateResult.stdout, env)).toMatchInlineSnapshot(`
 "\nMullgate config validated.
 phase: validation
