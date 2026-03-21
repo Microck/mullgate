@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 
 import { registerConfigCommands } from './commands/config.js';
+import { registerDoctorCommand } from './commands/doctor.js';
 import { registerSetupCommand } from './commands/setup.js';
 import { registerStartCommand } from './commands/start.js';
 import { registerStatusCommand } from './commands/status.js';
@@ -18,6 +19,7 @@ export function createCli(): Command {
   registerSetupCommand(program);
   registerStartCommand(program);
   registerStatusCommand(program);
+  registerDoctorCommand(program);
   registerConfigCommands(program);
 
   return program;

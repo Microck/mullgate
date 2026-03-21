@@ -1,11 +1,19 @@
-import { readFile } from 'node:fs/promises';
-
 import type { Command } from 'commander';
 
 import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
 import { redactSensitiveText } from '../config/redact.js';
 import { ConfigStore, type LoadConfigResult } from '../config/store.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
+import {
+  classifyContainerState,
+  findContainerForService,
+  formatArtifactPresence,
+  readJsonArtifact,
+  renderComposeRemediation,
+  resolveLastStartDiagnostic,
+  type ArtifactReadResult,
+  type ContainerLiveState,
+} from './runtime-diagnostics.js';
 import {
   queryDockerComposeStatus,
   type DockerComposeContainer,
@@ -37,19 +45,6 @@ type StatusFailure = {
 
 type StatusFlowResult = StatusSuccess | StatusFailure;
 
-type ArtifactReadResult<T> =
-  | {
-      readonly kind: 'present';
-      readonly value: T;
-    }
-  | {
-      readonly kind: 'missing';
-    }
-  | {
-      readonly kind: 'invalid';
-      readonly reason: string;
-    };
-
 type RouteSurface = {
   readonly index: number;
   readonly alias: string;
@@ -73,7 +68,7 @@ type RouteSurface = {
 type RouteContainerView = {
   readonly route: RouteSurface;
   readonly container: DockerComposeContainer | null;
-  readonly liveState: 'running' | 'starting' | 'stopped' | 'degraded';
+  readonly liveState: ContainerLiveState;
   readonly detail: string;
 };
 
@@ -284,69 +279,6 @@ function createRouteContainerView(route: RouteSurface, container: DockerComposeC
   };
 }
 
-function findContainerForService(containers: readonly DockerComposeContainer[], serviceName: string): DockerComposeContainer | null {
-  return containers.find((container) => container.service === serviceName) ?? null;
-}
-
-function classifyContainerState(container: DockerComposeContainer | null): { readonly liveState: RouteContainerView['liveState']; readonly detail: string } {
-  if (!container) {
-    return {
-      liveState: 'stopped',
-      detail: 'not present in live compose status',
-    };
-  }
-
-  const state = normalizeState(container.state);
-  const health = normalizeState(container.health);
-  const suffix = [
-    container.status ? `status=${container.status}` : null,
-    health !== 'none' ? `health=${health}` : null,
-    container.exitCode !== null ? `exit=${container.exitCode}` : null,
-  ]
-    .filter((value): value is string => value !== null)
-    .join(', ');
-
-  if (state === 'running' && (health === 'healthy' || health === 'none')) {
-    return {
-      liveState: 'running',
-      detail: suffix.length > 0 ? `running (${suffix})` : 'running',
-    };
-  }
-
-  if (state === 'running' && health === 'starting') {
-    return {
-      liveState: 'starting',
-      detail: `running but still warming up (${suffix || 'health=starting'})`,
-    };
-  }
-
-  if (state === 'created' || state === 'restarting' || state === 'starting') {
-    return {
-      liveState: 'starting',
-      detail: suffix.length > 0 ? `${state} (${suffix})` : state,
-    };
-  }
-
-  if (state === 'running' && health === 'unhealthy') {
-    return {
-      liveState: 'degraded',
-      detail: `running but unhealthy (${suffix || 'health=unhealthy'})`,
-    };
-  }
-
-  if (state === 'unknown') {
-    return {
-      liveState: 'degraded',
-      detail: suffix.length > 0 ? `unknown (${suffix})` : 'unknown live state',
-    };
-  }
-
-  return {
-    liveState: 'stopped',
-    detail: suffix.length > 0 ? `${state} (${suffix})` : state,
-  };
-}
-
 function classifyOverallPhase(input: {
   readonly config: MullgateConfig;
   readonly composeStatus: DockerComposeStatusResult;
@@ -451,62 +383,6 @@ function buildDiagnostics(input: {
   return diagnostics;
 }
 
-function renderComposeRemediation(code: 'DOCKER_COMPOSE_MISSING' | 'COMPOSE_PS_FAILED' | 'COMPOSE_PS_INVALID_JSON'): string {
-  switch (code) {
-    case 'DOCKER_COMPOSE_MISSING':
-      return 'Install Docker plus the Compose plugin, then rerun `mullgate status` or `mullgate start`.';
-    case 'COMPOSE_PS_FAILED':
-      return 'Check `docker compose ps` / `docker compose logs` for the saved compose file and resolve the runtime failure before retrying.';
-    case 'COMPOSE_PS_INVALID_JSON':
-      return 'Update Docker Compose to a version that supports stable JSON output, or inspect the compose project manually for now.';
-  }
-}
-
-function resolveLastStartDiagnostic(
-  config: MullgateConfig,
-  result: ArtifactReadResult<RuntimeStartDiagnostic>,
-): RuntimeStartDiagnostic | null {
-  if (result.kind === 'present') {
-    return result.value;
-  }
-
-  return config.diagnostics.lastRuntimeStart;
-}
-
-async function readJsonArtifact<T>(targetPath: string): Promise<ArtifactReadResult<T>> {
-  try {
-    const raw = await readFile(targetPath, 'utf8');
-    return {
-      kind: 'present',
-      value: JSON.parse(raw) as T,
-    };
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return { kind: 'missing' };
-    }
-
-    return {
-      kind: 'invalid',
-      reason: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
-}
-
-function formatArtifactPresence<T>(artifactPath: string, result: ArtifactReadResult<T>): string {
-  switch (result.kind) {
-    case 'present':
-      return `${artifactPath} (present)`;
-    case 'missing':
-      return `${artifactPath} (missing)`;
-    case 'invalid':
-      return `${artifactPath} (invalid: ${result.reason})`;
-  }
-}
-
 function renderLoadError(result: Extract<LoadConfigResult, { ok: false }>): string {
   return [
     'Failed to inspect Mullgate runtime status.',
@@ -538,8 +414,4 @@ function writeStatusResult(result: StatusFlowResult, dependencies: Pick<StatusCo
   }
 
   stderr.write(`${result.summary}\n`);
-}
-
-function normalizeState(value: string | null): string {
-  return value?.trim().toLowerCase() ?? 'none';
 }
