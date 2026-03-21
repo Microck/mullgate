@@ -236,10 +236,10 @@ async function createFakeWireproxyBinary(root: string): Promise<string> {
   return binaryPath;
 }
 
-async function seedSavedConfig(env: NodeJS.ProcessEnv): Promise<ConfigStore> {
+async function seedSavedConfig(env: NodeJS.ProcessEnv, configure?: (config: MullgateConfig) => MullgateConfig): Promise<ConfigStore> {
   const paths = resolveMullgatePaths(env);
   const store = new ConfigStore(paths);
-  const config = createFixtureConfig(env);
+  const config = configure ? configure(createFixtureConfig(env)) : createFixtureConfig(env);
   const relayPayload = await readRelayCatalogFixture();
   const normalizedCatalog = normalizeRelayPayload(relayPayload, {
     endpoint: 'https://api.mullvad.net/public/relays/wireguard/v1/',
@@ -370,15 +370,30 @@ describe('mullgate start command', () => {
       runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json
       validation report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-at-vie-wg-001-configtest.json
       validation: wireproxy-binary/configtest (2 routes)
-      routed endpoints:
+      exposure entrypoints:
+      mode: loopback
+      base domain: n/a
+      restart needed: no
       1. se-got-wg-101 -> 127.0.0.1
-         socks5: socks5://alice:[redacted]@se-got-wg-101:1080
-         http: http://alice:[redacted]@se-got-wg-101:8080
-         https: https://alice:[redacted]@se-got-wg-101:8443
+         alias: sweden-gothenburg
+         dns: not required; use direct bind IP entrypoints
+         socks5 hostname: socks5://[redacted]:[redacted]@se-got-wg-101:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
+         http hostname: http://[redacted]:[redacted]@se-got-wg-101:8080
+         http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
+         https hostname: https://[redacted]:[redacted]@se-got-wg-101:8443
+         https direct ip: https://[redacted]:[redacted]@127.0.0.1:8443
       2. at-vie-wg-001 -> 127.0.0.2
-         socks5: socks5://alice:[redacted]@at-vie-wg-001:1080
-         http: http://alice:[redacted]@at-vie-wg-001:8080
-         https: https://alice:[redacted]@at-vie-wg-001:8443
+         alias: austria-vienna
+         dns: not required; use direct bind IP entrypoints
+         socks5 hostname: socks5://[redacted]:[redacted]@at-vie-wg-001:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
+         http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
+         http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
+         https hostname: https://[redacted]:[redacted]@at-vie-wg-001:8443
+         https direct ip: https://[redacted]:[redacted]@127.0.0.2:8443
+      warnings:
+      - info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
       runtime status: running"
     `);
     expect('\n' + normalizeReport(persistedReport, env)).toMatchInlineSnapshot(`
@@ -400,6 +415,106 @@ describe('mullgate start command', () => {
   \"command\": \"docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach\"
 }"
 `);
+  });
+
+  it('surfaces public single-route exposure warnings and redacted hostname/direct-IP entrypoints in start output', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const store = await seedSavedConfig(env, (config) => {
+      const updated = structuredClone(config);
+      updated.setup.exposure = {
+        mode: 'public',
+        allowLan: true,
+        baseDomain: 'proxy.example.com',
+      };
+      updated.setup.bind.host = '198.51.100.10';
+      updated.runtime.status = {
+        phase: 'unvalidated',
+        lastCheckedAt: null,
+        message: 'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+      };
+      updated.routing.locations = [
+        {
+          ...updated.routing.locations[0]!,
+          alias: 'sweden-gothenburg',
+          hostname: 'sweden-gothenburg.proxy.example.com',
+          bindIp: '198.51.100.10',
+        },
+      ];
+      return updated;
+    });
+    const stdout = createBufferSink();
+    const stderr = createBufferSink();
+    const wireproxyBinary = await createFakeWireproxyBinary(env.HOME!);
+
+    const action = createStartCommandAction({
+      store,
+      checkedAt: '2026-03-21T01:02:00.000Z',
+      stdout,
+      stderr,
+      validateOptions: {
+        wireproxyBinary,
+      },
+      startRuntime: async (options) => ({
+        ok: true,
+        phase: 'compose-launch',
+        source: 'docker-compose',
+        checkedAt: '2026-03-21T01:02:00.000Z',
+        composeFilePath: options.composeFilePath,
+        command: {
+          binary: 'docker',
+          args: ['compose', '--file', options.composeFilePath, 'up', '--detach'],
+          cwd: path.dirname(options.composeFilePath),
+          rendered: `docker compose --file ${options.composeFilePath} up --detach`,
+        },
+        message: 'Docker Compose launched the Mullgate runtime bundle in detached mode.',
+        stdout: 'Container mullgate-routing-layer-1  Started\nContainer mullgate-wireproxy-sweden-gothenburg-1  Started\n',
+        stderr: '',
+      }),
+    });
+
+    await action();
+
+    expect(process.exitCode).toBe(0);
+    expect(stderr.value.current).toBe('');
+    expect(stdout.value.current).not.toContain('proxy-password');
+    expect(stdout.value.current).not.toContain('alice');
+    expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
+      "
+      Mullgate runtime started.
+      phase: compose-launch
+      source: docker-compose
+      attempted at: 2026-03-21T01:02:00.000Z
+      routes: 1
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      primary wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+      relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+      docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json
+      validation report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-se-got-wg-101-configtest.json
+      validation: wireproxy-binary/configtest
+      exposure entrypoints:
+      mode: public
+      base domain: proxy.example.com
+      restart needed: no
+      1. sweden-gothenburg.proxy.example.com -> 198.51.100.10
+         alias: sweden-gothenburg
+         dns: sweden-gothenburg.proxy.example.com A 198.51.100.10
+         socks5 hostname: socks5://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@198.51.100.10:1080
+         http hostname: http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080
+         http direct ip: http://[redacted]:[redacted]@198.51.100.10:8080
+         https hostname: https://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8443
+         https direct ip: https://[redacted]:[redacted]@198.51.100.10:8443
+      warnings:
+      - info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
+      - warning: Public exposure publishes authenticated proxy listeners on publicly routable IPs. Confirm firewalling, rate limits, and monitoring before enabling it on the open internet.
+      - warning: Only one routed bind IP is configured, so remote exposure will not provide hostname-based route selection until additional routes are added.
+      runtime status: running"
+    `);
+
+    const manifest = JSON.parse(await readFile(paths.runtimeBundleManifestFile, 'utf8')) as { exposure: { warnings: Array<{ code: string }> } };
+    expect(manifest.exposure.warnings.map((warning) => warning.code)).toEqual(['DNS_REQUIRED', 'PUBLIC_EXPOSURE', 'SINGLE_ROUTE']);
   });
 
   it('persists secret-safe route-aware compose failure diagnostics with phase, source, code, and validation metadata', async () => {

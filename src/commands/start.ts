@@ -329,6 +329,31 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
     return persistSuccess;
   }
 
+  const refreshedRuntimeBundle = await renderRuntimeBundle({
+    config: successConfig,
+    paths: store.paths,
+    generatedAt: runtimeResult.checkedAt,
+  });
+
+  if (!refreshedRuntimeBundle.ok) {
+    return {
+      ok: false,
+      exitCode: 1,
+      phase: 'persist-config',
+      source: refreshedRuntimeBundle.source,
+      paths: store.paths,
+      attemptedAt: runtimeResult.checkedAt,
+      artifactPath: refreshedRuntimeBundle.artifactPath,
+      message: 'Runtime started, but Mullgate failed to refresh the runtime manifest with the latest exposure status.',
+      ...(refreshedRuntimeBundle.cause ? { cause: refreshedRuntimeBundle.cause } : {}),
+      ...(refreshedRuntimeBundle.code ? { code: refreshedRuntimeBundle.code } : {}),
+      config: successConfig,
+      report,
+      composeFilePath: store.paths.runtimeComposeFile,
+      validationSource: validationResult.validationSource,
+    };
+  }
+
   return {
     ok: true,
     phase: 'compose-launch',
@@ -338,8 +363,8 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
     config: successConfig,
     report,
     validationSource: validationResult.validationSource,
-    composeFilePath: runtimeBundle.artifactPaths.dockerComposePath,
-    manifestPath: runtimeBundle.artifactPaths.manifestPath,
+    composeFilePath: refreshedRuntimeBundle.artifactPaths.dockerComposePath,
+    manifestPath: refreshedRuntimeBundle.artifactPaths.manifestPath,
     validationReportPath: validationResult.reportPath,
     summary: [
       'Mullgate runtime started.',
@@ -350,22 +375,36 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
       `config: ${store.paths.configFile}`,
       `primary wireproxy config: ${wireproxyRender.artifactPaths.wireproxyConfigPath}`,
       `relay cache: ${wireproxyRender.artifactPaths.relayCachePath}`,
-      `docker compose: ${runtimeBundle.artifactPaths.dockerComposePath}`,
-      `runtime manifest: ${runtimeBundle.artifactPaths.manifestPath}`,
+      `docker compose: ${refreshedRuntimeBundle.artifactPaths.dockerComposePath}`,
+      `runtime manifest: ${refreshedRuntimeBundle.artifactPaths.manifestPath}`,
       `validation report: ${validationResult.reportPath}`,
       `validation: ${validationResult.validationSource}`,
-      'routed endpoints:',
-      ...renderPublishedEndpointInventory(runtimeBundle.manifest),
+      'exposure entrypoints:',
+      ...renderExposureInventory(refreshedRuntimeBundle.manifest),
       'runtime status: running',
     ].join('\n'),
   };
 }
 
-function renderPublishedEndpointInventory(manifest: RuntimeBundleManifest): string[] {
-  return manifest.routes.flatMap((route, index) => [
-    `${index + 1}. ${route.hostname} -> ${route.bindIp}`,
-    ...route.publishedEndpoints.map((endpoint) => `   ${endpoint.protocol}: ${endpoint.proxyUrl}`),
-  ]);
+function renderExposureInventory(manifest: RuntimeBundleManifest): string[] {
+  return [
+    `mode: ${manifest.exposure.mode}`,
+    `base domain: ${manifest.exposure.baseDomain ?? 'n/a'}`,
+    `restart needed: ${manifest.exposure.runtimeStatus.restartRequired ? 'yes' : 'no'}`,
+    ...manifest.exposure.routes.flatMap((route) => [
+      `${route.index + 1}. ${route.hostname} -> ${route.bindIp}`,
+      `   alias: ${route.alias}`,
+      `   dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
+      ...route.endpoints.flatMap((endpoint) => [
+        `   ${endpoint.protocol} hostname: ${endpoint.redactedHostnameUrl}`,
+        `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`,
+      ]),
+    ]),
+    'warnings:',
+    ...(manifest.exposure.warnings.length > 0
+      ? manifest.exposure.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`)
+      : ['- none']),
+  ];
 }
 
 function writeStartResult(result: StartFlowResult, dependencies: Pick<StartCommandDependencies, 'stdout' | 'stderr'>): void {

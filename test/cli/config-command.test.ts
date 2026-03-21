@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { renderHostsReport } from '../../src/commands/config.js';
+import { renderExposureReport, renderHostsReport, updateExposureConfig } from '../../src/commands/config.js';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
 
@@ -74,7 +74,7 @@ function createFixtureConfig(): MullgateConfig {
       locations: [
         {
           alias: 'sweden-gothenburg',
-          hostname: 'se-got-wg-101.proxy.test',
+          hostname: 'sweden-gothenburg',
           bindIp: '127.0.0.1',
           relayPreference: {
             requested: 'sweden-gothenburg',
@@ -103,15 +103,15 @@ function createFixtureConfig(): MullgateConfig {
             },
           },
           runtime: {
-            routeId: 'se-got-wg-101',
-            wireproxyServiceName: 'wireproxy-se-got-wg-101',
-            haproxyBackendName: 'route-se-got-wg-101',
-            wireproxyConfigFile: 'wireproxy-se-got-wg-101.conf',
+            routeId: 'sweden-gothenburg',
+            wireproxyServiceName: 'wireproxy-sweden-gothenburg',
+            haproxyBackendName: 'route-sweden-gothenburg',
+            wireproxyConfigFile: 'wireproxy-sweden-gothenburg.conf',
           },
         },
         {
           alias: 'austria-vienna',
-          hostname: 'at-vie-wg-001.proxy.test',
+          hostname: 'austria-vienna',
           bindIp: '127.0.0.2',
           relayPreference: {
             requested: 'austria-vienna',
@@ -140,10 +140,10 @@ function createFixtureConfig(): MullgateConfig {
             },
           },
           runtime: {
-            routeId: 'at-vie-wg-001',
-            wireproxyServiceName: 'wireproxy-at-vie-wg-001',
-            haproxyBackendName: 'route-at-vie-wg-001',
-            wireproxyConfigFile: 'wireproxy-at-vie-wg-001.conf',
+            routeId: 'austria-vienna',
+            wireproxyServiceName: 'wireproxy-austria-vienna',
+            haproxyBackendName: 'route-austria-vienna',
+            wireproxyConfigFile: 'wireproxy-austria-vienna.conf',
           },
         },
       ],
@@ -174,7 +174,7 @@ function createFixtureConfig(): MullgateConfig {
   };
 }
 
-describe('renderHostsReport', () => {
+describe('config inspection helpers', () => {
   it('prints secret-safe host mappings plus a copy-paste hosts block', () => {
     const config = createFixtureConfig();
 
@@ -191,12 +191,140 @@ source: canonical-config
 config: /tmp/mullgate-home/config/mullgate/config.json
 routes: 2
 hostname -> bind ip
-1. se-got-wg-101.proxy.test -> 127.0.0.1 (alias: sweden-gothenburg, route id: se-got-wg-101)
-2. at-vie-wg-001.proxy.test -> 127.0.0.2 (alias: austria-vienna, route id: at-vie-wg-001)
+1. sweden-gothenburg -> 127.0.0.1 (alias: sweden-gothenburg, route id: sweden-gothenburg)
+2. austria-vienna -> 127.0.0.2 (alias: austria-vienna, route id: austria-vienna)
 
 copy/paste hosts block
-127.0.0.1 se-got-wg-101.proxy.test
-127.0.0.2 at-vie-wg-001.proxy.test"
+127.0.0.1 sweden-gothenburg
+127.0.0.2 austria-vienna"
 `);
+  });
+
+  it('renders the dedicated exposure report with DNS guidance, direct-IP entrypoints, and restart hints', () => {
+    const config = createFixtureConfig();
+    config.setup.exposure = {
+      mode: 'private-network',
+      allowLan: true,
+      baseDomain: 'proxy.example.com',
+    };
+    config.setup.bind.host = '192.168.10.10';
+    config.routing.locations[0]!.hostname = 'sweden-gothenburg.proxy.example.com';
+    config.routing.locations[0]!.bindIp = '192.168.10.10';
+    config.routing.locations[1]!.hostname = 'austria-vienna.proxy.example.com';
+    config.routing.locations[1]!.bindIp = '192.168.10.11';
+    config.runtime.status = {
+      phase: 'unvalidated',
+      lastCheckedAt: null,
+      message: 'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+    };
+
+    const report = renderExposureReport(config, '/tmp/mullgate-home/config/mullgate/config.json');
+
+    expect(report).not.toContain('multi-route-secret');
+    expect(report).not.toContain('123456789012');
+    expect(report).not.toContain('private-key-value-1');
+    expect(report).toContain('[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080');
+    expect('\n' + report).toMatchInlineSnapshot(`
+"\nMullgate exposure report
+phase: inspect-config
+source: canonical-config
+config: /tmp/mullgate-home/config/mullgate/config.json
+mode: private-network
+base domain: proxy.example.com
+allow lan: yes
+runtime status: unvalidated
+restart needed: yes
+runtime message: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+
+guidance
+- Private-network mode expects those bind IPs to be reachable from your LAN, VPN, or overlay network.
+- Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.
+- Publish the DNS records below so every route hostname resolves to its matching bind IP.
+
+routes
+1. sweden-gothenburg.proxy.example.com -> 192.168.10.10
+   alias: sweden-gothenburg
+   route id: sweden-gothenburg
+   dns: sweden-gothenburg.proxy.example.com A 192.168.10.10
+   socks5 hostname: socks5://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080
+   socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.10:1080
+   http hostname: http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080
+   http direct ip: http://[redacted]:[redacted]@192.168.10.10:8080
+   https hostname: https://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8443
+   https direct ip: https://[redacted]:[redacted]@192.168.10.10:8443
+2. austria-vienna.proxy.example.com -> 192.168.10.11
+   alias: austria-vienna
+   route id: austria-vienna
+   dns: austria-vienna.proxy.example.com A 192.168.10.11
+   socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1080
+   socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.11:1080
+   http hostname: http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080
+   http direct ip: http://[redacted]:[redacted]@192.168.10.11:8080
+   https hostname: https://[redacted]:[redacted]@austria-vienna.proxy.example.com:8443
+   https direct ip: https://[redacted]:[redacted]@192.168.10.11:8443
+
+warnings
+- info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
+- warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+
+local host-file mapping
+- \`mullgate config hosts\` remains the copy/paste /etc/hosts view for local-only testing."
+`);
+  });
+
+  it('updates exposure settings without raw JSON edits and mirrors the first bind IP back to setup.bind.host', () => {
+    const config = createFixtureConfig();
+
+    const result = updateExposureConfig(config, '/tmp/mullgate-home/config/mullgate/config.json', {
+      mode: 'private-network',
+      baseDomain: 'proxy.example.com',
+      baseDomainSpecified: true,
+      routeBindIps: ['192.168.10.10', '192.168.10.11'],
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.config.setup.exposure).toEqual({
+      mode: 'private-network',
+      allowLan: true,
+      baseDomain: 'proxy.example.com',
+    });
+    expect(result.config.setup.bind.host).toBe('192.168.10.10');
+    expect(result.config.routing.locations.map((location) => ({ hostname: location.hostname, bindIp: location.bindIp }))).toEqual([
+      { hostname: 'sweden-gothenburg.proxy.example.com', bindIp: '192.168.10.10' },
+      { hostname: 'austria-vienna.proxy.example.com', bindIp: '192.168.10.11' },
+    ]);
+    expect(result.config.runtime.status).toEqual({
+      phase: 'unvalidated',
+      lastCheckedAt: null,
+      message: 'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+    });
+    expect('\n' + renderExposureReport(result.config, '/tmp/mullgate-home/config/mullgate/config.json')).toContain(
+      'dns: sweden-gothenburg.proxy.example.com A 192.168.10.10',
+    );
+  });
+
+  it('rejects ambiguous non-loopback bind IP edits with an explicit routed-exposure failure', () => {
+    const config = createFixtureConfig();
+
+    const result = updateExposureConfig(config, '/tmp/mullgate-home/config/mullgate/config.json', {
+      mode: 'private-network',
+      baseDomainSpecified: false,
+      routeBindIps: ['192.168.10.10', '192.168.10.10'],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      phase: 'setup-validation',
+      source: 'input',
+      code: 'AMBIGUOUS_SHARED_BIND_IP',
+      message: 'Non-loopback multi-route exposure requires distinct bind IPs, but found duplicates: 192.168.10.10.',
+      cause: 'S03 routing still dispatches by destination bind IP, so multiple remote routes cannot safely share one published IP.',
+      artifactPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
   });
 });

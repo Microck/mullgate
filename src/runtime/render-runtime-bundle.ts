@@ -2,6 +2,7 @@ import { chmod, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import { REDACTED } from '../config/redact.js';
+import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
 import { resolveRouteWireproxyPaths, type MullgatePaths } from '../config/paths.js';
 import type { MullgateConfig, RoutedLocation } from '../config/schema.js';
 
@@ -28,11 +29,13 @@ export type RuntimeEndpoint = {
   readonly containerHost: '0.0.0.0';
   readonly containerPort: number;
   readonly auth: {
-    readonly username: string;
+    readonly username: typeof REDACTED;
     readonly password: typeof REDACTED;
   };
-  readonly proxyUrl: string;
+  readonly hostnameUrl: string;
   readonly bindUrl: string;
+  readonly redactedHostnameUrl: string;
+  readonly redactedBindUrl: string;
 };
 
 export type RuntimeBundleManifest = {
@@ -61,6 +64,7 @@ export type RuntimeBundleManifest = {
       };
     };
   };
+  readonly exposure: ExposureContract;
   readonly routes: readonly {
     readonly routeId: string;
     readonly alias: string;
@@ -248,24 +252,19 @@ function buildPublishedEndpoints(
 ): RuntimeEndpoint[] {
   return config.routing.locations.flatMap((route) => {
     const endpoints: RuntimeEndpoint[] = [
-      createEndpoint(config, route, 'socks5', config.setup.bind.socksPort),
-      createEndpoint(config, route, 'http', config.setup.bind.httpPort),
+      createEndpoint(route, 'socks5', config.setup.bind.socksPort),
+      createEndpoint(route, 'http', config.setup.bind.httpPort),
     ];
 
     if (https.enabled) {
-      endpoints.push(createEndpoint(config, route, 'https', https.port));
+      endpoints.push(createEndpoint(route, 'https', https.port));
     }
 
     return endpoints;
   });
 }
 
-function createEndpoint(
-  config: MullgateConfig,
-  route: RoutedLocation,
-  protocol: RuntimeEndpoint['protocol'],
-  port: number,
-): RuntimeEndpoint {
+function createEndpoint(route: RoutedLocation, protocol: RuntimeEndpoint['protocol'], port: number): RuntimeEndpoint {
   return {
     routeId: route.runtime.routeId,
     hostname: route.hostname,
@@ -276,11 +275,13 @@ function createEndpoint(
     containerHost: CONTAINER_BIND_HOST,
     containerPort: port,
     auth: {
-      username: config.setup.auth.username,
+      username: REDACTED,
       password: REDACTED,
     },
-    proxyUrl: `${protocol}://${encodeURIComponent(config.setup.auth.username)}:${REDACTED}@${route.hostname}:${port}`,
-    bindUrl: `${protocol}://${encodeURIComponent(config.setup.auth.username)}:${REDACTED}@${route.bindIp}:${port}`,
+    hostnameUrl: `${protocol}://${route.hostname}:${port}`,
+    bindUrl: `${protocol}://${route.bindIp}:${port}`,
+    redactedHostnameUrl: `${protocol}://${REDACTED}:${REDACTED}@${route.hostname}:${port}`,
+    redactedBindUrl: `${protocol}://${REDACTED}:${REDACTED}@${route.bindIp}:${port}`,
   };
 }
 
@@ -346,6 +347,7 @@ function buildRuntimeBundleManifest(
         },
       },
     },
+    exposure: buildExposureContract(config),
     routes: routeManifests,
     publishedEndpoints,
   };

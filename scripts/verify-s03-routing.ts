@@ -278,8 +278,8 @@ function assertHostsOutput(output: string, config: MullgateConfig): void {
 }
 
 function assertStartSummary(output: string, manifest: RuntimeBundleManifest, config: MullgateConfig): void {
-  if (!output.includes('routed endpoints:')) {
-    throw new Error('`mullgate start` success output did not include the routed endpoint inventory.');
+  if (!output.includes('exposure entrypoints:')) {
+    throw new Error('`mullgate start` success output did not include the exposure entrypoint inventory.');
   }
 
   for (const route of manifest.routes.slice(0, 2)) {
@@ -290,8 +290,12 @@ function assertStartSummary(output: string, manifest: RuntimeBundleManifest, con
     for (const protocol of REQUIRED_PROTOCOLS) {
       const endpoint = findEndpoint(route.publishedEndpoints, protocol);
 
-      if (!output.includes(`   ${protocol}: ${endpoint.proxyUrl}`)) {
-        throw new Error(`Expected start output to include ${protocol} endpoint ${endpoint.proxyUrl}.`);
+      if (!output.includes(`   ${protocol} hostname: ${endpoint.redactedHostnameUrl}`)) {
+        throw new Error(`Expected start output to include ${protocol} hostname endpoint ${endpoint.redactedHostnameUrl}.`);
+      }
+
+      if (!output.includes(`   ${protocol} direct ip: ${endpoint.redactedBindUrl}`)) {
+        throw new Error(`Expected start output to include ${protocol} direct-ip endpoint ${endpoint.redactedBindUrl}.`);
       }
     }
   }
@@ -334,7 +338,12 @@ function assertManifestTopology(manifest: RuntimeBundleManifest, config: Mullgat
         );
       }
 
-      if (endpoint.auth.password !== REDACTED || !endpoint.proxyUrl.includes(REDACTED) || !endpoint.bindUrl.includes(REDACTED)) {
+      if (
+        endpoint.auth.username !== REDACTED ||
+        endpoint.auth.password !== REDACTED ||
+        !endpoint.redactedHostnameUrl.includes(REDACTED) ||
+        !endpoint.redactedBindUrl.includes(REDACTED)
+      ) {
         throw new Error(`Runtime manifest endpoint ${protocol} for ${route.runtime.routeId} was not redacted.`);
       }
     }

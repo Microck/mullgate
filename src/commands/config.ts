@@ -3,8 +3,15 @@ import { constants as fsConstants } from 'node:fs';
 import type { Command } from 'commander';
 
 import { formatRedactedConfig, redactConfig } from '../config/redact.js';
+import {
+  buildExposureContract,
+  deriveExposureHostname,
+  type ExposureValidationFailure,
+  normalizeExposureBaseDomain,
+  validateExposureSettings,
+} from '../config/exposure-contract.js';
 import { ConfigStore, syncLegacyMirrorsToRouting, type LoadConfigResult } from '../config/store.js';
-import type { MullgateConfig } from '../config/schema.js';
+import type { ExposureMode, MullgateConfig } from '../config/schema.js';
 import { loadStoredRelayCatalog, summarizeValidationSource, verifyHttpsAssets, withRuntimeStatus } from '../app/setup-runner.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
 import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
@@ -64,6 +71,29 @@ type ConfigValidationFailure = {
 };
 
 type ConfigValidationResult = ConfigValidationSuccess | ConfigValidationFailure;
+
+type ExposureUpdateInput = {
+  readonly mode?: ExposureMode;
+  readonly baseDomain?: string | null;
+  readonly baseDomainSpecified: boolean;
+  readonly routeBindIps?: readonly string[];
+};
+
+type ExposureUpdateSuccess = {
+  readonly ok: true;
+  readonly config: MullgateConfig;
+};
+
+type ExposureUpdateFailure = ExposureValidationFailure;
+
+type ExposureUpdateResult = ExposureUpdateSuccess | ExposureUpdateFailure;
+
+export type ExposureCommandOptions = {
+  readonly mode?: string;
+  readonly baseDomain?: string;
+  readonly clearBaseDomain?: boolean;
+  readonly routeBindIp?: string[];
+};
 
 export function registerConfigCommands(program: Command): void {
   const config = program.command('config').description('Inspect saved Mullgate configuration and derived paths.');
@@ -138,6 +168,102 @@ export function registerConfigCommands(program: Command): void {
       }
 
       process.stdout.write(`${renderHostsReport(result.config, store.paths.configFile)}\n`);
+    });
+
+  config
+    .command('exposure')
+    .option('--mode <mode>', 'Set exposure mode to loopback, private-network, or public.')
+    .option('--base-domain <domain>', 'Set the base domain used to derive per-route hostnames.')
+    .option('--clear-base-domain', 'Remove any configured base domain and fall back to alias/direct-IP hostnames.')
+    .option('--route-bind-ip <ip>', 'Set an ordered per-route bind IP. Repeat once per route.', collectRepeatedValues, [])
+    .description('Inspect or update remote exposure mode, bind IPs, DNS guidance, and restart status without raw JSON edits.')
+    .action(async (options: ExposureCommandOptions) => {
+      const store = new ConfigStore();
+      const result = await store.load();
+
+      if (!result.ok) {
+        process.stderr.write(`${renderLoadError(result)}\n`);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (result.source === 'empty') {
+        process.stderr.write(`${renderMissingConfig(result.message, store.paths.configFile)}\n`);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (!hasExposureUpdate(options)) {
+        process.stdout.write(`${renderExposureReport(result.config, store.paths.configFile)}\n`);
+        return;
+      }
+
+      if (options.baseDomain !== undefined && options.clearBaseDomain) {
+        process.stderr.write(`${renderExposureUpdateError({
+          ok: false,
+          phase: 'setup-validation',
+          source: 'input',
+          code: 'AMBIGUOUS_BASE_DOMAIN',
+          message: 'Pass --base-domain or --clear-base-domain, not both.',
+          artifactPath: store.paths.configFile,
+        })}\n`);
+        process.exitCode = 1;
+        return;
+      }
+
+      let mode: ExposureMode | undefined;
+
+      if (options.mode !== undefined) {
+        try {
+          mode = parseExposureModeOption(options.mode);
+        } catch (error) {
+          process.stderr.write(
+            `${renderExposureUpdateError({
+              ok: false,
+              phase: 'setup-validation',
+              source: 'input',
+              code: 'INVALID_EXPOSURE_MODE',
+              message: error instanceof Error ? error.message : String(error),
+              artifactPath: store.paths.configFile,
+            })}\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+      }
+
+      const updateResult = updateExposureConfig(result.config, store.paths.configFile, {
+        ...(mode ? { mode } : {}),
+        ...(options.baseDomain !== undefined ? { baseDomain: options.baseDomain } : {}),
+        baseDomainSpecified: Boolean(options.clearBaseDomain || options.baseDomain !== undefined),
+        ...(options.clearBaseDomain ? { baseDomain: null } : {}),
+        ...(options.routeBindIp && options.routeBindIp.length > 0 ? { routeBindIps: options.routeBindIp } : {}),
+      });
+
+      if (!updateResult.ok) {
+        process.stderr.write(`${renderExposureUpdateError(updateResult)}\n`);
+        process.exitCode = 1;
+        return;
+      }
+
+      try {
+        await store.save(updateResult.config);
+      } catch (error) {
+        process.stderr.write(
+          `${renderValidationError({
+            ok: false,
+            phase: 'persist-config',
+            source: 'filesystem',
+            message: 'Failed to persist the updated exposure contract.',
+            artifactPath: store.paths.configFile,
+            cause: error instanceof Error ? error.message : String(error),
+          })}\n`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      process.stdout.write(`${renderExposureUpdateSuccess(updateResult.config, store.paths.configFile)}\n`);
     });
 
   config
@@ -340,6 +466,126 @@ export function renderHostsReport(config: MullgateConfig, configPath: string): s
     '',
     'copy/paste hosts block',
     ...renderHostsBlock(config),
+  ].join('\n');
+}
+
+export function renderExposureReport(config: MullgateConfig, configPath: string): string {
+  const exposure = buildExposureContract(config);
+
+  return [
+    'Mullgate exposure report',
+    'phase: inspect-config',
+    'source: canonical-config',
+    `config: ${configPath}`,
+    `mode: ${exposure.mode}`,
+    `base domain: ${exposure.baseDomain ?? 'n/a'}`,
+    `allow lan: ${exposure.allowLan ? 'yes' : 'no'}`,
+    `runtime status: ${exposure.runtimeStatus.phase}`,
+    `restart needed: ${exposure.runtimeStatus.restartRequired ? 'yes' : 'no'}`,
+    ...(exposure.runtimeStatus.message ? [`runtime message: ${exposure.runtimeStatus.message}`] : []),
+    '',
+    'guidance',
+    ...exposure.guidance.map((line) => `- ${line}`),
+    '',
+    'routes',
+    ...exposure.routes.flatMap((route) => [
+      `${route.index + 1}. ${route.hostname} -> ${route.bindIp}`,
+      `   alias: ${route.alias}`,
+      `   route id: ${route.routeId}`,
+      `   dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
+      ...route.endpoints.flatMap((endpoint) => [
+        `   ${endpoint.protocol} hostname: ${endpoint.redactedHostnameUrl}`,
+        `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`,
+      ]),
+    ]),
+    '',
+    'warnings',
+    ...(exposure.warnings.length > 0
+      ? exposure.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`)
+      : ['- none']),
+    '',
+    'local host-file mapping',
+    '- `mullgate config hosts` remains the copy/paste /etc/hosts view for local-only testing.',
+  ].join('\n');
+}
+
+export function updateExposureConfig(config: MullgateConfig, artifactPath: string, input: ExposureUpdateInput): ExposureUpdateResult {
+  const nextMode = input.mode ?? config.setup.exposure.mode;
+  const nextBaseDomain = input.baseDomainSpecified ? input.baseDomain ?? null : config.setup.exposure.baseDomain;
+  const existingBindIps = config.routing.locations.map((location) => location.bindIp);
+  const routeBindIps =
+    input.routeBindIps ??
+    (nextMode === 'loopback' ? [] : config.setup.exposure.mode === 'loopback' && input.mode !== undefined ? [] : existingBindIps);
+  const validated = validateExposureSettings({
+    routeCount: config.routing.locations.length,
+    exposureMode: nextMode,
+    exposureBaseDomain: normalizeExposureBaseDomain(nextBaseDomain),
+    routeBindIps,
+    artifactPath,
+    caller: 'config-exposure',
+  });
+
+  if (!validated.ok) {
+    return validated;
+  }
+
+  const updatedRoutingLocations = config.routing.locations.map((location, index) => ({
+    ...location,
+    bindIp: validated.routeBindIps[index]!,
+    hostname: deriveExposureHostname(location.alias, validated.routeBindIps[index]!, validated.baseDomain, validated.mode),
+  }));
+  const canonicalConfig = syncLegacyMirrorsToRouting({
+    ...config,
+    setup: {
+      ...config.setup,
+      bind: {
+        ...config.setup.bind,
+        host: validated.bindHost,
+      },
+      exposure: {
+        mode: validated.mode,
+        allowLan: validated.mode !== 'loopback',
+        baseDomain: validated.baseDomain,
+      },
+    },
+    routing: {
+      locations: updatedRoutingLocations,
+    },
+  });
+
+  return {
+    ok: true,
+    config: withRuntimeStatus(
+      canonicalConfig,
+      'unvalidated',
+      null,
+      'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+    ),
+  };
+}
+
+function renderExposureUpdateSuccess(config: MullgateConfig, configPath: string): string {
+  return [
+    'Mullgate exposure updated.',
+    'phase: persist-config',
+    'source: input',
+    `config: ${configPath}`,
+    `runtime status: ${config.runtime.status.phase}`,
+    `reason: ${config.runtime.status.message ?? 'Exposure settings changed.'}`,
+    '',
+    renderExposureReport(config, configPath),
+  ].join('\n');
+}
+
+function renderExposureUpdateError(result: ExposureUpdateFailure): string {
+  return [
+    'Mullgate exposure update failed.',
+    `phase: ${result.phase}`,
+    `source: ${result.source}`,
+    `code: ${result.code}`,
+    `artifact: ${result.artifactPath}`,
+    `reason: ${result.message}`,
+    ...(result.cause ? [`cause: ${result.cause}`] : []),
   ].join('\n');
 }
 
@@ -640,6 +886,24 @@ function applyPostSetNormalization(config: MullgateConfig, changedPath: string):
       config.setup.bind.httpsPort = null;
     }
   }
+}
+
+function hasExposureUpdate(options: ExposureCommandOptions): boolean {
+  return Boolean(options.mode || options.baseDomain !== undefined || options.clearBaseDomain || options.routeBindIp?.length);
+}
+
+function parseExposureModeOption(raw: string): ExposureMode {
+  const normalized = raw.trim();
+
+  if (normalized === 'loopback' || normalized === 'private-network' || normalized === 'public') {
+    return normalized;
+  }
+
+  throw new Error('Exposure mode must be loopback, private-network, or public.');
+}
+
+function collectRepeatedValues(value: string, previous: string[]): string[] {
+  return [...previous, value.trim()].filter((entry) => entry.length > 0);
 }
 
 function parseRequiredString(raw: string): string {

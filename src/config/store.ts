@@ -194,6 +194,7 @@ export function syncLegacyMirrorsToRouting(config: MullgateConfig): MullgateConf
 
   const updatedPrimary = normalizeRoutedLocation(
     {
+      hostname: firstLocation.hostname,
       bindIp: firstLocation.bindIp,
       relayPreference: structuredClone(config.setup.location),
       mullvad: structuredClone(config.mullvad),
