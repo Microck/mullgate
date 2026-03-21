@@ -332,11 +332,19 @@ export function renderHostsReport(config: MullgateConfig, configPath: string): s
     'phase: inspect-config',
     'source: canonical-config',
     `config: ${configPath}`,
+    `routes: ${config.routing.locations.length}`,
     'hostname -> bind ip',
     ...config.routing.locations.map(
       (location, index) => `${index + 1}. ${location.hostname} -> ${location.bindIp} (alias: ${location.alias}, route id: ${location.runtime.routeId})`,
     ),
+    '',
+    'copy/paste hosts block',
+    ...renderHostsBlock(config),
   ].join('\n');
+}
+
+function renderHostsBlock(config: MullgateConfig): string[] {
+  return config.routing.locations.map((location) => `${location.bindIp} ${location.hostname}`);
 }
 
 async function validateSavedConfig(input: { store: ConfigStore; refresh: boolean }): Promise<ConfigValidationResult> {

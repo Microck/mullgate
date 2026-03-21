@@ -356,20 +356,30 @@ describe('mullgate start command', () => {
     });
     expect(savedConfig.diagnostics.lastRuntimeStart).toEqual(persistedReport);
     expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
-"\nMullgate runtime started.
-phase: compose-launch
-source: docker-compose
-attempted at: 2026-03-21T01:00:00.000Z
-routes: 2
-config: /tmp/mullgate-home/config/mullgate/config.json
-primary wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
-runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json
-validation report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-at-vie-wg-001-configtest.json
-validation: wireproxy-binary/configtest (2 routes)
-runtime status: running"
-`);
+      "
+      Mullgate runtime started.
+      phase: compose-launch
+      source: docker-compose
+      attempted at: 2026-03-21T01:00:00.000Z
+      routes: 2
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      primary wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+      relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+      docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json
+      validation report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-at-vie-wg-001-configtest.json
+      validation: wireproxy-binary/configtest (2 routes)
+      routed endpoints:
+      1. se-got-wg-101 -> 127.0.0.1
+         socks5: socks5://alice:[redacted]@se-got-wg-101:1080
+         http: http://alice:[redacted]@se-got-wg-101:8080
+         https: https://alice:[redacted]@se-got-wg-101:8443
+      2. at-vie-wg-001 -> 127.0.0.2
+         socks5: socks5://alice:[redacted]@at-vie-wg-001:1080
+         http: http://alice:[redacted]@at-vie-wg-001:8080
+         https: https://alice:[redacted]@at-vie-wg-001:8443
+      runtime status: running"
+    `);
     expect('\n' + normalizeReport(persistedReport, env)).toMatchInlineSnapshot(`
 "\n{
   \"attemptedAt\": \"2026-03-21T01:00:00.000Z\",

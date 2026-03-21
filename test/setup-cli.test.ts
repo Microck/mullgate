@@ -342,13 +342,18 @@ routes: 1
    wireproxy service: wireproxy-sweden-gothenburg"
 `);
         expect('\n' + normalizeOutput(hostsResult.stdout, env)).toMatchInlineSnapshot(`
-"\nMullgate routed hosts
-phase: inspect-config
-source: canonical-config
-config: /tmp/mullgate-home/config/mullgate/config.json
-hostname -> bind ip
-1. sweden-gothenburg -> 127.0.0.1 (alias: sweden-gothenburg, route id: sweden-gothenburg)"
-`);
+          "
+          Mullgate routed hosts
+          phase: inspect-config
+          source: canonical-config
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          routes: 1
+          hostname -> bind ip
+          1. sweden-gothenburg -> 127.0.0.1 (alias: sweden-gothenburg, route id: sweden-gothenburg)
+
+          copy/paste hosts block
+          127.0.0.1 sweden-gothenburg"
+        `);
         expect('\n' + normalizeOutput(validateResult.stdout, env)).toMatchInlineSnapshot(`
 "\nMullgate config validated.
 phase: validation
@@ -510,14 +515,20 @@ routes: 2
    wireproxy service: wireproxy-austria-vienna"
 `);
         expect('\n' + normalizeOutput(hostsResult.stdout, env)).toMatchInlineSnapshot(`
-"\nMullgate routed hosts
-phase: inspect-config
-source: canonical-config
-config: /tmp/mullgate-home/config/mullgate/config.json
-hostname -> bind ip
-1. sweden-gothenburg -> 127.0.0.1 (alias: sweden-gothenburg, route id: sweden-gothenburg)
-2. austria-vienna -> 127.0.0.2 (alias: austria-vienna, route id: austria-vienna)"
-`);
+          "
+          Mullgate routed hosts
+          phase: inspect-config
+          source: canonical-config
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          routes: 2
+          hostname -> bind ip
+          1. sweden-gothenburg -> 127.0.0.1 (alias: sweden-gothenburg, route id: sweden-gothenburg)
+          2. austria-vienna -> 127.0.0.2 (alias: austria-vienna, route id: austria-vienna)
+
+          copy/paste hosts block
+          127.0.0.1 sweden-gothenburg
+          127.0.0.2 austria-vienna"
+        `);
       },
     );
   });

@@ -354,9 +354,18 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
       `runtime manifest: ${runtimeBundle.artifactPaths.manifestPath}`,
       `validation report: ${validationResult.reportPath}`,
       `validation: ${validationResult.validationSource}`,
+      'routed endpoints:',
+      ...renderPublishedEndpointInventory(runtimeBundle.manifest),
       'runtime status: running',
     ].join('\n'),
   };
+}
+
+function renderPublishedEndpointInventory(manifest: RuntimeBundleManifest): string[] {
+  return manifest.routes.flatMap((route, index) => [
+    `${index + 1}. ${route.hostname} -> ${route.bindIp}`,
+    ...route.publishedEndpoints.map((endpoint) => `   ${endpoint.protocol}: ${endpoint.proxyUrl}`),
+  ]);
 }
 
 function writeStartResult(result: StartFlowResult, dependencies: Pick<StartCommandDependencies, 'stdout' | 'stderr'>): void {
