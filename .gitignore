@@ -26,4 +26,5 @@ vendor/
 coverage/
 .cache/
 tmp/
+.tmp/
 AGENTS.md
