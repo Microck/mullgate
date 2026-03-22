@@ -1,0 +1,10 @@
+{
+  "phase": "prerequisite-check",
+  "mode": "live",
+  "preservedWorkspace": true,
+  "workspacePath": "/tmp/mullgate-m004-yotouB",
+  "notes": [
+    "Reused the S01 shared-entry topology with 1 Mullvad device and 3 logical exits.",
+    "Feasibility verdict was FAIL at phase prerequisite-check."
+  ]
+}

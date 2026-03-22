@@ -68,12 +68,62 @@ export type CompatibilitySummaryBundle = {
   readonly phase: string;
   readonly overallVerdict: 'pass' | 'contract-change' | 'fail';
   readonly artifact: CompatibilityArtifact;
+  readonly summary: {
+    readonly headline: string;
+    readonly protocolMatrix: readonly {
+      readonly protocol: CompatibilityArtifact['protocols'][number]['protocol'];
+      readonly outcome: CompatibilityArtifact['protocols'][number]['outcome'];
+      readonly reason: CompatibilityArtifact['protocols'][number]['reason'];
+      readonly contractStatus: 'preserved' | 'contract-change' | 'failed';
+      readonly summary: string;
+      readonly observedCapabilitySummary: string;
+      readonly artifactPath?: string;
+    }[];
+    readonly requirementDeltas: readonly {
+      readonly requirementId: CompatibilityArtifact['requirementDeltas'][number]['requirementId'];
+      readonly title: string;
+      readonly status: CompatibilityArtifact['requirementDeltas'][number]['status'];
+      readonly summary: string;
+      readonly evidence: readonly string[];
+    }[];
+    readonly operatorImpact: {
+      readonly authSurface: 'preserved' | 'failed';
+      readonly relaySelectionFlow: 'hostname-selected' | 'explicit-relay-selection-required';
+      readonly locationDiscovery: 'truthful-hostname-selection' | 'explicit-relay-mapping' | 'not-truthful';
+      readonly notes: readonly string[];
+    };
+    readonly hostnameRouting: {
+      readonly status: CompatibilityArtifact['hostnameRouting']['status'];
+      readonly reason: CompatibilityArtifact['hostnameRouting']['reason'];
+      readonly summary: string;
+      readonly explicitFailure: string | null;
+      readonly artifactPath?: string;
+    };
+    readonly recommendation: {
+      readonly posture: CompatibilityArtifact['recommendation']['posture'];
+      readonly summary: string;
+      readonly survivingRequirementIds: readonly string[];
+      readonly degradedRequirementIds: readonly string[];
+      readonly failedRequirementIds: readonly string[];
+    };
+    readonly artifactLinks: {
+      readonly artifactJson: string;
+      readonly summaryJson: string;
+      readonly summaryText: string;
+      readonly protocolEvidence: string;
+      readonly hostnameRoutingEvidence: string;
+      readonly evaluationMetadata: string;
+      readonly feasibilitySummaryJson?: string;
+      readonly feasibilitySummaryText?: string;
+    };
+  };
   readonly diagnostics: {
     readonly workspacePath?: string;
     readonly preservedWorkspace: boolean;
     readonly notes: readonly string[];
     readonly artifactPaths: {
       readonly artifactJson: string;
+      readonly summaryJson: string;
       readonly summaryText: string;
       readonly protocolEvidence: string;
       readonly hostnameRoutingEvidence: string;
@@ -239,8 +289,8 @@ export function renderCompatibilityHelp(): string {
     'This verifier expects exactly one Mullvad device for the shared-entry runtime.',
     'It never falls back to a redesigned multi-device path. When the topology,',
     'hostname truthfulness, or a probe phase fails, inspect latest/summary.json,',
-    'latest/summary.txt, latest/protocol-evidence.json, and the preserved temp',
-    'workspace paths named in the output bundle.',
+    'latest/summary.txt, latest/protocol-evidence.json, latest/hostname-routing.json,',
+    'and the preserved temp workspace paths named in the output bundle.',
     '',
   ].join('\n');
 }
@@ -489,7 +539,7 @@ async function writeCompatibilityOutputs(input: {
     ),
   ]);
 
-  const bundle: CompatibilitySummaryBundle = {
+  const baseBundle: Omit<CompatibilitySummaryBundle, 'summary'> = {
     schemaVersion: 1,
     generatedAt: input.artifact.generatedAt,
     mode: input.mode,
@@ -502,6 +552,7 @@ async function writeCompatibilityOutputs(input: {
       notes: [...input.notes],
       artifactPaths: {
         artifactJson: input.artifactJsonPath,
+        summaryJson: input.summaryJsonPath,
         summaryText: input.summaryTextPath,
         protocolEvidence: input.protocolEvidencePath,
         hostnameRoutingEvidence: input.hostnameRoutingEvidencePath,
@@ -512,14 +563,99 @@ async function writeCompatibilityOutputs(input: {
     },
   };
 
-  const summaryText = renderCompatibilitySummary({ bundle });
+  const bundleWithSummary: CompatibilitySummaryBundle = {
+    ...baseBundle,
+    summary: createCompatibilitySummarySurface({
+      bundle: baseBundle,
+      summaryJsonPath: input.summaryJsonPath,
+    }),
+  };
+
+  const summaryText = renderCompatibilitySummary({ bundle: bundleWithSummary });
   await Promise.all([
-    writeFile(input.summaryJsonPath, `${JSON.stringify(bundle, null, 2)}\n`, { mode: 0o600 }),
+    writeFile(input.summaryJsonPath, `${JSON.stringify(bundleWithSummary, null, 2)}\n`, { mode: 0o600 }),
     writeFile(input.summaryTextPath, `${summaryText}\n`, { mode: 0o600 }),
   ]);
   process.stdout.write(`${summaryText}\n`);
 
-  return bundle;
+  return bundleWithSummary;
+}
+
+function createCompatibilitySummarySurface(input: {
+  readonly bundle: Omit<CompatibilitySummaryBundle, 'summary'>;
+  readonly summaryJsonPath: string;
+}): CompatibilitySummaryBundle['summary'] {
+  const hostnameRoutingFailure =
+    input.bundle.artifact.hostnameRouting.status === 'not-truthful'
+      ? 'Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.'
+      : null;
+
+  return {
+    headline: summarizeHeadline({ bundle: input.bundle, hostnameRoutingFailure }),
+    protocolMatrix: input.bundle.artifact.protocols.map((protocol) => {
+      return {
+        protocol: protocol.protocol,
+        outcome: protocol.outcome,
+        reason: protocol.reason,
+        contractStatus: toProtocolContractStatus(protocol.outcome),
+        summary: protocol.summary,
+        observedCapabilitySummary: protocol.observedCapabilitySummary,
+        ...(protocol.artifactPath ? { artifactPath: protocol.artifactPath } : {}),
+      };
+    }),
+    requirementDeltas: input.bundle.artifact.requirementDeltas.map((requirement) => {
+      return {
+        requirementId: requirement.requirementId,
+        title: requirement.title,
+        status: requirement.status,
+        summary: requirement.summary,
+        evidence: [...requirement.evidence],
+      };
+    }),
+    operatorImpact: {
+      authSurface: input.bundle.artifact.operator.authPreserved ? 'preserved' : 'failed',
+      relaySelectionFlow: input.bundle.artifact.operator.requiresClientSpecificRelayConfiguration
+        ? 'explicit-relay-selection-required'
+        : 'hostname-selected',
+      locationDiscovery:
+        input.bundle.artifact.hostnameRouting.status === 'truthful'
+          ? 'truthful-hostname-selection'
+          : input.bundle.artifact.operator.locationSelectionDiscoverable
+            ? 'explicit-relay-mapping'
+            : 'not-truthful',
+      notes: [...input.bundle.artifact.operator.notes],
+    },
+    hostnameRouting: {
+      status: input.bundle.artifact.hostnameRouting.status,
+      reason: input.bundle.artifact.hostnameRouting.reason,
+      summary: input.bundle.artifact.hostnameRouting.summary,
+      explicitFailure: hostnameRoutingFailure,
+      ...(input.bundle.artifact.hostnameRouting.artifactPath
+        ? { artifactPath: input.bundle.artifact.hostnameRouting.artifactPath }
+        : {}),
+    },
+    recommendation: {
+      posture: input.bundle.artifact.recommendation.posture,
+      summary: input.bundle.artifact.recommendation.summary,
+      survivingRequirementIds: [...input.bundle.artifact.recommendation.survivingRequirementIds],
+      degradedRequirementIds: [...input.bundle.artifact.recommendation.degradedRequirementIds],
+      failedRequirementIds: [...input.bundle.artifact.recommendation.failedRequirementIds],
+    },
+    artifactLinks: {
+      artifactJson: input.bundle.diagnostics.artifactPaths.artifactJson,
+      summaryJson: input.summaryJsonPath,
+      summaryText: input.bundle.diagnostics.artifactPaths.summaryText,
+      protocolEvidence: input.bundle.diagnostics.artifactPaths.protocolEvidence,
+      hostnameRoutingEvidence: input.bundle.diagnostics.artifactPaths.hostnameRoutingEvidence,
+      evaluationMetadata: input.bundle.diagnostics.artifactPaths.evaluationMetadata,
+      ...(input.bundle.diagnostics.artifactPaths.feasibilitySummaryJson
+        ? { feasibilitySummaryJson: input.bundle.diagnostics.artifactPaths.feasibilitySummaryJson }
+        : {}),
+      ...(input.bundle.diagnostics.artifactPaths.feasibilitySummaryText
+        ? { feasibilitySummaryText: input.bundle.diagnostics.artifactPaths.feasibilitySummaryText }
+        : {}),
+    },
+  };
 }
 
 function renderCompatibilitySummary(input: { readonly bundle: CompatibilitySummaryBundle }): string {
@@ -527,35 +663,51 @@ function renderCompatibilitySummary(input: { readonly bundle: CompatibilitySumma
     `M004 compatibility verdict: ${input.bundle.overallVerdict.toUpperCase()}`,
     `phase: ${input.bundle.phase}`,
     `mode: ${input.bundle.mode}`,
-    `recommendation posture: ${input.bundle.artifact.recommendation.posture}`,
-    `hostname-selected routing: ${input.bundle.artifact.hostnameRouting.status} (${input.bundle.artifact.hostnameRouting.reason})`,
-    `hostname summary: ${input.bundle.artifact.hostnameRouting.summary}`,
+    `recommendation posture: ${input.bundle.summary.recommendation.posture}`,
+    `headline: ${input.bundle.summary.headline}`,
+    `hostname-selected routing: ${input.bundle.summary.hostnameRouting.status} (${input.bundle.summary.hostnameRouting.reason})`,
+    `hostname summary: ${input.bundle.summary.hostnameRouting.summary}`,
   ];
 
-  input.bundle.artifact.protocols.forEach((protocol) => {
+  if (input.bundle.summary.hostnameRouting.explicitFailure) {
+    lines.push(`hostname-selected routing failure: ${input.bundle.summary.hostnameRouting.explicitFailure}`);
+  }
+
+  lines.push('protocol matrix:');
+  input.bundle.summary.protocolMatrix.forEach((protocol) => {
     lines.push(
-      `${protocol.protocol}: ${protocol.outcome} (${protocol.reason}) — ${protocol.summary}`,
+      `- ${protocol.protocol}: ${protocol.outcome} / ${protocol.contractStatus} (${protocol.reason}) — ${protocol.summary}`,
     );
+    lines.push(`  observed: ${protocol.observedCapabilitySummary}`);
+  });
+
+  lines.push('operator impact:');
+  lines.push(`- auth surface: ${input.bundle.summary.operatorImpact.authSurface}`);
+  lines.push(`- relay selection flow: ${input.bundle.summary.operatorImpact.relaySelectionFlow}`);
+  lines.push(`- location discovery: ${input.bundle.summary.operatorImpact.locationDiscovery}`);
+  input.bundle.summary.operatorImpact.notes.forEach((note) => {
+    lines.push(`  note: ${note}`);
   });
 
   lines.push('requirement deltas:');
-  input.bundle.artifact.requirementDeltas.forEach((requirement) => {
-    lines.push(`- ${requirement.requirementId}: ${requirement.status} — ${requirement.summary}`);
+  input.bundle.summary.requirementDeltas.forEach((requirement) => {
+    lines.push(`- ${requirement.requirementId} ${requirement.title}: ${requirement.status} — ${requirement.summary}`);
   });
 
-  lines.push('artifacts:');
-  lines.push(`- artifact: ${input.bundle.diagnostics.artifactPaths.artifactJson}`);
-  lines.push(`- summary text: ${input.bundle.diagnostics.artifactPaths.summaryText}`);
-  lines.push(`- protocol evidence: ${input.bundle.diagnostics.artifactPaths.protocolEvidence}`);
-  lines.push(`- hostname evidence: ${input.bundle.diagnostics.artifactPaths.hostnameRoutingEvidence}`);
-  lines.push(`- evaluation metadata: ${input.bundle.diagnostics.artifactPaths.evaluationMetadata}`);
+  lines.push('artifact links:');
+  lines.push(`- artifact: ${input.bundle.summary.artifactLinks.artifactJson}`);
+  lines.push(`- summary json: ${input.bundle.summary.artifactLinks.summaryJson}`);
+  lines.push(`- summary text: ${input.bundle.summary.artifactLinks.summaryText}`);
+  lines.push(`- protocol evidence: ${input.bundle.summary.artifactLinks.protocolEvidence}`);
+  lines.push(`- hostname evidence: ${input.bundle.summary.artifactLinks.hostnameRoutingEvidence}`);
+  lines.push(`- evaluation metadata: ${input.bundle.summary.artifactLinks.evaluationMetadata}`);
 
-  if (input.bundle.diagnostics.artifactPaths.feasibilitySummaryJson) {
-    lines.push(`- feasibility summary json: ${input.bundle.diagnostics.artifactPaths.feasibilitySummaryJson}`);
+  if (input.bundle.summary.artifactLinks.feasibilitySummaryJson) {
+    lines.push(`- feasibility summary json: ${input.bundle.summary.artifactLinks.feasibilitySummaryJson}`);
   }
 
-  if (input.bundle.diagnostics.artifactPaths.feasibilitySummaryText) {
-    lines.push(`- feasibility summary text: ${input.bundle.diagnostics.artifactPaths.feasibilitySummaryText}`);
+  if (input.bundle.summary.artifactLinks.feasibilitySummaryText) {
+    lines.push(`- feasibility summary text: ${input.bundle.summary.artifactLinks.feasibilitySummaryText}`);
   }
 
   if (input.bundle.diagnostics.workspacePath) {
@@ -563,6 +715,37 @@ function renderCompatibilitySummary(input: { readonly bundle: CompatibilitySumma
   }
 
   return lines.join('\n');
+}
+
+function summarizeHeadline(input: {
+  readonly bundle: Omit<CompatibilitySummaryBundle, 'summary'>;
+  readonly hostnameRoutingFailure: string | null;
+}): string {
+  if (input.bundle.overallVerdict === 'pass') {
+    return 'All tracked protocol and hostname-routing contracts remain truthful under the shared-entry topology.';
+  }
+
+  if (input.bundle.overallVerdict === 'contract-change') {
+    return 'The shared-entry topology only remains usable if Mullgate accepts the named contract changes in the compatibility matrix.';
+  }
+
+  if (input.hostnameRoutingFailure) {
+    return `SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate’s current truthful contract: ${input.hostnameRoutingFailure}`;
+  }
+
+  return 'The shared-entry topology fails one or more tracked contracts and is not truthful enough to recommend as-is.';
+}
+
+function toProtocolContractStatus(outcome: CompatibilityArtifact['protocols'][number]['outcome']): 'preserved' | 'contract-change' | 'failed' {
+  if (outcome === 'supported') {
+    return 'preserved';
+  }
+
+  if (outcome === 'degraded') {
+    return 'contract-change';
+  }
+
+  return 'failed';
 }
 
 function toOverallVerdict(artifact: CompatibilityArtifact): 'pass' | 'contract-change' | 'fail' {

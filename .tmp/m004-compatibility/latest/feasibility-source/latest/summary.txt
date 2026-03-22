@@ -1,0 +1,14 @@
+M004 feasibility verdict: FAIL
+reason: prerequisite-missing
+phase: prerequisite-check
+stop reason: prerequisite-missing
+entry relay: al-tia-wg-003
+requested exits: 3
+successful probes: 0
+failed probes: 0
+distinct observed exits: 0
+route unchanged: false
+exit-1: relay=al-tia-wg-004, observed=not-run
+exit-2: relay=ar-bue-wg-001, observed=not-run
+exit-3: relay=at-vie-wg-001, observed=not-run
+workspace: /tmp/mullgate-m004-yotouB

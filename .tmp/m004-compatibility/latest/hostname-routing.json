@@ -1,0 +1,10 @@
+{
+  "sharedBindIpCount": 1,
+  "requestedProxyHostnamePreserved": false,
+  "currentSelector": "destination-bind-ip",
+  "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts",
+  "notes": [
+    "The reused S01 topology provisions exactly one Mullvad WireGuard entry identity.",
+    "Logical exit selection only appears inside the chained SOCKS5 client path, not as distinct bind IPs at the shared entry."
+  ]
+}

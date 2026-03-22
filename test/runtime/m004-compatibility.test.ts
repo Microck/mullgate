@@ -538,9 +538,21 @@ describe('m004 compatibility contract', () => {
 
     expect(summaryJson).toContain('"phase": "fixture-replay"');
     expect(summaryJson).toContain('"overallVerdict": "fail"');
+    expect(summaryJson).toContain('"summary"');
+    expect(summaryJson).toContain('"protocolMatrix"');
+    expect(summaryJson).toContain('"operatorImpact"');
+    expect(summaryJson).toContain('"artifactLinks"');
+    expect(summaryJson).toContain('"summaryJson"');
+    expect(summaryJson).toContain('"explicitFailure": "Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection."');
+    expect(summaryText).toContain('headline: SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate’s current truthful contract');
     expect(summaryText).toContain('hostname-selected routing: not-truthful (one-bind-ip-plus-socks5-hostname-loss)');
-    expect(summaryText).toContain('socks5: degraded (explicit-relay-selection-required)');
-    expect(summaryText).toContain('artifacts:');
+    expect(summaryText).toContain('hostname-selected routing failure: Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.');
+    expect(summaryText).toContain('protocol matrix:');
+    expect(summaryText).toContain('- socks5: degraded / contract-change (explicit-relay-selection-required)');
+    expect(summaryText).toContain('- http: blocked / failed (hostname-routing-not-truthful)');
+    expect(summaryText).toContain('- https: blocked / failed (hostname-routing-not-truthful)');
+    expect(summaryText).toContain('artifact links:');
+    expect(summaryText).toContain('summary json:');
     expect(artifactJson).toContain('shared-entry-compatibility-matrix');
     expect(artifactJson).not.toContain('123456789012');
   });

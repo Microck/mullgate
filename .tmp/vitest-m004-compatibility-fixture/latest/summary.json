@@ -178,6 +178,146 @@
     ],
     "artifactPaths": {
       "artifactJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/artifact.json",
+      "summaryJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/summary.json",
+      "summaryText": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/summary.txt",
+      "protocolEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/protocol-evidence.json",
+      "hostnameRoutingEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/hostname-routing.json",
+      "evaluationMetadata": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/evaluation.json"
+    }
+  },
+  "summary": {
+    "headline": "SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate’s current truthful contract: Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.",
+    "protocolMatrix": [
+      {
+        "protocol": "socks5",
+        "outcome": "degraded",
+        "reason": "explicit-relay-selection-required",
+        "contractStatus": "contract-change",
+        "summary": "SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.",
+        "observedCapabilitySummary": "SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop.",
+        "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-socks5.json"
+      },
+      {
+        "protocol": "http",
+        "outcome": "blocked",
+        "reason": "hostname-routing-not-truthful",
+        "contractStatus": "failed",
+        "summary": "HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
+        "observedCapabilitySummary": "HTTP reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology.",
+        "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-http.json"
+      },
+      {
+        "protocol": "https",
+        "outcome": "blocked",
+        "reason": "hostname-routing-not-truthful",
+        "contractStatus": "failed",
+        "summary": "HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
+        "observedCapabilitySummary": "HTTPS reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology.",
+        "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-https.json"
+      }
+    ],
+    "requirementDeltas": [
+      {
+        "requirementId": "R004",
+        "title": "Hostname-selected location routing",
+        "status": "failed",
+        "summary": "Hostname-selected routing no longer truthfully selects the Mullvad exit under the shared-entry topology.",
+        "evidence": [
+          "Hostname-selected routing is not truthful under one bind IP because SOCKS5 does not preserve the requested proxy hostname for the current destination-bind-IP selector."
+        ]
+      },
+      {
+        "requirementId": "R005",
+        "title": "SOCKS5 support",
+        "status": "degraded",
+        "summary": "SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.",
+        "evidence": [
+          "SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop."
+        ]
+      },
+      {
+        "requirementId": "R006",
+        "title": "HTTP proxy support",
+        "status": "failed",
+        "summary": "HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
+        "evidence": [
+          "HTTP reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology."
+        ]
+      },
+      {
+        "requirementId": "R007",
+        "title": "HTTPS proxy support",
+        "status": "failed",
+        "summary": "HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
+        "evidence": [
+          "HTTPS reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology."
+        ]
+      },
+      {
+        "requirementId": "R008",
+        "title": "Authenticated proxy access",
+        "status": "preserved",
+        "summary": "Authenticated proxy access remains visible and enforced at the shared entry.",
+        "evidence": [
+          "Shared-entry probing still requires authenticated local proxy access."
+        ]
+      },
+      {
+        "requirementId": "R017",
+        "title": "Low-friction first run for self-hosters",
+        "status": "failed",
+        "summary": "The shared-entry topology breaks the low-friction self-hoster story because at least one required protocol no longer works truthfully.",
+        "evidence": [
+          "Operators must configure client-specific relay selection instead of relying on hostname-only routing."
+        ]
+      },
+      {
+        "requirementId": "R019",
+        "title": "Easy location naming and discovery",
+        "status": "degraded",
+        "summary": "Route naming remains diagnosable, but operators must understand an explicit relay-selection mapping instead of hostname-only routing.",
+        "evidence": [
+          "Hostname-selected routing is not truthful under one bind IP because SOCKS5 does not preserve the requested proxy hostname for the current destination-bind-IP selector.",
+          "Location-selection metadata can still be described to operators in a compatibility bundle."
+        ]
+      }
+    ],
+    "operatorImpact": {
+      "authSurface": "preserved",
+      "relaySelectionFlow": "explicit-relay-selection-required",
+      "locationDiscovery": "explicit-relay-mapping",
+      "notes": [
+        "Authenticated access remains on the shared entry.",
+        "Operators can inspect relay mapping in the compatibility bundle, but clients must opt into explicit relay choice."
+      ]
+    },
+    "hostnameRouting": {
+      "status": "not-truthful",
+      "reason": "one-bind-ip-plus-socks5-hostname-loss",
+      "summary": "Hostname-selected routing is not truthful under one bind IP because SOCKS5 does not preserve the requested proxy hostname for the current destination-bind-IP selector.",
+      "explicitFailure": "Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.",
+      "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/hostname-routing.json"
+    },
+    "recommendation": {
+      "posture": "blocked",
+      "summary": "The shared-entry redesign is blocked because one or more active product requirements fail under the compatibility matrix.",
+      "survivingRequirementIds": [
+        "R008"
+      ],
+      "degradedRequirementIds": [
+        "R005",
+        "R019"
+      ],
+      "failedRequirementIds": [
+        "R004",
+        "R006",
+        "R007",
+        "R017"
+      ]
+    },
+    "artifactLinks": {
+      "artifactJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/artifact.json",
+      "summaryJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/summary.json",
       "summaryText": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/summary.txt",
       "protocolEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/protocol-evidence.json",
       "hostnameRoutingEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/hostname-routing.json",

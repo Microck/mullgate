@@ -93,8 +93,8 @@ describe('verify-m004-compatibility help contract', () => {
       This verifier expects exactly one Mullvad device for the shared-entry runtime.
       It never falls back to a redesigned multi-device path. When the topology,
       hostname truthfulness, or a probe phase fails, inspect latest/summary.json,
-      latest/summary.txt, latest/protocol-evidence.json, and the preserved temp
-      workspace paths named in the output bundle."
+      latest/summary.txt, latest/protocol-evidence.json, latest/hostname-routing.json,
+      and the preserved temp workspace paths named in the output bundle."
     `);
   });
 });

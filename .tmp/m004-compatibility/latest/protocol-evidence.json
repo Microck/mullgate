@@ -1,0 +1,26 @@
+[
+  {
+    "protocol": "socks5",
+    "probeSucceeded": false,
+    "canSelectExitByHostname": false,
+    "canSelectExitWithExplicitRelaySelection": false,
+    "observedCapabilitySummary": "SOCKS5 client-side chaining did not complete truthfully because the reused shared-entry feasibility phase stopped at prerequisite-check with reason prerequisite-missing.",
+    "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts/artifact.json"
+  },
+  {
+    "protocol": "http",
+    "probeSucceeded": true,
+    "canSelectExitByHostname": false,
+    "canSelectExitWithExplicitRelaySelection": false,
+    "observedCapabilitySummary": "HTTP can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTP clients, so hostname-selected routing cannot survive.",
+    "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts/artifact.json"
+  },
+  {
+    "protocol": "https",
+    "probeSucceeded": true,
+    "canSelectExitByHostname": false,
+    "canSelectExitWithExplicitRelaySelection": false,
+    "observedCapabilitySummary": "HTTPS can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTPS clients, so hostname-selected routing cannot survive.",
+    "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts/artifact.json"
+  }
+]

@@ -1,29 +1,29 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-03-22T02:05:00.000Z",
-  "mode": "fixture",
-  "phase": "fixture-replay",
+  "generatedAt": "2026-03-22T01:48:39.893Z",
+  "mode": "live",
+  "phase": "prerequisite-check",
   "overallVerdict": "fail",
   "artifact": {
     "schemaVersion": 1,
-    "generatedAt": "2026-03-22T02:05:00.000Z",
+    "generatedAt": "2026-03-22T01:48:39.893Z",
     "proofModel": "shared-entry-compatibility-matrix",
     "feasibility": {
       "proofModel": "single-entry-shared-socks-exits",
-      "generatedAt": "2026-03-21T19:02:00.000Z",
+      "generatedAt": "2026-03-22T01:48:39.883Z",
       "verdict": {
-        "status": "pass",
-        "reason": "distinct-exits-confirmed",
-        "phase": "summary",
-        "stopReason": "distinct-exits-confirmed",
-        "summary": "The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged."
+        "status": "fail",
+        "reason": "prerequisite-missing",
+        "phase": "prerequisite-check",
+        "stopReason": "prerequisite-missing",
+        "summary": "The feasibility verifier could not prove the topology because one or more prerequisites were missing."
       },
       "summary": {
-        "requestedLogicalExitCount": 2,
-        "successfulProbeCount": 2,
+        "requestedLogicalExitCount": 3,
+        "successfulProbeCount": 0,
         "failedProbeCount": 0,
-        "distinctObservedExitCount": 2,
-        "routeUnchanged": true,
+        "distinctObservedExitCount": 0,
+        "routeUnchanged": false,
         "collapsedLogicalExitIds": []
       }
     },
@@ -34,45 +34,45 @@
       "sharedBindIpCount": 1,
       "requestedProxyHostnamePreserved": false,
       "currentSelector": "destination-bind-ip",
-      "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/hostname-routing.json",
+      "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts",
       "notes": [
-        "Only one bind IP remains at the shared entry.",
-        "SOCKS5 preserves the destination hostname to the remote proxy, not the original shared-entry routing hostname."
+        "The reused S01 topology provisions exactly one Mullvad WireGuard entry identity.",
+        "Logical exit selection only appears inside the chained SOCKS5 client path, not as distinct bind IPs at the shared entry."
       ]
     },
     "protocols": [
       {
         "protocol": "socks5",
-        "outcome": "degraded",
-        "reason": "explicit-relay-selection-required",
-        "summary": "SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.",
-        "observedCapabilitySummary": "SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop.",
-        "probeSucceeded": true,
+        "outcome": "blocked",
+        "reason": "probe-failed",
+        "summary": "SOCKS5 probing failed, so the shared-entry topology cannot support that protocol truthfully.",
+        "observedCapabilitySummary": "SOCKS5 client-side chaining did not complete truthfully because the reused shared-entry feasibility phase stopped at prerequisite-check with reason prerequisite-missing.",
+        "probeSucceeded": false,
         "canSelectExitByHostname": false,
-        "canSelectExitWithExplicitRelaySelection": true,
-        "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-socks5.json"
+        "canSelectExitWithExplicitRelaySelection": false,
+        "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts/artifact.json"
       },
       {
         "protocol": "http",
         "outcome": "blocked",
         "reason": "hostname-routing-not-truthful",
         "summary": "HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
-        "observedCapabilitySummary": "HTTP reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology.",
+        "observedCapabilitySummary": "HTTP can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTP clients, so hostname-selected routing cannot survive.",
         "probeSucceeded": true,
         "canSelectExitByHostname": false,
         "canSelectExitWithExplicitRelaySelection": false,
-        "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-http.json"
+        "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts/artifact.json"
       },
       {
         "protocol": "https",
         "outcome": "blocked",
         "reason": "hostname-routing-not-truthful",
         "summary": "HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
-        "observedCapabilitySummary": "HTTPS reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology.",
+        "observedCapabilitySummary": "HTTPS can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTPS clients, so hostname-selected routing cannot survive.",
         "probeSucceeded": true,
         "canSelectExitByHostname": false,
         "canSelectExitWithExplicitRelaySelection": false,
-        "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-https.json"
+        "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts/artifact.json"
       }
     ],
     "requirementDeltas": [
@@ -88,10 +88,10 @@
       {
         "requirementId": "R005",
         "title": "SOCKS5 support",
-        "status": "degraded",
-        "summary": "SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.",
+        "status": "failed",
+        "summary": "SOCKS5 probing failed, so the shared-entry topology cannot support that protocol truthfully.",
         "evidence": [
-          "SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop."
+          "SOCKS5 client-side chaining did not complete truthfully because the reused shared-entry feasibility phase stopped at prerequisite-check with reason prerequisite-missing."
         ]
       },
       {
@@ -100,7 +100,7 @@
         "status": "failed",
         "summary": "HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
         "evidence": [
-          "HTTP reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology."
+          "HTTP can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTP clients, so hostname-selected routing cannot survive."
         ]
       },
       {
@@ -109,7 +109,7 @@
         "status": "failed",
         "summary": "HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
         "evidence": [
-          "HTTPS reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology."
+          "HTTPS can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTPS clients, so hostname-selected routing cannot survive."
         ]
       },
       {
@@ -127,7 +127,7 @@
         "status": "failed",
         "summary": "The shared-entry topology breaks the low-friction self-hoster story because at least one required protocol no longer works truthfully.",
         "evidence": [
-          "Operators must configure client-specific relay selection instead of relying on hostname-only routing."
+          "Operators can keep the current hostname-only route-selection flow."
         ]
       },
       {
@@ -148,11 +148,11 @@
         "R008"
       ],
       "degradedRequirementIds": [
-        "R005",
         "R019"
       ],
       "failedRequirementIds": [
         "R004",
+        "R005",
         "R006",
         "R007",
         "R017"
@@ -160,29 +160,30 @@
     },
     "operator": {
       "authPreserved": true,
-      "requiresClientSpecificRelayConfiguration": true,
+      "requiresClientSpecificRelayConfiguration": false,
       "locationSelectionDiscoverable": true,
       "notes": [
-        "Authenticated access remains on the shared entry.",
-        "Operators can inspect relay mapping in the compatibility bundle, but clients must opt into explicit relay choice."
+        "Authenticated access remains on the local shared-entry proxy surface.",
+        "Operators would have to understand explicit relay mapping instead of hostname-selected routing."
       ]
     }
   },
   "diagnostics": {
-    "workspacePath": "/tmp/mullgate-m004-fixture",
+    "workspacePath": "/tmp/mullgate-m004-yotouB",
     "preservedWorkspace": true,
     "notes": [
-      "Fixture proves that one-entry SOCKS5 chaining can still reach distinct exits while hostname-selected routing fails.",
-      "HTTP and HTTPS remain explicit contract failures because no truthful relay selector survives the one-entry topology.",
-      "Fixture replay mode skipped all live Mullvad and Docker prerequisites."
+      "Reused the S01 shared-entry topology with 1 Mullvad device and 3 logical exits.",
+      "Feasibility verdict was FAIL at phase prerequisite-check."
     ],
     "artifactPaths": {
-      "artifactJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/artifact.json",
-      "summaryJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/summary.json",
-      "summaryText": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/summary.txt",
-      "protocolEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/protocol-evidence.json",
-      "hostnameRoutingEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/hostname-routing.json",
-      "evaluationMetadata": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/evaluation.json"
+      "artifactJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/artifact.json",
+      "summaryJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/summary.json",
+      "summaryText": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/summary.txt",
+      "protocolEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/protocol-evidence.json",
+      "hostnameRoutingEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/hostname-routing.json",
+      "evaluationMetadata": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/evaluation.json",
+      "feasibilitySummaryJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/feasibility-source/latest/summary.json",
+      "feasibilitySummaryText": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/feasibility-source/latest/summary.txt"
     }
   },
   "summary": {
@@ -190,12 +191,12 @@
     "protocolMatrix": [
       {
         "protocol": "socks5",
-        "outcome": "degraded",
-        "reason": "explicit-relay-selection-required",
-        "contractStatus": "contract-change",
-        "summary": "SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.",
-        "observedCapabilitySummary": "SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop.",
-        "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-socks5.json"
+        "outcome": "blocked",
+        "reason": "probe-failed",
+        "contractStatus": "failed",
+        "summary": "SOCKS5 probing failed, so the shared-entry topology cannot support that protocol truthfully.",
+        "observedCapabilitySummary": "SOCKS5 client-side chaining did not complete truthfully because the reused shared-entry feasibility phase stopped at prerequisite-check with reason prerequisite-missing.",
+        "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts/artifact.json"
       },
       {
         "protocol": "http",
@@ -203,8 +204,8 @@
         "reason": "hostname-routing-not-truthful",
         "contractStatus": "failed",
         "summary": "HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
-        "observedCapabilitySummary": "HTTP reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology.",
-        "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-http.json"
+        "observedCapabilitySummary": "HTTP can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTP clients, so hostname-selected routing cannot survive.",
+        "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts/artifact.json"
       },
       {
         "protocol": "https",
@@ -212,8 +213,8 @@
         "reason": "hostname-routing-not-truthful",
         "contractStatus": "failed",
         "summary": "HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
-        "observedCapabilitySummary": "HTTPS reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology.",
-        "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-https.json"
+        "observedCapabilitySummary": "HTTPS can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTPS clients, so hostname-selected routing cannot survive.",
+        "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts/artifact.json"
       }
     ],
     "requirementDeltas": [
@@ -229,10 +230,10 @@
       {
         "requirementId": "R005",
         "title": "SOCKS5 support",
-        "status": "degraded",
-        "summary": "SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.",
+        "status": "failed",
+        "summary": "SOCKS5 probing failed, so the shared-entry topology cannot support that protocol truthfully.",
         "evidence": [
-          "SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop."
+          "SOCKS5 client-side chaining did not complete truthfully because the reused shared-entry feasibility phase stopped at prerequisite-check with reason prerequisite-missing."
         ]
       },
       {
@@ -241,7 +242,7 @@
         "status": "failed",
         "summary": "HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
         "evidence": [
-          "HTTP reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology."
+          "HTTP can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTP clients, so hostname-selected routing cannot survive."
         ]
       },
       {
@@ -250,7 +251,7 @@
         "status": "failed",
         "summary": "HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.",
         "evidence": [
-          "HTTPS reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology."
+          "HTTPS can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTPS clients, so hostname-selected routing cannot survive."
         ]
       },
       {
@@ -268,7 +269,7 @@
         "status": "failed",
         "summary": "The shared-entry topology breaks the low-friction self-hoster story because at least one required protocol no longer works truthfully.",
         "evidence": [
-          "Operators must configure client-specific relay selection instead of relying on hostname-only routing."
+          "Operators can keep the current hostname-only route-selection flow."
         ]
       },
       {
@@ -284,11 +285,11 @@
     ],
     "operatorImpact": {
       "authSurface": "preserved",
-      "relaySelectionFlow": "explicit-relay-selection-required",
+      "relaySelectionFlow": "hostname-selected",
       "locationDiscovery": "explicit-relay-mapping",
       "notes": [
-        "Authenticated access remains on the shared entry.",
-        "Operators can inspect relay mapping in the compatibility bundle, but clients must opt into explicit relay choice."
+        "Authenticated access remains on the local shared-entry proxy surface.",
+        "Operators would have to understand explicit relay mapping instead of hostname-selected routing."
       ]
     },
     "hostnameRouting": {
@@ -296,7 +297,7 @@
       "reason": "one-bind-ip-plus-socks5-hostname-loss",
       "summary": "Hostname-selected routing is not truthful under one bind IP because SOCKS5 does not preserve the requested proxy hostname for the current destination-bind-IP selector.",
       "explicitFailure": "Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.",
-      "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/hostname-routing.json"
+      "artifactPath": "/tmp/mullgate-m004-yotouB/artifacts"
     },
     "recommendation": {
       "posture": "blocked",
@@ -305,23 +306,25 @@
         "R008"
       ],
       "degradedRequirementIds": [
-        "R005",
         "R019"
       ],
       "failedRequirementIds": [
         "R004",
+        "R005",
         "R006",
         "R007",
         "R017"
       ]
     },
     "artifactLinks": {
-      "artifactJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/artifact.json",
-      "summaryJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/summary.json",
-      "summaryText": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/summary.txt",
-      "protocolEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/protocol-evidence.json",
-      "hostnameRoutingEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/hostname-routing.json",
-      "evaluationMetadata": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility-fixture/latest/evaluation.json"
+      "artifactJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/artifact.json",
+      "summaryJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/summary.json",
+      "summaryText": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/summary.txt",
+      "protocolEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/protocol-evidence.json",
+      "hostnameRoutingEvidence": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/hostname-routing.json",
+      "evaluationMetadata": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/evaluation.json",
+      "feasibilitySummaryJson": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/feasibility-source/latest/summary.json",
+      "feasibilitySummaryText": "/home/ubuntu/workspace/mullvad-proxy/.tmp/m004-compatibility/latest/feasibility-source/latest/summary.txt"
     }
   }
 }
