@@ -49,7 +49,10 @@ export type SaveConfigResult = {
 
 export type PathReport = {
   readonly phase: 'resolve-paths';
-  readonly source: 'xdg';
+  readonly source: 'canonical-path-contract';
+  readonly platform: MullgatePaths['platform'];
+  readonly platformSource: MullgatePaths['platformSource'];
+  readonly pathSources: MullgatePaths['pathSources'];
   readonly paths: MullgatePaths;
   readonly exists: {
     readonly configFile: boolean;
@@ -150,7 +153,10 @@ export class ConfigStore {
   async inspectPaths(): Promise<PathReport> {
     return {
       phase: 'resolve-paths',
-      source: 'xdg',
+      source: 'canonical-path-contract',
+      platform: this.paths.platform,
+      platformSource: this.paths.platformSource,
+      pathSources: this.paths.pathSources,
       paths: this.paths,
       exists: {
         configFile: await fileExists(this.paths.configFile),

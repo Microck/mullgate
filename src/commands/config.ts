@@ -100,7 +100,7 @@ export function registerConfigCommands(program: Command): void {
 
   config
     .command('path')
-    .description('Show the resolved Mullgate XDG paths.')
+    .description('Show the resolved Mullgate config/state/cache/runtime paths.')
     .action(async () => {
       const store = new ConfigStore();
       const report = await store.inspectPaths();
@@ -420,9 +420,15 @@ export function renderPathReport(report: Awaited<ReturnType<ConfigStore['inspect
     'Mullgate path report',
     `phase: ${report.phase}`,
     `source: ${report.source}`,
+    `platform: ${report.platform}`,
+    `platform source: ${report.platformSource}`,
+    `config home: ${paths.configHome} (${report.pathSources.configHome})`,
+    `state home: ${paths.stateHome} (${report.pathSources.stateHome})`,
+    `cache home: ${paths.cacheHome} (${report.pathSources.cacheHome})`,
     `config file: ${paths.configFile} (${exists.configFile ? 'present' : 'missing'})`,
     `state dir: ${paths.appStateDir}`,
     `cache dir: ${paths.appCacheDir}`,
+    `runtime dir: ${paths.runtimeDir} (${exists.runtimeDir ? 'present' : 'missing'})`,
     `wireproxy config: ${paths.wireproxyConfigFile}`,
     `wireproxy configtest report: ${paths.wireproxyConfigTestReportFile}`,
     `docker compose: ${paths.dockerComposePath}`,

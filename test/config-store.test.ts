@@ -26,6 +26,48 @@ function createTempEnvironment(): NodeJS.ProcessEnv {
   };
 }
 
+function createPlatformEnvironment(platform: 'linux' | 'macos' | 'windows'): NodeJS.ProcessEnv {
+  const root = mkdtempSync(path.join(tmpdir(), `mullgate-${platform}-test-`));
+  temporaryDirectories.push(root);
+
+  if (platform === 'windows') {
+    return {
+      ...process.env,
+      MULLGATE_PLATFORM: 'windows',
+      USERPROFILE: 'C:\\Users\\alice',
+      APPDATA: 'C:\\Users\\alice\\AppData\\Roaming',
+      LOCALAPPDATA: 'C:\\Users\\alice\\AppData\\Local',
+      HOME: undefined,
+      XDG_CONFIG_HOME: undefined,
+      XDG_STATE_HOME: undefined,
+      XDG_CACHE_HOME: undefined,
+      TMPDIR: root,
+    };
+  }
+
+  if (platform === 'macos') {
+    return {
+      ...process.env,
+      MULLGATE_PLATFORM: 'macos',
+      HOME: '/Users/alice',
+      XDG_CONFIG_HOME: undefined,
+      XDG_STATE_HOME: undefined,
+      XDG_CACHE_HOME: undefined,
+      TMPDIR: root,
+    };
+  }
+
+  return {
+    ...process.env,
+    MULLGATE_PLATFORM: 'linux',
+    HOME: '/home/alice',
+    XDG_CONFIG_HOME: undefined,
+    XDG_STATE_HOME: undefined,
+    XDG_CACHE_HOME: undefined,
+    TMPDIR: root,
+  };
+}
+
 function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
   const paths = resolveMullgatePaths(env);
   const timestamp = '2026-03-20T18:48:01.000Z';
@@ -223,8 +265,8 @@ describe('mullgate config store', () => {
     `);
   });
 
-  it('resolves Linux XDG paths predictably', async () => {
-    const env = createTempEnvironment();
+  it('resolves Linux fallback paths predictably', async () => {
+    const env = createPlatformEnvironment('linux');
     const store = new ConfigStore(resolveMullgatePaths(env));
     const report = await store.inspectPaths();
 
@@ -232,16 +274,101 @@ describe('mullgate config store', () => {
       [
         "Mullgate path report",
         "phase: resolve-paths",
-        "source: xdg",
-        "config file: ${resolveMullgatePaths(env).configFile} (missing)",
-        "state dir: ${resolveMullgatePaths(env).appStateDir}",
-        "cache dir: ${resolveMullgatePaths(env).appCacheDir}",
-        "wireproxy config: ${resolveMullgatePaths(env).wireproxyConfigFile}",
-        "wireproxy configtest report: ${resolveMullgatePaths(env).wireproxyConfigTestReportFile}",
-        "docker compose: ${resolveMullgatePaths(env).dockerComposePath}",
-        "relay cache: ${resolveMullgatePaths(env).provisioningCacheFile} (missing)",
+        "source: canonical-path-contract",
+        "platform: linux",
+        "platform source: env:MULLGATE_PLATFORM",
+        "config home: /home/alice/.config (platform:linux-xdg-default)",
+        "state home: /home/alice/.local/state (platform:linux-xdg-default)",
+        "cache home: /home/alice/.cache (platform:linux-xdg-default)",
+        "config file: /home/alice/.config/mullgate/config.json (missing)",
+        "state dir: /home/alice/.local/state/mullgate",
+        "cache dir: /home/alice/.cache/mullgate",
+        "runtime dir: /home/alice/.local/state/mullgate/runtime (missing)",
+        "wireproxy config: /home/alice/.local/state/mullgate/runtime/wireproxy.conf",
+        "wireproxy configtest report: /home/alice/.local/state/mullgate/runtime/wireproxy-configtest.json",
+        "docker compose: /home/alice/.local/state/mullgate/runtime/docker-compose.yml",
+        "relay cache: /home/alice/.cache/mullgate/relays.json (missing)",
       ]
     `);
+  });
+
+  it('resolves macOS fallback paths predictably', async () => {
+    const env = createPlatformEnvironment('macos');
+    const store = new ConfigStore(resolveMullgatePaths(env));
+    const report = await store.inspectPaths();
+
+    expect(renderPathReport(report).split('\n')).toMatchInlineSnapshot(`
+      [
+        "Mullgate path report",
+        "phase: resolve-paths",
+        "source: canonical-path-contract",
+        "platform: macos",
+        "platform source: env:MULLGATE_PLATFORM",
+        "config home: /Users/alice/Library/Application Support (platform:macos-library-application-support)",
+        "state home: /Users/alice/Library/Application Support (platform:macos-library-application-support)",
+        "cache home: /Users/alice/Library/Caches (platform:macos-library-caches)",
+        "config file: /Users/alice/Library/Application Support/mullgate/config.json (missing)",
+        "state dir: /Users/alice/Library/Application Support/mullgate",
+        "cache dir: /Users/alice/Library/Caches/mullgate",
+        "runtime dir: /Users/alice/Library/Application Support/mullgate/runtime (missing)",
+        "wireproxy config: /Users/alice/Library/Application Support/mullgate/runtime/wireproxy.conf",
+        "wireproxy configtest report: /Users/alice/Library/Application Support/mullgate/runtime/wireproxy-configtest.json",
+        "docker compose: /Users/alice/Library/Application Support/mullgate/runtime/docker-compose.yml",
+        "relay cache: /Users/alice/Library/Caches/mullgate/relays.json (missing)",
+      ]
+    `);
+  });
+
+  it('resolves Windows fallback paths predictably', async () => {
+    const env = createPlatformEnvironment('windows');
+    const store = new ConfigStore(resolveMullgatePaths(env));
+    const report = await store.inspectPaths();
+
+    expect(renderPathReport(report).split('\n')).toMatchInlineSnapshot(`
+      [
+        "Mullgate path report",
+        "phase: resolve-paths",
+        "source: canonical-path-contract",
+        "platform: windows",
+        "platform source: env:MULLGATE_PLATFORM",
+        "config home: C:\\Users\\alice\\AppData\\Roaming (platform:windows-appdata)",
+        "state home: C:\\Users\\alice\\AppData\\Local (platform:windows-localappdata)",
+        "cache home: C:\\Users\\alice\\AppData\\Local (platform:windows-localappdata)",
+        "config file: C:\\Users\\alice\\AppData\\Roaming\\mullgate\\config.json (missing)",
+        "state dir: C:\\Users\\alice\\AppData\\Local\\mullgate",
+        "cache dir: C:\\Users\\alice\\AppData\\Local\\mullgate",
+        "runtime dir: C:\\Users\\alice\\AppData\\Local\\mullgate\\runtime (missing)",
+        "wireproxy config: C:\\Users\\alice\\AppData\\Local\\mullgate\\runtime\\wireproxy.conf",
+        "wireproxy configtest report: C:\\Users\\alice\\AppData\\Local\\mullgate\\runtime\\wireproxy-configtest.json",
+        "docker compose: C:\\Users\\alice\\AppData\\Local\\mullgate\\runtime\\docker-compose.yml",
+        "relay cache: C:\\Users\\alice\\AppData\\Local\\mullgate\\relays.json (missing)",
+      ]
+    `);
+  });
+
+  it('keeps explicit XDG overrides higher priority than platform fallbacks', async () => {
+    const env: NodeJS.ProcessEnv = {
+      ...createPlatformEnvironment('macos'),
+      XDG_CONFIG_HOME: '/tmp/override-config',
+      XDG_STATE_HOME: '/tmp/override-state',
+      XDG_CACHE_HOME: '/tmp/override-cache',
+    };
+    const store = new ConfigStore(resolveMullgatePaths(env));
+    const report = await store.inspectPaths();
+
+    expect(report).toMatchObject({
+      platform: 'macos',
+      pathSources: {
+        configHome: 'env:XDG_CONFIG_HOME',
+        stateHome: 'env:XDG_STATE_HOME',
+        cacheHome: 'env:XDG_CACHE_HOME',
+      },
+      paths: {
+        configHome: '/tmp/override-config',
+        stateHome: '/tmp/override-state',
+        cacheHome: '/tmp/override-cache',
+      },
+    });
   });
 
   it('loads a legacy single-location config and persists the routed form with intact legacy mirrors', async () => {
