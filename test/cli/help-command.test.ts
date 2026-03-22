@@ -190,7 +190,8 @@ describe('mullgate help command contract', () => {
         -h, --help                       display help for command
 
       Commands:
-        path                             Show the resolved Mullgate XDG paths.
+        path                             Show the resolved Mullgate
+                                         config/state/cache/runtime paths.
         show                             Show the saved Mullgate config with secrets
                                          redacted.
         locations                        List routed location aliases, bind IPs, relay

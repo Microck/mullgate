@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveMullgatePaths } from '../../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
-import { renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
+import { planRuntimeBundle, renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -24,11 +24,41 @@ function createTempEnvironment(): NodeJS.ProcessEnv {
   };
 }
 
+function createPlatformEnvironment(platform: 'macos' | 'windows'): NodeJS.ProcessEnv {
+  const root = mkdtempSync(path.join(tmpdir(), `mullgate-runtime-bundle-${platform}-`));
+  temporaryDirectories.push(root);
+
+  if (platform === 'windows') {
+    return {
+      ...process.env,
+      MULLGATE_PLATFORM: 'windows',
+      USERPROFILE: 'C:\\Users\\alice',
+      APPDATA: 'C:\\Users\\alice\\AppData\\Roaming',
+      LOCALAPPDATA: 'C:\\Users\\alice\\AppData\\Local',
+      HOME: undefined,
+      XDG_CONFIG_HOME: undefined,
+      XDG_STATE_HOME: undefined,
+      XDG_CACHE_HOME: undefined,
+      TMPDIR: root,
+    };
+  }
+
+  return {
+    ...process.env,
+    MULLGATE_PLATFORM: 'macos',
+    HOME: '/Users/alice',
+    XDG_CONFIG_HOME: undefined,
+    XDG_STATE_HOME: undefined,
+    XDG_CACHE_HOME: undefined,
+    TMPDIR: root,
+  };
+}
+
 function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
   const paths = resolveMullgatePaths(env);
   const timestamp = '2026-03-20T18:48:01.000Z';
-  const certPath = path.join(env.HOME!, 'certs', 'proxy.crt');
-  const keyPath = path.join(env.HOME!, 'certs', 'proxy.key');
+  const certPath = path.join(paths.appStateDir, 'certs', 'proxy.crt');
+  const keyPath = path.join(paths.appStateDir, 'certs', 'proxy.key');
 
   return {
     version: CONFIG_VERSION,
@@ -243,8 +273,8 @@ services:
     network_mode: host
     volumes:
       - /tmp/mullgate-home/state/mullgate/runtime/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - /tmp/mullgate-home/certs/proxy.crt:/run/mullgate-cert.pem:ro
-      - /tmp/mullgate-home/certs/proxy.key:/run/mullgate-key.pem:ro
+      - /tmp/mullgate-home/state/mullgate/certs/proxy.crt:/run/mullgate-cert.pem:ro
+      - /tmp/mullgate-home/state/mullgate/certs/proxy.key:/run/mullgate-key.pem:ro
   wireproxy-se-got-wg-101:
     image: backplane/wireproxy:20260320
     user: \"0:0\"
@@ -309,6 +339,25 @@ backend route-at-vie-wg-001-https
           restart: string;
         };
       };
+      platform: {
+        platform: string;
+        posture: {
+          supportLevel: string;
+          modeLabel: string;
+        };
+        surfaces: {
+          configPaths: string;
+          configWorkflow: string;
+          runtimeArtifacts: string;
+          runtimeExecution: string;
+          diagnostics: string;
+        };
+        hostNetworking: {
+          support: string;
+          modeLabel: string;
+        };
+        warnings: Array<{ code: string }>;
+      };
       services: {
         routingLayer: {
           listeners: {
@@ -354,10 +403,134 @@ backend route-at-vie-wg-001-https
       restart:
         'After changing exposure settings, rerun `mullgate config validate` or `mullgate start` so the runtime artifacts match the saved local-only posture.',
     });
+    expect(parsedManifest.platform).toEqual({
+      platform: 'linux',
+      platformSource: 'process.platform',
+      pathSources: {
+        configHome: 'env:XDG_CONFIG_HOME',
+        stateHome: 'env:XDG_STATE_HOME',
+        cacheHome: 'env:XDG_CACHE_HOME',
+      },
+      paths: {
+        configHome: '/tmp/mullgate-home/config',
+        stateHome: '/tmp/mullgate-home/state',
+        cacheHome: '/tmp/mullgate-home/cache',
+        appConfigDir: '/tmp/mullgate-home/config/mullgate',
+        appStateDir: '/tmp/mullgate-home/state/mullgate',
+        appCacheDir: '/tmp/mullgate-home/cache/mullgate',
+        runtimeDir: '/tmp/mullgate-home/state/mullgate/runtime',
+        runtimeBundleDir: '/tmp/mullgate-home/state/mullgate/runtime',
+        runtimeManifestPath: '/tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json',
+      },
+      posture: {
+        supportLevel: 'full',
+        modeLabel: 'Linux-first runtime support',
+        summary:
+          'Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.',
+        runtimeStory:
+          'Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.',
+      },
+      surfaces: {
+        configPaths: 'supported',
+        configWorkflow: 'supported',
+        runtimeArtifacts: 'supported',
+        runtimeExecution: 'supported',
+        diagnostics: 'supported',
+      },
+      hostNetworking: {
+        support: 'native',
+        modeLabel: 'Native host networking available',
+        summary:
+          'Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.',
+        remediation:
+          'If runtime checks fail on Linux, inspect Docker Compose health, route bind IP ownership, and hostname-resolution drift before assuming the platform contract is wrong.',
+      },
+      guidance: [
+        'Linux is the reference runtime target for the current Mullgate topology and verification flow.',
+        'Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.',
+      ],
+      warnings: [],
+    });
     expect(parsedManifest.routes.map((route) => route.services.backends)).toEqual([
       { socks5: null, http: null, https: 'route-se-got-wg-101-https' },
       { socks5: null, http: null, https: 'route-at-vie-wg-001-https' },
     ]);
+  });
+
+  it('serializes partial-support platform posture for Docker Desktop style platforms', async () => {
+    const macosEnv = createPlatformEnvironment('macos');
+    const macosPaths = resolveMullgatePaths(macosEnv);
+    const macosConfig = createFixtureConfig(macosEnv);
+    macosConfig.setup.bind.httpsPort = null;
+    macosConfig.setup.https = { enabled: false };
+    const macosResult = planRuntimeBundle({
+      config: macosConfig,
+      paths: macosPaths,
+      generatedAt: '2026-03-20T18:57:00.000Z',
+    });
+
+    expect(macosResult.ok).toBe(true);
+
+    if (!macosResult.ok) {
+      return;
+    }
+
+    expect(macosResult.manifest.platform).toMatchObject({
+      platform: 'macos',
+      posture: {
+        supportLevel: 'partial',
+        modeLabel: 'macOS path + diagnostics support',
+      },
+      surfaces: {
+        configPaths: 'supported',
+        configWorkflow: 'supported',
+        runtimeArtifacts: 'supported',
+        runtimeExecution: 'limited',
+        diagnostics: 'supported',
+      },
+      hostNetworking: {
+        support: 'limited',
+        modeLabel: 'Docker Desktop host networking is limited',
+      },
+    });
+    expect(macosResult.manifest.platform.warnings.map((warning) => warning.code)).toEqual([
+      'LINUX_RUNTIME_RECOMMENDED',
+      'DOCKER_DESKTOP_HOST_NETWORKING_LIMITED',
+    ]);
+
+    const windowsEnv = createPlatformEnvironment('windows');
+    const windowsPaths = resolveMullgatePaths(windowsEnv);
+    const windowsConfig = createFixtureConfig(windowsEnv);
+    windowsConfig.setup.bind.httpsPort = null;
+    windowsConfig.setup.https = { enabled: false };
+    const windowsResult = planRuntimeBundle({
+      config: windowsConfig,
+      paths: windowsPaths,
+      generatedAt: '2026-03-20T18:57:30.000Z',
+    });
+
+    expect(windowsResult.ok).toBe(true);
+
+    if (!windowsResult.ok) {
+      return;
+    }
+
+    expect(windowsResult.manifest.platform).toMatchObject({
+      platform: 'windows',
+      posture: {
+        supportLevel: 'partial',
+        modeLabel: 'Windows path + diagnostics support',
+      },
+      hostNetworking: {
+        support: 'limited',
+        modeLabel: 'Docker Desktop host networking is limited',
+      },
+      paths: {
+        configHome: 'C:\\Users\\alice\\AppData\\Roaming',
+        stateHome: 'C:\\Users\\alice\\AppData\\Local',
+        cacheHome: 'C:\\Users\\alice\\AppData\\Local',
+      },
+    });
   });
 
   it('records domain guidance and public single-route warnings in the manifest exposure contract', async () => {

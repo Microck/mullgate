@@ -5,6 +5,7 @@ import { REDACTED } from '../config/redact.js';
 import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
 import { resolveRouteWireproxyPaths, type MullgatePaths } from '../config/paths.js';
 import type { MullgateConfig, RoutedLocation } from '../config/schema.js';
+import { buildPlatformSupportContract, type PlatformSupportContract } from '../platform/support-contract.js';
 
 const CONTAINER_BIND_HOST = '0.0.0.0';
 const WIREPROXY_IMAGE = 'backplane/wireproxy:20260320';
@@ -67,6 +68,7 @@ export type RuntimeBundleManifest = {
     };
   };
   readonly exposure: ExposureContract;
+  readonly platform: PlatformSupportContract;
   readonly routes: readonly {
     readonly routeId: string;
     readonly alias: string;
@@ -351,6 +353,7 @@ function buildRuntimeBundleManifest(
       },
     },
     exposure: buildExposureContract(config),
+    platform: buildPlatformSupportContract({ paths }),
     routes: routeManifests,
     publishedEndpoints,
   };

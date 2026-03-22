@@ -21,6 +21,7 @@ import {
   type DockerComposeStatusResult,
   type QueryDockerComposeStatusOptions,
 } from '../runtime/docker-runtime.js';
+import { buildPlatformSupportContract, type PlatformSupportContract } from '../platform/support-contract.js';
 import type { RuntimeBundleManifest } from '../runtime/render-runtime-bundle.js';
 import type { ValidateWireproxyResult } from '../runtime/validate-wireproxy.js';
 import {
@@ -151,6 +152,7 @@ export async function runDoctorFlow(
   const lastStartResult = normalizeLastStartResult(lastStartResultRaw);
   const manifest = manifestResult.kind === 'present' ? manifestResult.value : null;
   const exposure = manifest?.exposure ?? buildExposureContract(config);
+  const platform = manifest?.platform ?? buildPlatformSupportContract({ paths: store.paths });
   const lastStart = resolveLastStartDiagnostic(config, lastStartResult);
   const routeTargets = buildRouteArtifactTargets(config, manifest);
   const routeValidationReports = await Promise.all(
@@ -162,6 +164,7 @@ export async function runDoctorFlow(
 
   const checks = await Promise.all([
     Promise.resolve(buildConfigCheck(config, store.paths.configFile)),
+    Promise.resolve(buildPlatformCheck(platform)),
     Promise.resolve(buildValidationCheck(config, primaryWireproxyExists, routeValidationReports)),
     Promise.resolve(buildRelayCacheCheck(config.runtime.relayCachePath, relayCacheResult, checkedAt)),
     Promise.resolve(buildExposureCheck(config, exposure)),
@@ -264,6 +267,43 @@ function buildConfigCheck(config: MullgateConfig, configPath: string): DoctorChe
       `saved-runtime-phase=${config.runtime.status.phase}`,
       `exposure-mode=${config.setup.exposure.mode}`,
     ],
+  };
+}
+
+function buildPlatformCheck(platform: PlatformSupportContract): DoctorCheck {
+  const details = [
+    `platform=${platform.platform}`,
+    `platform-source=${platform.platformSource}`,
+    `support-level=${platform.posture.supportLevel}`,
+    `mode-label=${platform.posture.modeLabel}`,
+    `summary=${platform.posture.summary}`,
+    `runtime-story=${platform.posture.runtimeStory}`,
+    `config-paths=${platform.surfaces.configPaths}`,
+    `config-workflow=${platform.surfaces.configWorkflow}`,
+    `runtime-artifacts=${platform.surfaces.runtimeArtifacts}`,
+    `runtime-execution=${platform.surfaces.runtimeExecution}`,
+    `diagnostics=${platform.surfaces.diagnostics}`,
+    `host-networking=${platform.hostNetworking.modeLabel}`,
+    `host-networking-summary=${platform.hostNetworking.summary}`,
+    ...platform.guidance.map((line) => `guidance=${line}`),
+    ...platform.warnings.map((warning) => `${warning.severity}: ${warning.message}`),
+  ];
+
+  if (platform.posture.supportLevel === 'partial') {
+    return {
+      name: 'platform-support',
+      outcome: 'degraded',
+      summary: 'Current platform keeps truthful config and diagnostic surfaces, but runtime execution remains limited compared with Linux.',
+      details,
+      remediation: platform.hostNetworking.remediation,
+    };
+  }
+
+  return {
+    name: 'platform-support',
+    outcome: 'pass',
+    summary: 'Current platform matches the fully supported Linux runtime contract.',
+    details,
   };
 }
 

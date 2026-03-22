@@ -826,7 +826,7 @@ function assertDoctorSurface(input: {
   assertContains({ text: input.output, expected: 'overall: degraded', message: 'doctor should stay degraded in the idle-runtime verifier.' });
 
   const exposureOutcome = input.exposureContract.warnings.some((warning) => warning.severity === 'warning') ? 'degraded' : 'pass';
-  assertContains({ text: input.output, expected: `4. exposure-contract: ${exposureOutcome}`, message: 'doctor exposure-contract check drifted away from the expected severity.' });
+  assertContains({ text: input.output, expected: `exposure-contract: ${exposureOutcome}`, message: 'doctor exposure-contract check drifted away from the expected severity.' });
   assertContains({ text: input.output, expected: `detail: mode=${input.exposureContract.mode}`, message: 'doctor mode detail missing.' });
   assertContains({ text: input.output, expected: `detail: mode-label=${input.exposureContract.posture.modeLabel}`, message: 'doctor mode-label detail missing.' });
   assertContains({ text: input.output, expected: `detail: recommendation=${input.exposureContract.posture.recommendation}`, message: 'doctor recommendation detail missing.' });

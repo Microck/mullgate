@@ -413,6 +413,14 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       recommendation: local-default
       posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
       remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+      platform: linux
+      platform source: process.platform
+      platform support: full
+      platform mode: Linux-first runtime support
+      platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
+      runtime story: Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.
+      host networking: Native host networking available
+      host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
       compose inspection: available
       compose project: mullgate
       compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
@@ -440,6 +448,10 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
          socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
          http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
          http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
+
+      platform guidance
+      - Linux is the reference runtime target for the current Mullgate topology and verification flow.
+      - Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
 
       network-mode guidance
       - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
@@ -559,6 +571,14 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       recommendation: local-default
       posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
       remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+      platform: linux
+      platform source: process.platform
+      platform support: full
+      platform mode: Linux-first runtime support
+      platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
+      runtime story: Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.
+      host networking: Native host networking available
+      host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
       compose inspection: available
       compose project: mullgate
       compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
@@ -587,6 +607,10 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
          http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
          http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
 
+      platform guidance
+      - Linux is the reference runtime target for the current Mullgate topology and verification flow.
+      - Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
+
       network-mode guidance
       - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
       - Use \`mullgate config hosts\` if you want a copy/paste /etc/hosts block for this machine.
@@ -609,6 +633,47 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       reason: Docker Compose failed to start the Mullgate runtime bundle for [redacted] / [redacted] / [redacted].
       cause: service wireproxy-at-vie-wg-001 crashed while reading [redacted] and account [redacted]"
     `);
+  });
+
+  it('surfaces partial platform support from the runtime manifest on macOS-style installs', async () => {
+    const env = createTempEnvironment();
+    env.MULLGATE_PLATFORM = 'macos';
+    const { store, paths } = await seedSavedConfig(env, {
+      configure: (config) => ({
+        ...config,
+        setup: {
+          ...config.setup,
+          bind: {
+            ...config.setup.bind,
+            httpsPort: null,
+          },
+          https: {
+            enabled: false,
+          },
+        },
+      }),
+    });
+    const stdout = createBufferSink();
+    const stderr = createBufferSink();
+
+    const action = createStatusCommandAction({
+      store,
+      stdout,
+      stderr,
+      inspectRuntime: async () => createComposeStatusSuccess(paths.runtimeComposeFile, []),
+    });
+
+    await action();
+
+    expect(process.exitCode).toBe(0);
+    expect(stderr.value.current).toBe('');
+    const summary = stdout.value.current.trimEnd();
+    expect(summary).toContain('platform: macos');
+    expect(summary).toContain('platform support: partial');
+    expect(summary).toContain('platform mode: macOS path + diagnostics support');
+    expect(summary).toContain('host networking: Docker Desktop host networking is limited');
+    expect(summary).toContain('platform guidance');
+    expect(summary).toContain('platform warnings');
   });
 
   it('reports a validated-but-not-started runtime as stopped when compose has no containers', async () => {
@@ -645,6 +710,14 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       recommendation: local-default
       posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
       remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+      platform: linux
+      platform source: process.platform
+      platform support: full
+      platform mode: Linux-first runtime support
+      platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
+      runtime story: Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.
+      host networking: Native host networking available
+      host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
       compose inspection: available
       compose project: n/a
       compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
@@ -672,6 +745,10 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
          socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
          http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
          http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
+
+      platform guidance
+      - Linux is the reference runtime target for the current Mullgate topology and verification flow.
+      - Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
 
       network-mode guidance
       - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.

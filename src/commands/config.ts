@@ -13,6 +13,7 @@ import {
 import { ConfigStore, syncLegacyMirrorsToRouting, type LoadConfigResult } from '../config/store.js';
 import type { ExposureMode, MullgateConfig } from '../config/schema.js';
 import { loadStoredRelayCatalog, summarizeValidationSource, verifyHttpsAssets, withRuntimeStatus } from '../app/setup-runner.js';
+import { buildPlatformSupportContract } from '../platform/support-contract.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
 import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
 
@@ -415,6 +416,7 @@ export function registerConfigCommands(program: Command): void {
 
 export function renderPathReport(report: Awaited<ReturnType<ConfigStore['inspectPaths']>>): string {
   const { paths, exists } = report;
+  const platform = buildPlatformSupportContract({ paths: report.paths });
 
   return [
     'Mullgate path report',
@@ -422,6 +424,12 @@ export function renderPathReport(report: Awaited<ReturnType<ConfigStore['inspect
     `source: ${report.source}`,
     `platform: ${report.platform}`,
     `platform source: ${report.platformSource}`,
+    `platform support: ${platform.posture.supportLevel}`,
+    `platform mode: ${platform.posture.modeLabel}`,
+    `platform summary: ${platform.posture.summary}`,
+    `runtime story: ${platform.posture.runtimeStory}`,
+    `host networking: ${platform.hostNetworking.modeLabel}`,
+    `host networking summary: ${platform.hostNetworking.summary}`,
     `config home: ${paths.configHome} (${report.pathSources.configHome})`,
     `state home: ${paths.stateHome} (${report.pathSources.stateHome})`,
     `cache home: ${paths.cacheHome} (${report.pathSources.cacheHome})`,
@@ -433,6 +441,12 @@ export function renderPathReport(report: Awaited<ReturnType<ConfigStore['inspect
     `wireproxy configtest report: ${paths.wireproxyConfigTestReportFile}`,
     `docker compose: ${paths.dockerComposePath}`,
     `relay cache: ${paths.provisioningCacheFile} (${exists.relayCacheFile ? 'present' : 'missing'})`,
+    '',
+    'platform guidance',
+    ...platform.guidance.map((line) => `- ${line}`),
+    '',
+    'platform warnings',
+    ...(platform.warnings.length > 0 ? platform.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`) : ['- none']),
   ].join('\n');
 }
 

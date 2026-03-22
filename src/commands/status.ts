@@ -3,6 +3,7 @@ import type { Command } from 'commander';
 import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
 import { redactSensitiveText } from '../config/redact.js';
 import { ConfigStore, type LoadConfigResult } from '../config/store.js';
+import { buildPlatformSupportContract, type PlatformSupportContract } from '../platform/support-contract.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
 import {
   classifyContainerState,
@@ -132,6 +133,7 @@ export async function runStatusFlow(dependencies: Omit<StatusCommandDependencies
   ]);
 
   const exposure = manifestResult.kind === 'present' ? manifestResult.value.exposure : buildExposureContract(config);
+  const platform = manifestResult.kind === 'present' ? manifestResult.value.platform : buildPlatformSupportContract({ paths: store.paths });
   const routes = buildRouteSurfaces(config, exposure, manifestResult.kind === 'present' ? manifestResult.value : null);
   const routeViews = composeStatus.ok ? buildRouteContainerViews(routes, composeStatus.containers) : routes.map((route) => createRouteContainerView(route, null));
   const routingLayerContainer = composeStatus.ok ? findContainerForService(composeStatus.containers, ROUTING_LAYER_SERVICE) : null;
@@ -171,6 +173,14 @@ export async function runStatusFlow(dependencies: Omit<StatusCommandDependencies
       `recommendation: ${exposure.posture.recommendation}`,
       `posture summary: ${exposure.posture.summary}`,
       `remote story: ${exposure.posture.remoteStory}`,
+      `platform: ${platform.platform}`,
+      `platform source: ${platform.platformSource}`,
+      `platform support: ${platform.posture.supportLevel}`,
+      `platform mode: ${platform.posture.modeLabel}`,
+      `platform summary: ${platform.posture.summary}`,
+      `runtime story: ${platform.posture.runtimeStory}`,
+      `host networking: ${platform.hostNetworking.modeLabel}`,
+      `host networking summary: ${platform.hostNetworking.summary}`,
       `compose inspection: ${composeStatus.ok ? 'available' : 'unavailable'}`,
       ...(composeStatus.ok
         ? [
@@ -202,6 +212,12 @@ export async function runStatusFlow(dependencies: Omit<StatusCommandDependencies
           `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`,
         ]),
       ]),
+      '',
+      'platform guidance',
+      ...platform.guidance.map((line) => `- ${line}`),
+      ...(platform.warnings.length > 0
+        ? ['', 'platform warnings', ...platform.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`)]
+        : []),
       '',
       'network-mode guidance',
       ...exposure.guidance.map((line) => `- ${line}`),

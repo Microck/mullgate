@@ -2,8 +2,9 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { renderExposureReport, renderHostsReport, updateExposureConfig } from '../../src/commands/config.js';
+import { renderExposureReport, renderHostsReport, renderPathReport, updateExposureConfig } from '../../src/commands/config.js';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
+import { ConfigStore } from '../../src/config/store.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
 
 function createFixtureConfig(): MullgateConfig {
@@ -175,6 +176,53 @@ function createFixtureConfig(): MullgateConfig {
 }
 
 describe('config inspection helpers', () => {
+  it('renders platform support posture in the path report for non-Linux installs', async () => {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      MULLGATE_PLATFORM: 'macos',
+      HOME: '/Users/alice',
+      XDG_CONFIG_HOME: undefined,
+      XDG_STATE_HOME: undefined,
+      XDG_CACHE_HOME: undefined,
+    };
+    const report = await new ConfigStore(resolveMullgatePaths(env)).inspectPaths();
+
+    expect(renderPathReport(report).split('\n')).toMatchInlineSnapshot(`
+      [
+        "Mullgate path report",
+        "phase: resolve-paths",
+        "source: canonical-path-contract",
+        "platform: macos",
+        "platform source: env:MULLGATE_PLATFORM",
+        "platform support: partial",
+        "platform mode: macOS path + diagnostics support",
+        "platform summary: macOS keeps truthful config paths, runtime-manifest output, and diagnostics, but the current Docker-first runtime remains Linux-first because Docker Desktop does not provide the same host-networking semantics.",
+        "runtime story: Use this platform for config inspection and deterministic diagnostics, but plan on a Linux host when you need the current multi-route runtime to be truthful end-to-end.",
+        "host networking: Docker Desktop host networking is limited",
+        "host networking summary: Docker Desktop does not expose Linux host-networking semantics for per-route bind IP listeners, so Mullgate cannot claim runtime parity with the Linux host-networking deployment on this platform.",
+        "config home: /Users/alice/Library/Application Support (platform:macos-library-application-support)",
+        "state home: /Users/alice/Library/Application Support (platform:macos-library-application-support)",
+        "cache home: /Users/alice/Library/Caches (platform:macos-library-caches)",
+        "config file: /Users/alice/Library/Application Support/mullgate/config.json (missing)",
+        "state dir: /Users/alice/Library/Application Support/mullgate",
+        "cache dir: /Users/alice/Library/Caches/mullgate",
+        "runtime dir: /Users/alice/Library/Application Support/mullgate/runtime (missing)",
+        "wireproxy config: /Users/alice/Library/Application Support/mullgate/runtime/wireproxy.conf",
+        "wireproxy configtest report: /Users/alice/Library/Application Support/mullgate/runtime/wireproxy-configtest.json",
+        "docker compose: /Users/alice/Library/Application Support/mullgate/runtime/docker-compose.yml",
+        "relay cache: /Users/alice/Library/Caches/mullgate/relays.json (missing)",
+        "",
+        "platform guidance",
+        "- macOS should still resolve the correct config/state/cache locations and emit the same exposure and diagnostic contracts as Linux.",
+        "- When the CLI talks about runtime limitations on macOS, it should point at Docker Desktop host-networking differences instead of pretending the Linux runtime model is fully portable.",
+        "",
+        "platform warnings",
+        "- warning: Linux remains the recommended runtime host for the current Docker-first Mullgate topology.",
+        "- warning: Docker Desktop does not provide the Linux host-networking behavior that the current per-route bind-IP runtime depends on.",
+      ]
+    `);
+  });
+
   it('prints secret-safe host mappings plus a copy-paste hosts block', () => {
     const config = createFixtureConfig();
 
