@@ -13,7 +13,8 @@
     "test": "tsx scripts/test.ts",
     "cli": "tsx src/cli.ts",
     "verify:s06": "tsx scripts/verify-s06-release.ts",
-    "verify:m004-feasibility": "tsx scripts/verify-m004-feasibility.ts"
+    "verify:m004-feasibility": "tsx scripts/verify-m004-feasibility.ts",
+    "verify:m004-compatibility": "tsx scripts/verify-m004-compatibility.ts"
   },
   "engines": {
     "node": ">=22.0.0"

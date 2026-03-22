@@ -1,0 +1,182 @@
+{
+  "generatedAt": "2026-03-22T02:05:00.000Z",
+  "phase": "fixture-replay",
+  "notes": [
+    "Fixture proves that one-entry SOCKS5 chaining can still reach distinct exits while hostname-selected routing fails.",
+    "HTTP and HTTPS remain explicit contract failures because no truthful relay selector survives the one-entry topology."
+  ],
+  "feasibility": {
+    "schemaVersion": 1,
+    "generatedAt": "2026-03-21T19:02:00.000Z",
+    "topology": {
+      "proofModel": "single-entry-shared-socks-exits",
+      "entryIdentity": {
+        "mullvadWireguardDeviceCount": 1,
+        "deviceName": "mullgate-m004-compatibility",
+        "relayHostname": "se-got-wg-101",
+        "relayFqdn": "se-got-wg-101.relays.mullvad.net",
+        "endpointIpv4": "146.70.10.10",
+        "publicKey": "entry-public-key",
+        "location": {
+          "countryCode": "se",
+          "countryName": "Sweden",
+          "cityCode": "got",
+          "cityName": "Gothenburg"
+        }
+      },
+      "logicalExits": [
+        {
+          "logicalExitId": "exit-1",
+          "relayHostname": "at-vie-wg-001",
+          "relayFqdn": "at-vie-wg-001.relays.mullvad.net",
+          "endpointIpv4": "146.70.116.98",
+          "publicKey": "relay-public-key-1",
+          "socksHostname": "at-vie-wg-socks5-001.relays.mullvad.net",
+          "socksPort": 1080,
+          "source": "www-relays-all",
+          "location": {
+            "countryCode": "at",
+            "countryName": "Austria",
+            "cityCode": "vie",
+            "cityName": "Vienna"
+          }
+        },
+        {
+          "logicalExitId": "exit-2",
+          "relayHostname": "se-got-wg-101",
+          "relayFqdn": "se-got-wg-101.relays.mullvad.net",
+          "endpointIpv4": "146.70.40.2",
+          "publicKey": "relay-public-key-2",
+          "socksHostname": "se-got-wg-socks5-101.relays.mullvad.net",
+          "socksPort": 1080,
+          "source": "www-relays-all",
+          "location": {
+            "countryCode": "se",
+            "countryName": "Sweden",
+            "cityCode": "got",
+            "cityName": "Gothenburg"
+          }
+        }
+      ]
+    },
+    "relaySelection": {
+      "requestedCount": 2,
+      "availableCount": 2,
+      "candidateCount": 3,
+      "missingMetadataCount": 0,
+      "selectedRelayHostnames": [
+        "at-vie-wg-001",
+        "se-got-wg-101"
+      ]
+    },
+    "prerequisiteFailures": [],
+    "routeCheck": {
+      "before": {
+        "checkedAt": "2026-03-21T19:00:00.000Z",
+        "targetIp": "1.1.1.1",
+        "command": "ip route get 1.1.1.1",
+        "normalizedRoute": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000",
+        "stdout": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000\n",
+        "stderr": ""
+      },
+      "after": {
+        "checkedAt": "2026-03-21T19:03:00.000Z",
+        "targetIp": "1.1.1.1",
+        "command": "ip route get 1.1.1.1",
+        "normalizedRoute": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000",
+        "stdout": "1.1.1.1 via 192.0.2.1 dev eth0 src 192.0.2.10 uid 1000\n",
+        "stderr": ""
+      },
+      "unchanged": true
+    },
+    "probes": [
+      {
+        "ok": true,
+        "logicalExitId": "exit-1",
+        "targetUrl": "https://am.i.mullvad.net/json",
+        "startedAt": "2026-03-21T19:01:00.000Z",
+        "completedAt": "2026-03-21T19:01:01.000Z",
+        "durationMs": 1000,
+        "observedExit": {
+          "ip": "185.65.134.10",
+          "country": "Austria",
+          "city": "Vienna"
+        }
+      },
+      {
+        "ok": true,
+        "logicalExitId": "exit-2",
+        "targetUrl": "https://am.i.mullvad.net/json",
+        "startedAt": "2026-03-21T19:01:00.000Z",
+        "completedAt": "2026-03-21T19:01:01.000Z",
+        "durationMs": 1000,
+        "observedExit": {
+          "ip": "185.65.136.30",
+          "country": "Sweden",
+          "city": "Gothenburg"
+        }
+      }
+    ],
+    "summary": {
+      "requestedLogicalExitCount": 2,
+      "successfulProbeCount": 2,
+      "failedProbeCount": 0,
+      "distinctObservedExitCount": 2,
+      "routeUnchanged": true,
+      "collapsedLogicalExitIds": []
+    },
+    "verdict": {
+      "status": "pass",
+      "reason": "distinct-exits-confirmed",
+      "phase": "summary",
+      "stopReason": "distinct-exits-confirmed",
+      "summary": "The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged."
+    }
+  },
+  "hostnameRouting": {
+    "sharedBindIpCount": 1,
+    "requestedProxyHostnamePreserved": false,
+    "currentSelector": "destination-bind-ip",
+    "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/hostname-routing.json",
+    "notes": [
+      "Only one bind IP remains at the shared entry.",
+      "SOCKS5 preserves the destination hostname to the remote proxy, not the original shared-entry routing hostname."
+    ]
+  },
+  "protocols": [
+    {
+      "protocol": "socks5",
+      "probeSucceeded": true,
+      "canSelectExitByHostname": false,
+      "canSelectExitWithExplicitRelaySelection": true,
+      "observedCapabilitySummary": "SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop.",
+      "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-socks5.json"
+    },
+    {
+      "protocol": "http",
+      "probeSucceeded": true,
+      "canSelectExitByHostname": false,
+      "canSelectExitWithExplicitRelaySelection": false,
+      "observedCapabilitySummary": "HTTP reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology.",
+      "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-http.json"
+    },
+    {
+      "protocol": "https",
+      "probeSucceeded": true,
+      "canSelectExitByHostname": false,
+      "canSelectExitWithExplicitRelaySelection": false,
+      "observedCapabilitySummary": "HTTPS reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology.",
+      "artifactPath": "/tmp/mullgate-m004-fixture/artifacts/probe-https.json"
+    }
+  ],
+  "operator": {
+    "authPreserved": true,
+    "requiresClientSpecificRelayConfiguration": true,
+    "locationSelectionDiscoverable": true,
+    "notes": [
+      "Authenticated access remains on the shared entry.",
+      "Operators can inspect relay mapping in the compatibility bundle, but clients must opt into explicit relay choice."
+    ]
+  },
+  "workspacePath": "/tmp/mullgate-m004-fixture"
+}

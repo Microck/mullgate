@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -7,6 +10,7 @@ import {
   serializeCompatibilityArtifact,
   type CompatibilityProtocolObservation,
 } from '../../src/m004/compatibility-contract.js';
+import { runCompatibilityVerifier } from '../../src/m004/compatibility-runner.js';
 import {
   FEASIBILITY_PROOF_MODEL,
   type FeasibilityArtifact,
@@ -177,6 +181,8 @@ function createProtocolObservations(overrides: Partial<Record<'socks5' | 'http' 
     },
   ];
 }
+
+const fixturesDir = path.join(process.cwd(), 'test/fixtures');
 
 describe('m004 compatibility contract', () => {
   it('emits an approved compatibility artifact when hostname-selected routing stays truthful for every protocol', () => {
@@ -496,5 +502,46 @@ describe('m004 compatibility contract', () => {
     expect(serialized).toContain('shared-entry-compatibility-matrix');
     expect(serialized).toContain('"requirementId": "R004"');
     expect(serialized).toContain('"posture": "blocked"');
+  });
+
+  it('replays the compatibility hostname fixture into a secret-safe summary bundle', async () => {
+    const outputRoot = path.join(process.cwd(), '.tmp', 'vitest-m004-compatibility-fixture');
+    const result = await runCompatibilityVerifier({
+      targetUrl: 'https://am.i.mullvad.net/json',
+      routeCheckIp: '1.1.1.1',
+      logicalExitCount: 2,
+      outputRoot,
+      keepTempHome: false,
+      fixturePath: path.join(fixturesDir, 'm004', 'compatibility-hostname-fail.json'),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.preservedWorkspace).toBe(true);
+    expect(result.bundle.overallVerdict).toBe('fail');
+    expect(result.bundle.artifact.recommendation.posture).toBe('blocked');
+    expect(result.bundle.artifact.hostnameRouting.status).toBe('not-truthful');
+    expect(result.bundle.artifact.protocols.find((protocol) => protocol.protocol === 'socks5')).toEqual({
+      protocol: 'socks5',
+      outcome: 'degraded',
+      reason: 'explicit-relay-selection-required',
+      summary: 'SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.',
+      observedCapabilitySummary: 'SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop.',
+      probeSucceeded: true,
+      canSelectExitByHostname: false,
+      canSelectExitWithExplicitRelaySelection: true,
+      artifactPath: '/tmp/mullgate-m004-fixture/artifacts/probe-socks5.json',
+    });
+
+    const summaryJson = await readFile(result.summaryJsonPath, 'utf8');
+    const summaryText = await readFile(result.summaryTextPath, 'utf8');
+    const artifactJson = await readFile(result.artifactJsonPath, 'utf8');
+
+    expect(summaryJson).toContain('"phase": "fixture-replay"');
+    expect(summaryJson).toContain('"overallVerdict": "fail"');
+    expect(summaryText).toContain('hostname-selected routing: not-truthful (one-bind-ip-plus-socks5-hostname-loss)');
+    expect(summaryText).toContain('socks5: degraded (explicit-relay-selection-required)');
+    expect(summaryText).toContain('artifacts:');
+    expect(artifactJson).toContain('shared-entry-compatibility-matrix');
+    expect(artifactJson).not.toContain('123456789012');
   });
 });

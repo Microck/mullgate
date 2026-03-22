@@ -1,0 +1,24 @@
+M004 compatibility verdict: FAIL
+phase: fixture-replay
+mode: fixture
+recommendation posture: blocked
+hostname-selected routing: not-truthful (one-bind-ip-plus-socks5-hostname-loss)
+hostname summary: Hostname-selected routing is not truthful under one bind IP because SOCKS5 does not preserve the requested proxy hostname for the current destination-bind-IP selector.
+socks5: degraded (explicit-relay-selection-required) — SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.
+http: blocked (hostname-routing-not-truthful) — HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+https: blocked (hostname-routing-not-truthful) — HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+requirement deltas:
+- R004: failed — Hostname-selected routing no longer truthfully selects the Mullvad exit under the shared-entry topology.
+- R005: degraded — SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.
+- R006: failed — HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+- R007: failed — HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+- R008: preserved — Authenticated proxy access remains visible and enforced at the shared entry.
+- R017: failed — The shared-entry topology breaks the low-friction self-hoster story because at least one required protocol no longer works truthfully.
+- R019: degraded — Route naming remains diagnosable, but operators must understand an explicit relay-selection mapping instead of hostname-only routing.
+artifacts:
+- artifact: /home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/artifact.json
+- summary text: /home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/summary.txt
+- protocol evidence: /home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/protocol-evidence.json
+- hostname evidence: /home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/hostname-routing.json
+- evaluation metadata: /home/ubuntu/workspace/mullvad-proxy/.tmp/vitest-m004-compatibility-fixture/latest/evaluation.json
+workspace: /tmp/mullgate-m004-fixture
