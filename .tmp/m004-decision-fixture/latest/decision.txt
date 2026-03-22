@@ -1,0 +1,33 @@
+M004 shared-entry redesign decision: FAIL
+question: Should Mullgate pursue a shared-entry redesign that reuses one Mullvad WireGuard identity for many concurrent country-distinct exits?
+recommendation: Do not pursue the shared-entry redesign as-is because the compatibility verifier found blocked contracts that prevent R028 from advancing truthfully.
+next action: stop-redesign
+R028: blocked — R028 is blocked because Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection. Supporting failures: R004, R006, R007, R017.
+compatibility headline: SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate’s current truthful contract: Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.
+compatibility posture: blocked
+hostname routing: not-truthful
+hostname routing failure: Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.
+supporting requirements:
+- R004: failed — Hostname-selected routing no longer truthfully selects the Mullvad exit under the shared-entry topology.
+- R005: degraded — SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.
+- R006: failed — HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+- R007: failed — HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+- R008: preserved — Authenticated proxy access remains visible and enforced at the shared entry.
+- R017: failed — The shared-entry topology breaks the low-friction self-hoster story because at least one required protocol no longer works truthfully.
+- R019: degraded — Route naming remains diagnosable, but operators must understand an explicit relay-selection mapping instead of hostname-only routing.
+protocol matrix:
+- socks5: degraded (explicit-relay-selection-required) — SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.
+- http: blocked (hostname-routing-not-truthful) — HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+- https: blocked (hostname-routing-not-truthful) — HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+artifact links:
+- compatibility summary json: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/compatibility-summary.json
+- compatibility summary text: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/compatibility-summary.txt
+- compatibility artifact json: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/compatibility-artifact.json
+- protocol evidence: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/protocol-evidence.json
+- hostname routing evidence: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/hostname-routing.json
+- evaluation metadata: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/evaluation.json
+preserved workspace: yes
+workspace path: /tmp/mullgate-m004-fixture
+diagnostic note: Fixture proves that one-entry SOCKS5 chaining can still reach distinct exits while hostname-selected routing fails.
+diagnostic note: HTTP and HTTPS remain explicit contract failures because no truthful relay selector survives the one-entry topology.
+diagnostic note: Fixture replay mode skipped all live Mullvad and Docker prerequisites.

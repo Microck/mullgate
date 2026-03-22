@@ -658,7 +658,7 @@ function createCompatibilitySummarySurface(input: {
   };
 }
 
-function renderCompatibilitySummary(input: { readonly bundle: CompatibilitySummaryBundle }): string {
+export function renderCompatibilitySummary(input: { readonly bundle: CompatibilitySummaryBundle }): string {
   const lines: string[] = [
     `M004 compatibility verdict: ${input.bundle.overallVerdict.toUpperCase()}`,
     `phase: ${input.bundle.phase}`,

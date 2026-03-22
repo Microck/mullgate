@@ -1,0 +1,37 @@
+M004 compatibility verdict: FAIL
+phase: fixture-replay
+mode: fixture
+recommendation posture: blocked
+headline: SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate’s current truthful contract: Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.
+hostname-selected routing: not-truthful (one-bind-ip-plus-socks5-hostname-loss)
+hostname summary: Hostname-selected routing is not truthful under one bind IP because SOCKS5 does not preserve the requested proxy hostname for the current destination-bind-IP selector.
+hostname-selected routing failure: Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.
+protocol matrix:
+- socks5: degraded / contract-change (explicit-relay-selection-required) — SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.
+  observed: SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop.
+- http: blocked / failed (hostname-routing-not-truthful) — HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+  observed: HTTP reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology.
+- https: blocked / failed (hostname-routing-not-truthful) — HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+  observed: HTTPS reaches the shared entry but has no truthful hostname-selected or explicit second-hop selector in the one-entry topology.
+operator impact:
+- auth surface: preserved
+- relay selection flow: explicit-relay-selection-required
+- location discovery: explicit-relay-mapping
+  note: Authenticated access remains on the shared entry.
+  note: Operators can inspect relay mapping in the compatibility bundle, but clients must opt into explicit relay choice.
+requirement deltas:
+- R004 Hostname-selected location routing: failed — Hostname-selected routing no longer truthfully selects the Mullvad exit under the shared-entry topology.
+- R005 SOCKS5 support: degraded — SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.
+- R006 HTTP proxy support: failed — HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+- R007 HTTPS proxy support: failed — HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.
+- R008 Authenticated proxy access: preserved — Authenticated proxy access remains visible and enforced at the shared entry.
+- R017 Low-friction first run for self-hosters: failed — The shared-entry topology breaks the low-friction self-hoster story because at least one required protocol no longer works truthfully.
+- R019 Easy location naming and discovery: degraded — Route naming remains diagnosable, but operators must understand an explicit relay-selection mapping instead of hostname-only routing.
+artifact links:
+- artifact: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/artifact.json
+- summary json: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/summary.json
+- summary text: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/summary.txt
+- protocol evidence: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/protocol-evidence.json
+- hostname evidence: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/hostname-routing.json
+- evaluation metadata: /home/ubuntu/workspace/mullvad-proxy/.tmp/m004-decision-fixture/latest/evaluation.json
+workspace: /tmp/mullgate-m004-fixture
