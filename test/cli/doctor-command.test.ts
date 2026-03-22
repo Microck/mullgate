@@ -473,83 +473,91 @@ describe('mullgate doctor command', () => {
     expect(stdout.value.current).not.toContain('123456789012');
     expect(stdout.value.current).not.toContain('private-key-value-1');
     expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
-"\nMullgate doctor
-overall: pass
-checked at: 2026-03-21T08:00:00.000Z
-mode: offline-default
-config: /tmp/mullgate-home/config/mullgate/config.json
-runtime dir: /tmp/mullgate-home/state/mullgate/runtime
-relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
-last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (present)
+      "
+      Mullgate doctor
+      overall: pass
+      checked at: 2026-03-21T08:00:00.000Z
+      mode: offline-default
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      runtime dir: /tmp/mullgate-home/state/mullgate/runtime
+      relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+      wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
+      last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (present)
 
-checks
-1. config: pass
-   summary: Loaded the canonical Mullgate config successfully.
-   detail: config=/tmp/mullgate-home/config/mullgate/config.json
-   detail: routes=2
-   detail: saved-runtime-phase=running
-   detail: exposure-mode=loopback
+      checks
+      1. config: pass
+         summary: Loaded the canonical Mullgate config successfully.
+         detail: config=/tmp/mullgate-home/config/mullgate/config.json
+         detail: routes=2
+         detail: saved-runtime-phase=running
+         detail: exposure-mode=loopback
 
-2. validation-artifacts: pass
-   summary: Wireproxy config artifacts and persisted validation reports are present.
-   detail: saved-runtime-phase=running
-   detail: saved-runtime-message=Runtime is already up.
-   detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
-   detail: report[se-got-wg-101]=ok via internal-syntax
-   detail: report[at-vie-wg-001]=ok via internal-syntax
+      2. validation-artifacts: pass
+         summary: Wireproxy config artifacts and persisted validation reports are present.
+         detail: saved-runtime-phase=running
+         detail: saved-runtime-message=Runtime is already up.
+         detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
+         detail: report[se-got-wg-101]=ok via internal-syntax
+         detail: report[at-vie-wg-001]=ok via internal-syntax
 
-3. relay-cache: pass
-   summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
-   detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
-   detail: source=app-wireguard-v1
-   detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/
-   detail: fetched-at=2026-03-21T07:55:00.000Z
-   detail: relay-count=2
-   detail: age=0h
+      3. relay-cache: pass
+         summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
+         detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
+         detail: source=app-wireguard-v1
+         detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/
+         detail: fetched-at=2026-03-21T07:55:00.000Z
+         detail: relay-count=2
+         detail: age=0h
 
-4. exposure-contract: pass
-   summary: Saved exposure contract is internally coherent.
-   detail: mode=loopback
-   detail: base-domain=n/a
-   detail: allow-lan=no
-   detail: dns-records=0
-   detail: routes=2
-   detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
+      4. exposure-contract: pass
+         summary: Saved exposure contract is internally coherent.
+         detail: mode=loopback
+         detail: mode-label=Loopback / local-only
+         detail: recommendation=local-default
+         detail: posture-summary=Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
+         detail: remote-story=Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+         detail: base-domain=n/a
+         detail: allow-lan=no
+         detail: dns-records=0
+         detail: routes=2
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate config exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate config hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate config validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
 
-5. bind-posture: pass
-   summary: Saved bind IPs match the configured exposure posture.
-   detail: setup.bind.host=127.0.0.1
-   detail: route[1] se-got-wg-101 bind-ip=127.0.0.1
-   detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
+      5. bind-posture: pass
+         summary: Saved bind IPs match the configured exposure posture.
+         detail: setup.bind.host=127.0.0.1
+         detail: route[1] se-got-wg-101 bind-ip=127.0.0.1
+         detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
 
-6. hostname-resolution: pass
-   summary: Configured hostnames resolve to the bind IPs promised by the saved exposure contract.
-   detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
-   detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
+      6. hostname-resolution: pass
+         summary: Configured hostnames resolve to the bind IPs promised by the saved exposure contract.
+         detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
+         detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
 
-7. runtime: pass
-   summary: Live Docker Compose status matches the expected Mullgate routing-layer and per-route services.
-   detail: compose-command=docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
-   detail: containers=3
-   detail: running=3
-   detail: starting=0
-   detail: stopped=0
-   detail: unhealthy=0
-   detail: routing-layer=running (status=Up 40 seconds, health=healthy, exit=0)
-   detail: route se-got-wg-101 (wireproxy-se-got-wg-101)=running (status=Up 40 seconds, health=healthy, exit=0)
-   detail: route at-vie-wg-001 (wireproxy-at-vie-wg-001)=running (status=Up 40 seconds, health=healthy, exit=0)
+      7. runtime: pass
+         summary: Live Docker Compose status matches the expected Mullgate routing-layer and per-route services.
+         detail: compose-command=docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
+         detail: containers=3
+         detail: running=3
+         detail: starting=0
+         detail: stopped=0
+         detail: unhealthy=0
+         detail: routing-layer=running (status=Up 40 seconds, health=healthy, exit=0)
+         detail: route se-got-wg-101 (wireproxy-se-got-wg-101)=running (status=Up 40 seconds, health=healthy, exit=0)
+         detail: route at-vie-wg-001 (wireproxy-at-vie-wg-001)=running (status=Up 40 seconds, health=healthy, exit=0)
 
-8. last-start: pass
-   summary: The last recorded \`mullgate start\` attempt completed successfully.
-   detail: status=success
-   detail: attempted-at=2026-03-21T07:58:00.000Z
-   detail: phase=compose-launch
-   detail: source=docker-compose
-   detail: code=n/a
-   detail: reason=Docker Compose launched the Mullgate runtime bundle in detached mode."
-`);
+      8. last-start: pass
+         summary: The last recorded \`mullgate start\` attempt completed successfully.
+         detail: status=success
+         detail: attempted-at=2026-03-21T07:58:00.000Z
+         detail: phase=compose-launch
+         detail: source=docker-compose
+         detail: code=n/a
+         detail: reason=Docker Compose launched the Mullgate runtime bundle in detached mode."
+    `);
   });
 
   it('fails cleanly on an unconfigured install', async () => {
@@ -637,74 +645,82 @@ checks
     expect(process.exitCode).toBe(1);
     expect(stdout.value.current).toBe('');
     expect('\n' + normalizeOutput(stderr.value.current, env)).toMatchInlineSnapshot(`
-"\nMullgate doctor
-overall: fail
-checked at: 2026-03-21T08:00:00.000Z
-mode: offline-default
-config: /tmp/mullgate-home/config/mullgate/config.json
-runtime dir: /tmp/mullgate-home/state/mullgate/runtime
-relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
-last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (missing)
+      "
+      Mullgate doctor
+      overall: fail
+      checked at: 2026-03-21T08:00:00.000Z
+      mode: offline-default
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      runtime dir: /tmp/mullgate-home/state/mullgate/runtime
+      relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+      wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
+      last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (missing)
 
-checks
-1. config: pass
-   summary: Loaded the canonical Mullgate config successfully.
-   detail: config=/tmp/mullgate-home/config/mullgate/config.json
-   detail: routes=2
-   detail: saved-runtime-phase=running
-   detail: exposure-mode=loopback
+      checks
+      1. config: pass
+         summary: Loaded the canonical Mullgate config successfully.
+         detail: config=/tmp/mullgate-home/config/mullgate/config.json
+         detail: routes=2
+         detail: saved-runtime-phase=running
+         detail: exposure-mode=loopback
 
-2. validation-artifacts: pass
-   summary: Wireproxy config artifacts and persisted validation reports are present.
-   detail: saved-runtime-phase=running
-   detail: saved-runtime-message=Runtime is already up.
-   detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
-   detail: report[se-got-wg-101]=ok via internal-syntax
-   detail: report[at-vie-wg-001]=ok via internal-syntax
+      2. validation-artifacts: pass
+         summary: Wireproxy config artifacts and persisted validation reports are present.
+         detail: saved-runtime-phase=running
+         detail: saved-runtime-message=Runtime is already up.
+         detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
+         detail: report[se-got-wg-101]=ok via internal-syntax
+         detail: report[at-vie-wg-001]=ok via internal-syntax
 
-3. relay-cache: pass
-   summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
-   detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
-   detail: source=app-wireguard-v1
-   detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/
-   detail: fetched-at=2026-03-21T07:55:00.000Z
-   detail: relay-count=2
-   detail: age=0h
+      3. relay-cache: pass
+         summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
+         detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
+         detail: source=app-wireguard-v1
+         detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/
+         detail: fetched-at=2026-03-21T07:55:00.000Z
+         detail: relay-count=2
+         detail: age=0h
 
-4. exposure-contract: pass
-   summary: Saved exposure contract is internally coherent.
-   detail: mode=loopback
-   detail: base-domain=n/a
-   detail: allow-lan=no
-   detail: dns-records=0
-   detail: routes=2
-   detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
+      4. exposure-contract: pass
+         summary: Saved exposure contract is internally coherent.
+         detail: mode=loopback
+         detail: mode-label=Loopback / local-only
+         detail: recommendation=local-default
+         detail: posture-summary=Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
+         detail: remote-story=Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+         detail: base-domain=n/a
+         detail: allow-lan=no
+         detail: dns-records=0
+         detail: routes=2
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate config exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate config hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate config validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
 
-5. bind-posture: pass
-   summary: Saved bind IPs match the configured exposure posture.
-   detail: setup.bind.host=127.0.0.1
-   detail: route[1] se-got-wg-101 bind-ip=127.0.0.1
-   detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
+      5. bind-posture: pass
+         summary: Saved bind IPs match the configured exposure posture.
+         detail: setup.bind.host=127.0.0.1
+         detail: route[1] se-got-wg-101 bind-ip=127.0.0.1
+         detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
 
-6. hostname-resolution: pass
-   summary: Configured hostnames resolve to the bind IPs promised by the saved exposure contract.
-   detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
-   detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
+      6. hostname-resolution: pass
+         summary: Configured hostnames resolve to the bind IPs promised by the saved exposure contract.
+         detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
+         detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
 
-7. runtime: fail
-   summary: Docker CLI is not installed or is not on PATH, so Mullgate cannot inspect the runtime bundle.
-   detail: command=docker compose version
-   detail: code=DOCKER_COMPOSE_MISSING
-   detail: cause=spawn docker ENOENT
-   remediation: Install Docker plus the Compose plugin, then rerun \`mullgate status\`, \`mullgate doctor\`, or \`mullgate start\`.
+      7. runtime: fail
+         summary: Docker CLI is not installed or is not on PATH, so Mullgate cannot inspect the runtime bundle.
+         detail: command=docker compose version
+         detail: code=DOCKER_COMPOSE_MISSING
+         detail: cause=spawn docker ENOENT
+         remediation: Install Docker plus the Compose plugin, then rerun \`mullgate status\`, \`mullgate doctor\`, or \`mullgate start\`.
 
-8. last-start: degraded
-   summary: No persisted last-start diagnostic exists yet.
-   detail: Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.
-   remediation: Run \`mullgate start\` once to capture a persisted launch report that future doctor runs can inspect."
-`);
+      8. last-start: degraded
+         summary: No persisted last-start diagnostic exists yet.
+         detail: Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.
+         remediation: Run \`mullgate start\` once to capture a persisted launch report that future doctor runs can inspect."
+    `);
   });
 
   it('calls out hostname drift with route-aware remediation plus stale relay cache and validation drift', async () => {
@@ -749,86 +765,94 @@ checks
     expect(process.exitCode).toBe(1);
     expect(stdout.value.current).toBe('');
     expect('\n' + normalizeOutput(stderr.value.current, env)).toMatchInlineSnapshot(`
-"\nMullgate doctor
-overall: fail
-checked at: 2026-03-21T08:00:00.000Z
-mode: offline-default
-config: /tmp/mullgate-home/config/mullgate/config.json
-runtime dir: /tmp/mullgate-home/state/mullgate/runtime
-relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
-last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (missing)
+      "
+      Mullgate doctor
+      overall: fail
+      checked at: 2026-03-21T08:00:00.000Z
+      mode: offline-default
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      runtime dir: /tmp/mullgate-home/state/mullgate/runtime
+      relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+      wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
+      last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (missing)
 
-checks
-1. config: pass
-   summary: Loaded the canonical Mullgate config successfully.
-   detail: config=/tmp/mullgate-home/config/mullgate/config.json
-   detail: routes=2
-   detail: saved-runtime-phase=unvalidated
-   detail: exposure-mode=loopback
+      checks
+      1. config: pass
+         summary: Loaded the canonical Mullgate config successfully.
+         detail: config=/tmp/mullgate-home/config/mullgate/config.json
+         detail: routes=2
+         detail: saved-runtime-phase=unvalidated
+         detail: exposure-mode=loopback
 
-2. validation-artifacts: degraded
-   summary: Saved config is marked \`unvalidated\`, so runtime artifacts may lag behind recent config or exposure edits.
-   detail: saved-runtime-phase=unvalidated
-   detail: saved-runtime-message=Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
-   detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
-   detail: report[se-got-wg-101]=missing (/tmp/mullgate-home/state/mullgate/runtime/wireproxy-se-got-wg-101-configtest.json)
-   detail: report[at-vie-wg-001]=missing (/tmp/mullgate-home/state/mullgate/runtime/wireproxy-at-vie-wg-001-configtest.json)
-   remediation: Run \`mullgate config validate\` or \`mullgate start\` to regenerate wireproxy artifacts and capture a fresh validation report.
+      2. validation-artifacts: degraded
+         summary: Saved config is marked \`unvalidated\`, so runtime artifacts may lag behind recent config or exposure edits.
+         detail: saved-runtime-phase=unvalidated
+         detail: saved-runtime-message=Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+         detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
+         detail: report[se-got-wg-101]=missing (/tmp/mullgate-home/state/mullgate/runtime/wireproxy-se-got-wg-101-configtest.json)
+         detail: report[at-vie-wg-001]=missing (/tmp/mullgate-home/state/mullgate/runtime/wireproxy-at-vie-wg-001-configtest.json)
+         remediation: Run \`mullgate config validate\` or \`mullgate start\` to regenerate wireproxy artifacts and capture a fresh validation report.
 
-3. relay-cache: degraded
-   summary: Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.
-   detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
-   detail: source=app-wireguard-v1
-   detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/
-   detail: fetched-at=2026-03-10T08:00:00.000Z
-   detail: relay-count=2
-   detail: age=11d
-   remediation: Refresh the saved relay catalog with \`mullgate setup\`, then rerun \`mullgate config validate\` or \`mullgate start\` so runtime artifacts use the fresh relay data.
+      3. relay-cache: degraded
+         summary: Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.
+         detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
+         detail: source=app-wireguard-v1
+         detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/
+         detail: fetched-at=2026-03-10T08:00:00.000Z
+         detail: relay-count=2
+         detail: age=11d
+         remediation: Refresh the saved relay catalog with \`mullgate setup\`, then rerun \`mullgate config validate\` or \`mullgate start\` so runtime artifacts use the fresh relay data.
 
-4. exposure-contract: degraded
-   summary: Saved exposure contract includes warning-level posture guidance that operators should resolve or consciously accept.
-   detail: mode=loopback
-   detail: base-domain=n/a
-   detail: allow-lan=no
-   detail: dns-records=0
-   detail: routes=2
-   detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
-   detail: warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
-   remediation: Review the saved exposure mode/bind IPs and address the warning-level posture issues before relying on remote entrypoints.
+      4. exposure-contract: degraded
+         summary: Saved exposure contract includes warning-level posture guidance that operators should resolve or consciously accept.
+         detail: mode=loopback
+         detail: mode-label=Loopback / local-only
+         detail: recommendation=local-default
+         detail: posture-summary=Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
+         detail: remote-story=Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+         detail: base-domain=n/a
+         detail: allow-lan=no
+         detail: dns-records=0
+         detail: routes=2
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate config exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate config hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate config validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
+         detail: warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+         remediation: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate config exposure --mode private-network ...\` with one trusted-network bind IP per route.
 
-5. bind-posture: pass
-   summary: Saved bind IPs match the configured exposure posture.
-   detail: setup.bind.host=127.0.0.1
-   detail: route[1] se-got-wg-101 bind-ip=127.0.0.1
-   detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
+      5. bind-posture: pass
+         summary: Saved bind IPs match the configured exposure posture.
+         detail: setup.bind.host=127.0.0.1
+         detail: route[1] se-got-wg-101 bind-ip=127.0.0.1
+         detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
 
-6. hostname-resolution: fail
-   summary: One or more route hostnames no longer resolve to their saved bind IPs.
-   detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
-   detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.9
-   detail: Route at-vie-wg-001 expects at-vie-wg-001 to resolve to 127.0.0.2, but it currently resolves to 127.0.0.9.
-   remediation: Use \`mullgate config hosts\` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun \`mullgate doctor\`.
+      6. hostname-resolution: fail
+         summary: One or more route hostnames no longer resolve to their saved bind IPs.
+         detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
+         detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.9
+         detail: Route at-vie-wg-001 expects at-vie-wg-001 to resolve to 127.0.0.2, but it currently resolves to 127.0.0.9.
+         remediation: Use \`mullgate config hosts\` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun \`mullgate doctor\`.
 
-7. runtime: degraded
-   summary: No live compose containers are running right now.
-   detail: compose-command=docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
-   detail: containers=0
-   detail: running=0
-   detail: starting=0
-   detail: stopped=0
-   detail: unhealthy=0
-   detail: routing-layer=not present in live compose status
-   detail: route se-got-wg-101 (wireproxy-se-got-wg-101)=not present in live compose status
-   detail: route at-vie-wg-001 (wireproxy-at-vie-wg-001)=not present in live compose status
-   remediation: Run \`mullgate start\` after fixing any validation, bind, or last-start issues reported above.
+      7. runtime: degraded
+         summary: No live compose containers are running right now.
+         detail: compose-command=docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
+         detail: containers=0
+         detail: running=0
+         detail: starting=0
+         detail: stopped=0
+         detail: unhealthy=0
+         detail: routing-layer=not present in live compose status
+         detail: route se-got-wg-101 (wireproxy-se-got-wg-101)=not present in live compose status
+         detail: route at-vie-wg-001 (wireproxy-at-vie-wg-001)=not present in live compose status
+         remediation: Run \`mullgate start\` after fixing any validation, bind, or last-start issues reported above.
 
-8. last-start: degraded
-   summary: No persisted last-start diagnostic exists yet.
-   detail: Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.
-   remediation: Run \`mullgate start\` once to capture a persisted launch report that future doctor runs can inspect."
-`);
+      8. last-start: degraded
+         summary: No persisted last-start diagnostic exists yet.
+         detail: Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.
+         remediation: Run \`mullgate start\` once to capture a persisted launch report that future doctor runs can inspect."
+    `);
   });
 
   it('surfaces route-aware auth failures without leaking secrets', async () => {
@@ -918,89 +942,97 @@ checks
     expect(stderr.value.current).not.toContain('private-key-value-2');
     expect(stderr.value.current).not.toContain('BEGIN PRIVATE KEY');
     expect('\n' + normalizeOutput(stderr.value.current, env)).toMatchInlineSnapshot(`
-"\nMullgate doctor
-overall: fail
-checked at: 2026-03-21T08:10:30.000Z
-mode: offline-default
-config: /tmp/mullgate-home/config/mullgate/config.json
-runtime dir: /tmp/mullgate-home/state/mullgate/runtime
-relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
-last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (present)
+      "
+      Mullgate doctor
+      overall: fail
+      checked at: 2026-03-21T08:10:30.000Z
+      mode: offline-default
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      runtime dir: /tmp/mullgate-home/state/mullgate/runtime
+      relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+      wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
+      last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (present)
 
-checks
-1. config: pass
-   summary: Loaded the canonical Mullgate config successfully.
-   detail: config=/tmp/mullgate-home/config/mullgate/config.json
-   detail: routes=2
-   detail: saved-runtime-phase=running
-   detail: exposure-mode=loopback
+      checks
+      1. config: pass
+         summary: Loaded the canonical Mullgate config successfully.
+         detail: config=/tmp/mullgate-home/config/mullgate/config.json
+         detail: routes=2
+         detail: saved-runtime-phase=running
+         detail: exposure-mode=loopback
 
-2. validation-artifacts: pass
-   summary: Wireproxy config artifacts and persisted validation reports are present.
-   detail: saved-runtime-phase=running
-   detail: saved-runtime-message=Runtime is already up.
-   detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
-   detail: report[se-got-wg-101]=ok via internal-syntax
-   detail: report[at-vie-wg-001]=ok via internal-syntax
+      2. validation-artifacts: pass
+         summary: Wireproxy config artifacts and persisted validation reports are present.
+         detail: saved-runtime-phase=running
+         detail: saved-runtime-message=Runtime is already up.
+         detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
+         detail: report[se-got-wg-101]=ok via internal-syntax
+         detail: report[at-vie-wg-001]=ok via internal-syntax
 
-3. relay-cache: pass
-   summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
-   detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
-   detail: source=app-wireguard-v1
-   detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/
-   detail: fetched-at=2026-03-21T07:55:00.000Z
-   detail: relay-count=2
-   detail: age=0h
+      3. relay-cache: pass
+         summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
+         detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
+         detail: source=app-wireguard-v1
+         detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/
+         detail: fetched-at=2026-03-21T07:55:00.000Z
+         detail: relay-count=2
+         detail: age=0h
 
-4. exposure-contract: pass
-   summary: Saved exposure contract is internally coherent.
-   detail: mode=loopback
-   detail: base-domain=n/a
-   detail: allow-lan=no
-   detail: dns-records=0
-   detail: routes=2
-   detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
+      4. exposure-contract: pass
+         summary: Saved exposure contract is internally coherent.
+         detail: mode=loopback
+         detail: mode-label=Loopback / local-only
+         detail: recommendation=local-default
+         detail: posture-summary=Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
+         detail: remote-story=Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+         detail: base-domain=n/a
+         detail: allow-lan=no
+         detail: dns-records=0
+         detail: routes=2
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate config exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate config hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate config validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
 
-5. bind-posture: pass
-   summary: Saved bind IPs match the configured exposure posture.
-   detail: setup.bind.host=127.0.0.1
-   detail: route[1] se-got-wg-101 bind-ip=127.0.0.1
-   detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
+      5. bind-posture: pass
+         summary: Saved bind IPs match the configured exposure posture.
+         detail: setup.bind.host=127.0.0.1
+         detail: route[1] se-got-wg-101 bind-ip=127.0.0.1
+         detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
 
-6. hostname-resolution: pass
-   summary: Configured hostnames resolve to the bind IPs promised by the saved exposure contract.
-   detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
-   detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
+      6. hostname-resolution: pass
+         summary: Configured hostnames resolve to the bind IPs promised by the saved exposure contract.
+         detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
+         detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
 
-7. runtime: fail
-   summary: Live Docker Compose state shows one or more expected Mullgate services are stopped or degraded.
-   detail: compose-command=docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
-   detail: containers=3
-   detail: running=2
-   detail: starting=0
-   detail: stopped=1
-   detail: unhealthy=0
-   detail: routing-layer=running (status=Up 2 minutes, health=healthy, exit=0)
-   detail: route se-got-wg-101 (wireproxy-se-got-wg-101)=running (status=Up 2 minutes, health=healthy, exit=0)
-   detail: route at-vie-wg-001 (wireproxy-at-vie-wg-001)=exited (status=Exited (2) 5 seconds ago, exit=2)
-   remediation: Inspect \`docker compose ps\` / \`docker compose logs\` for the named services, fix the failing route or routing layer, then rerun \`mullgate start\`.
+      7. runtime: fail
+         summary: Live Docker Compose state shows one or more expected Mullgate services are stopped or degraded.
+         detail: compose-command=docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
+         detail: containers=3
+         detail: running=2
+         detail: starting=0
+         detail: stopped=1
+         detail: unhealthy=0
+         detail: routing-layer=running (status=Up 2 minutes, health=healthy, exit=0)
+         detail: route se-got-wg-101 (wireproxy-se-got-wg-101)=running (status=Up 2 minutes, health=healthy, exit=0)
+         detail: route at-vie-wg-001 (wireproxy-at-vie-wg-001)=exited (status=Exited (2) 5 seconds ago, exit=2)
+         remediation: Inspect \`docker compose ps\` / \`docker compose logs\` for the named services, fix the failing route or routing layer, then rerun \`mullgate start\`.
 
-8. last-start: fail
-   summary: The last recorded \`mullgate start\` attempt failed with an auth-related route/runtime error.
-   detail: status=failure
-   detail: attempted-at=2026-03-21T08:10:00.000Z
-   detail: phase=compose-launch
-   detail: source=docker-compose
-   detail: code=COMPOSE_UP_FAILED
-   detail: route-id=at-vie-wg-001
-   detail: route-hostname=at-vie-wg-001
-   detail: route-bind-ip=127.0.0.2
-   detail: service=wireproxy-at-vie-wg-001
-   detail: reason=Docker Compose failed for [redacted] / [redacted] / [redacted] while authenticating route at-vie-wg-001.
-   detail: cause=service wireproxy-at-vie-wg-001 rejected username alice password [redacted] while reading [redacted]
-   remediation: Check route at-vie-wg-001, service wireproxy-at-vie-wg-001, hostname at-vie-wg-001, bind 127.0.0.2 for rejected proxy auth or stale rendered credentials. If credentials changed, update \`setup.auth.username\` / \`setup.auth.password\` with \`mullgate config set\`, then rerun \`mullgate config validate\` and \`mullgate start\`."
-`);
+      8. last-start: fail
+         summary: The last recorded \`mullgate start\` attempt failed with an auth-related route/runtime error.
+         detail: status=failure
+         detail: attempted-at=2026-03-21T08:10:00.000Z
+         detail: phase=compose-launch
+         detail: source=docker-compose
+         detail: code=COMPOSE_UP_FAILED
+         detail: route-id=at-vie-wg-001
+         detail: route-hostname=at-vie-wg-001
+         detail: route-bind-ip=127.0.0.2
+         detail: service=wireproxy-at-vie-wg-001
+         detail: reason=Docker Compose failed for [redacted] / [redacted] / [redacted] while authenticating route at-vie-wg-001.
+         detail: cause=service wireproxy-at-vie-wg-001 rejected username alice password [redacted] while reading [redacted]
+         remediation: Check route at-vie-wg-001, service wireproxy-at-vie-wg-001, hostname at-vie-wg-001, bind 127.0.0.2 for rejected proxy auth or stale rendered credentials. If credentials changed, update \`setup.auth.username\` / \`setup.auth.password\` with \`mullgate config set\`, then rerun \`mullgate config validate\` and \`mullgate start\`."
+    `);
   });
 });

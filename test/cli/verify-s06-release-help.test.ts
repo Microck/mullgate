@@ -87,12 +87,14 @@ describe('verify-s06-release help contract', () => {
       If HTTPS cert/key paths are not provided, the verifier requires \`openssl\` so it can
       generate a temporary self-signed pair without persisting raw private-key material in
       the saved failure bundle.
-      The verifier also needs one free Mullvad WireGuard device slot per routed location.
+      The verifier also needs one free Mullvad WireGuard device slot per routed location unless
+      you resume from a previously preserved temp home with --reuse-temp-home.
 
       Options:
         --target-url <url>        Exit-check endpoint to query (default: https://am.i.mullvad.net/json)
         --route-check-ip <ip>     Direct-route IP used for host-route drift checks (default: 1.1.1.1)
         --keep-temp-home           Preserve the temp XDG home even on success.
+        --reuse-temp-home <path>   Resume verification from an earlier preserved temp home instead of provisioning new devices.
         -h, --help                 Show this help text."
     `);
   });

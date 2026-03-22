@@ -167,6 +167,10 @@ export async function runStatusFlow(dependencies: Omit<StatusCommandDependencies
       `saved checked at: ${config.runtime.status.lastCheckedAt ?? 'n/a'}`,
       `saved message: ${config.runtime.status.message ?? 'n/a'}`,
       `exposure source: ${manifestResult.kind === 'present' ? 'runtime-manifest' : 'canonical-config fallback'}`,
+      `mode label: ${exposure.posture.modeLabel}`,
+      `recommendation: ${exposure.posture.recommendation}`,
+      `posture summary: ${exposure.posture.summary}`,
+      `remote story: ${exposure.posture.remoteStory}`,
       `compose inspection: ${composeStatus.ok ? 'available' : 'unavailable'}`,
       ...(composeStatus.ok
         ? [
@@ -198,6 +202,9 @@ export async function runStatusFlow(dependencies: Omit<StatusCommandDependencies
           `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`,
         ]),
       ]),
+      '',
+      'network-mode guidance',
+      ...exposure.guidance.map((line) => `- ${line}`),
       '',
       'warnings',
       ...(diagnostics.length > 0 ? diagnostics.map((diagnostic) => `- ${diagnostic}`) : ['- none']),

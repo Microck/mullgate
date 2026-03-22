@@ -512,12 +512,12 @@ AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25
 
 [Socks5]
-BindAddress = 0.0.0.0:1080
+BindAddress = 127.0.0.1:1080
 Username = alice
 Password = PROXY_PASSWORD
 
 [http]
-BindAddress = 0.0.0.0:8080
+BindAddress = 127.0.0.1:8080
 Username = alice
 Password = PROXY_PASSWORD
 "

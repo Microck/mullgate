@@ -15,7 +15,8 @@
     "verify:s06": "tsx scripts/verify-s06-release.ts",
     "verify:m004-feasibility": "tsx scripts/verify-m004-feasibility.ts",
     "verify:m004-compatibility": "tsx scripts/verify-m004-compatibility.ts",
-    "verify:m004": "tsx scripts/verify-m004.ts"
+    "verify:m004": "tsx scripts/verify-m004.ts",
+    "verify:m002-network-modes": "tsx scripts/verify-m002-network-modes.ts"
   },
   "engines": {
     "node": ">=22.0.0"

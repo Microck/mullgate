@@ -225,51 +225,61 @@ copy/paste hosts block
     expect(report).not.toContain('private-key-value-1');
     expect(report).toContain('[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080');
     expect('\n' + report).toMatchInlineSnapshot(`
-"\nMullgate exposure report
-phase: inspect-config
-source: canonical-config
-config: /tmp/mullgate-home/config/mullgate/config.json
-mode: private-network
-base domain: proxy.example.com
-allow lan: yes
-runtime status: unvalidated
-restart needed: yes
-runtime message: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+      "
+      Mullgate exposure report
+      phase: inspect-config
+      source: canonical-config
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      mode: private-network
+      mode label: Private network / Tailscale-first
+      recommendation: recommended-remote
+      posture summary: Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.
+      remote story: Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate config hosts\` when local host-file wiring is the easiest path.
+      base domain: proxy.example.com
+      allow lan: yes
+      runtime status: unvalidated
+      restart needed: yes
+      runtime message: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
 
-guidance
-- Private-network mode expects those bind IPs to be reachable from your LAN, VPN, or overlay network.
-- Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.
-- Publish the DNS records below so every route hostname resolves to its matching bind IP.
+      guidance
+      - Private-network mode is the recommended remote posture for Tailscale, LAN, and other trusted overlays. Keep it private by ensuring every bind IP stays reachable only inside that trusted network.
+      - Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.
+      - Publish the DNS records below so every route hostname resolves to its matching bind IP.
 
-routes
-1. sweden-gothenburg.proxy.example.com -> 192.168.10.10
-   alias: sweden-gothenburg
-   route id: sweden-gothenburg
-   dns: sweden-gothenburg.proxy.example.com A 192.168.10.10
-   socks5 hostname: socks5://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080
-   socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.10:1080
-   http hostname: http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080
-   http direct ip: http://[redacted]:[redacted]@192.168.10.10:8080
-   https hostname: https://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8443
-   https direct ip: https://[redacted]:[redacted]@192.168.10.10:8443
-2. austria-vienna.proxy.example.com -> 192.168.10.11
-   alias: austria-vienna
-   route id: austria-vienna
-   dns: austria-vienna.proxy.example.com A 192.168.10.11
-   socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1080
-   socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.11:1080
-   http hostname: http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080
-   http direct ip: http://[redacted]:[redacted]@192.168.10.11:8080
-   https hostname: https://[redacted]:[redacted]@austria-vienna.proxy.example.com:8443
-   https direct ip: https://[redacted]:[redacted]@192.168.10.11:8443
+      remediation
+      - bind posture: Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.
+      - hostname resolution: Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate config hosts\` when host-file wiring is the intended local workaround.
+      - restart: After exposure or bind-IP changes, rerun \`mullgate config validate\` or \`mullgate start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
 
-warnings
-- info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
-- warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+      routes
+      1. sweden-gothenburg.proxy.example.com -> 192.168.10.10
+         alias: sweden-gothenburg
+         route id: sweden-gothenburg
+         dns: sweden-gothenburg.proxy.example.com A 192.168.10.10
+         socks5 hostname: socks5://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.10:1080
+         http hostname: http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080
+         http direct ip: http://[redacted]:[redacted]@192.168.10.10:8080
+         https hostname: https://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8443
+         https direct ip: https://[redacted]:[redacted]@192.168.10.10:8443
+      2. austria-vienna.proxy.example.com -> 192.168.10.11
+         alias: austria-vienna
+         route id: austria-vienna
+         dns: austria-vienna.proxy.example.com A 192.168.10.11
+         socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.11:1080
+         http hostname: http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080
+         http direct ip: http://[redacted]:[redacted]@192.168.10.11:8080
+         https hostname: https://[redacted]:[redacted]@austria-vienna.proxy.example.com:8443
+         https direct ip: https://[redacted]:[redacted]@192.168.10.11:8443
 
-local host-file mapping
-- \`mullgate config hosts\` remains the copy/paste /etc/hosts view for local-only testing."
-`);
+      warnings
+      - info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
+      - warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+
+      local host-file mapping
+      - \`mullgate config hosts\` remains the copy/paste /etc/hosts view for local-only testing."
+    `);
   });
 
   it('renders the dedicated exposure report for no-domain direct-IP public access', () => {
@@ -297,51 +307,61 @@ local host-file mapping
     expect(report).not.toContain('private-key-value-1');
     expect(report).toContain('[redacted]:[redacted]@203.0.113.10:1080');
     expect('\n' + report).toMatchInlineSnapshot(`
-"\nMullgate exposure report
-phase: inspect-config
-source: canonical-config
-config: /tmp/mullgate-home/config/mullgate/config.json
-mode: public
-base domain: n/a
-allow lan: yes
-runtime status: unvalidated
-restart needed: yes
-runtime message: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+      "
+      Mullgate exposure report
+      phase: inspect-config
+      source: canonical-config
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      mode: public
+      mode label: Advanced public exposure
+      recommendation: advanced-remote
+      posture summary: Expert-only remote posture. Publicly routable listeners are possible, but Mullgate does not treat this as the default or safest operating mode.
+      remote story: Prefer private-network mode unless you intentionally need internet-reachable listeners and can provide DNS, firewalling, monitoring, and host hardening yourself.
+      base domain: n/a
+      allow lan: yes
+      runtime status: unvalidated
+      restart needed: yes
+      runtime message: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
 
-guidance
-- Public mode expects those bind IPs to be reachable from the public internet.
-- Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.
-- No base domain is configured, so clients must reach each route via the direct bind IP entrypoints below.
+      guidance
+      - Public mode is advanced operator territory. Only use it when you intentionally want internet-reachable listeners and are prepared to harden the host around them.
+      - Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.
+      - No base domain is configured, so clients must reach each route via the direct bind IP entrypoints below.
 
-routes
-1. 203.0.113.10 -> 203.0.113.10
-   alias: sweden-gothenburg
-   route id: sweden-gothenburg
-   dns: not required; use direct bind IP entrypoints
-   socks5 hostname: socks5://[redacted]:[redacted]@203.0.113.10:1080
-   socks5 direct ip: socks5://[redacted]:[redacted]@203.0.113.10:1080
-   http hostname: http://[redacted]:[redacted]@203.0.113.10:8080
-   http direct ip: http://[redacted]:[redacted]@203.0.113.10:8080
-   https hostname: https://[redacted]:[redacted]@203.0.113.10:8443
-   https direct ip: https://[redacted]:[redacted]@203.0.113.10:8443
-2. 203.0.113.11 -> 203.0.113.11
-   alias: austria-vienna
-   route id: austria-vienna
-   dns: not required; use direct bind IP entrypoints
-   socks5 hostname: socks5://[redacted]:[redacted]@203.0.113.11:1080
-   socks5 direct ip: socks5://[redacted]:[redacted]@203.0.113.11:1080
-   http hostname: http://[redacted]:[redacted]@203.0.113.11:8080
-   http direct ip: http://[redacted]:[redacted]@203.0.113.11:8080
-   https hostname: https://[redacted]:[redacted]@203.0.113.11:8443
-   https direct ip: https://[redacted]:[redacted]@203.0.113.11:8443
+      remediation
+      - bind posture: Use public mode only with intentionally public, distinct bind IPs per route. If you are not deliberately publishing internet-reachable listeners, switch back to private-network mode.
+      - hostname resolution: Publish DNS A records so every route hostname resolves to its saved public bind IP before expecting remote hostname access to work on the open internet.
+      - restart: After changing exposure or DNS-facing bind IPs, rerun \`mullgate config validate\` or \`mullgate start\` so runtime artifacts reflect the advanced public posture accurately.
 
-warnings
-- warning: Public exposure publishes authenticated proxy listeners on publicly routable IPs. Confirm firewalling, rate limits, and monitoring before enabling it on the open internet.
-- warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+      routes
+      1. 203.0.113.10 -> 203.0.113.10
+         alias: sweden-gothenburg
+         route id: sweden-gothenburg
+         dns: not required; use direct bind IP entrypoints
+         socks5 hostname: socks5://[redacted]:[redacted]@203.0.113.10:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@203.0.113.10:1080
+         http hostname: http://[redacted]:[redacted]@203.0.113.10:8080
+         http direct ip: http://[redacted]:[redacted]@203.0.113.10:8080
+         https hostname: https://[redacted]:[redacted]@203.0.113.10:8443
+         https direct ip: https://[redacted]:[redacted]@203.0.113.10:8443
+      2. 203.0.113.11 -> 203.0.113.11
+         alias: austria-vienna
+         route id: austria-vienna
+         dns: not required; use direct bind IP entrypoints
+         socks5 hostname: socks5://[redacted]:[redacted]@203.0.113.11:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@203.0.113.11:1080
+         http hostname: http://[redacted]:[redacted]@203.0.113.11:8080
+         http direct ip: http://[redacted]:[redacted]@203.0.113.11:8080
+         https hostname: https://[redacted]:[redacted]@203.0.113.11:8443
+         https direct ip: https://[redacted]:[redacted]@203.0.113.11:8443
 
-local host-file mapping
-- \`mullgate config hosts\` remains the copy/paste /etc/hosts view for local-only testing."
-`);
+      warnings
+      - warning: Public exposure publishes authenticated proxy listeners on publicly routable IPs. Confirm firewalling, rate limits, and monitoring before enabling it on the open internet.
+      - warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+
+      local host-file mapping
+      - \`mullgate config hosts\` remains the copy/paste /etc/hosts view for local-only testing."
+    `);
   });
 
   it('updates exposure settings without raw JSON edits and mirrors the first bind IP back to setup.bind.host', () => {

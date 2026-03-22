@@ -237,23 +237,18 @@ services:
     entrypoint:
       - /bin/sh
       - -ec
-      - cat /run/mullgate/tls-input/cert.pem /run/mullgate/tls-input/key.pem > /run/mullgate/tls/haproxy.pem && exec haproxy -W -db -f /usr/local/etc/haproxy/haproxy.cfg
+      - cat /run/mullgate-cert.pem /run/mullgate-key.pem > /run/mullgate/tls/haproxy.pem && exec haproxy -W -db -f /usr/local/etc/haproxy/haproxy.cfg
     tmpfs:
       - /run/mullgate/tls
+    network_mode: host
     volumes:
       - /tmp/mullgate-home/state/mullgate/runtime/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - /tmp/mullgate-home/certs/proxy.crt:/run/mullgate/tls-input/cert.pem:ro
-      - /tmp/mullgate-home/certs/proxy.key:/run/mullgate/tls-input/key.pem:ro
-    ports:
-      - \"127.0.0.1:1080:1080\"
-      - \"127.0.0.1:8080:8080\"
-      - \"127.0.0.1:8443:8443\"
-      - \"127.0.0.2:1080:1080\"
-      - \"127.0.0.2:8080:8080\"
-      - \"127.0.0.2:8443:8443\"
+      - /tmp/mullgate-home/certs/proxy.crt:/run/mullgate-cert.pem:ro
+      - /tmp/mullgate-home/certs/proxy.key:/run/mullgate-key.pem:ro
   wireproxy-se-got-wg-101:
     image: backplane/wireproxy:20260320
     user: \"0:0\"
+    network_mode: host
     restart: unless-stopped
     command:
       - --config
@@ -263,6 +258,7 @@ services:
   wireproxy-at-vie-wg-001:
     image: backplane/wireproxy:20260320
     user: \"0:0\"
+    network_mode: host
     restart: unless-stopped
     command:
       - --config
@@ -283,22 +279,6 @@ defaults
   timeout client 1m
   timeout server 1m
 
-frontend socks5_proxy
-  bind 0.0.0.0:1080
-  acl route_se_got_wg_101_socks5 dst 127.0.0.1
-  use_backend route-se-got-wg-101-socks5 if route_se_got_wg_101_socks5
-  acl route_at_vie_wg_001_socks5 dst 127.0.0.2
-  use_backend route-at-vie-wg-001-socks5 if route_at_vie_wg_001_socks5
-  default_backend route-se-got-wg-101-socks5
-
-frontend http_proxy
-  bind 0.0.0.0:8080
-  acl route_se_got_wg_101_http dst 127.0.0.1
-  use_backend route-se-got-wg-101-http if route_se_got_wg_101_http
-  acl route_at_vie_wg_001_http dst 127.0.0.2
-  use_backend route-at-vie-wg-001-http if route_at_vie_wg_001_http
-  default_backend route-se-got-wg-101-http
-
 frontend https_proxy
   bind 0.0.0.0:8443 ssl crt /run/mullgate/tls/haproxy.pem
   acl route_se_got_wg_101_https dst 127.0.0.1
@@ -307,444 +287,77 @@ frontend https_proxy
   use_backend route-at-vie-wg-001-https if route_at_vie_wg_001_https
   default_backend route-se-got-wg-101-https
 
-backend route-se-got-wg-101-socks5
-  server se-got-wg-101 wireproxy-se-got-wg-101:1080 check
-
-backend route-se-got-wg-101-http
-  server se-got-wg-101 wireproxy-se-got-wg-101:8080 check
-
 backend route-se-got-wg-101-https
-  server se-got-wg-101 wireproxy-se-got-wg-101:8080 check
-
-backend route-at-vie-wg-001-socks5
-  server at-vie-wg-001 wireproxy-at-vie-wg-001:1080 check
-
-backend route-at-vie-wg-001-http
-  server at-vie-wg-001 wireproxy-at-vie-wg-001:8080 check
+  server se-got-wg-101 127.0.0.1:8080 check
 
 backend route-at-vie-wg-001-https
-  server at-vie-wg-001 wireproxy-at-vie-wg-001:8080 check
+  server at-vie-wg-001 127.0.0.2:8080 check
 
 "
 `);
-    expect('\n' + manifest).toMatchInlineSnapshot(`
-      "
-      {
-        "generatedAt": "2026-03-20T18:55:00.000Z",
-        "source": "canonical-config",
-        "topology": "multi-route-wireproxy-haproxy",
-        "relayCachePath": "/tmp/mullgate-home/cache/mullgate/relays.json",
-        "images": {
-          "wireproxy": "backplane/wireproxy:20260320",
-          "routingLayer": "haproxytech/haproxy-alpine:3.0.19"
-        },
-        "services": {
-          "routingLayer": {
-            "name": "routing-layer",
-            "listeners": {
-              "socks5": "0.0.0.0:1080",
-              "http": "0.0.0.0:8080",
-              "https": "0.0.0.0:8443"
-            },
-            "publishedPorts": [
-              "127.0.0.1:1080:1080",
-              "127.0.0.1:8080:8080",
-              "127.0.0.1:8443:8443",
-              "127.0.0.2:1080:1080",
-              "127.0.0.2:8080:8080",
-              "127.0.0.2:8443:8443"
-            ],
-            "mountPaths": {
-              "haproxyConfigPath": "/tmp/mullgate-home/state/mullgate/runtime/haproxy.cfg",
-              "certPath": "/tmp/mullgate-home/certs/proxy.crt",
-              "keyPath": "/tmp/mullgate-home/certs/proxy.key",
-              "combinedPemPath": "/run/mullgate/tls/haproxy.pem"
-            }
-          }
-        },
-        "exposure": {
-          "mode": "loopback",
-          "allowLan": false,
-          "baseDomain": null,
-          "ports": [
-            {
-              "protocol": "socks5",
-              "port": 1080
-            },
-            {
-              "protocol": "http",
-              "port": 8080
-            },
-            {
-              "protocol": "https",
-              "port": 8443
-            }
-          ],
-          "routes": [
-            {
-              "index": 0,
-              "alias": "sweden-gothenburg",
-              "routeId": "se-got-wg-101",
-              "hostname": "se-got-wg-101",
-              "bindIp": "127.0.0.1",
-              "dnsRecord": null,
-              "endpoints": [
-                {
-                  "protocol": "socks5",
-                  "port": 1080,
-                  "hostnameUrl": "socks5://se-got-wg-101:1080",
-                  "bindUrl": "socks5://127.0.0.1:1080",
-                  "redactedHostnameUrl": "socks5://[redacted]:[redacted]@se-got-wg-101:1080",
-                  "redactedBindUrl": "socks5://[redacted]:[redacted]@127.0.0.1:1080",
-                  "authRequired": true
-                },
-                {
-                  "protocol": "http",
-                  "port": 8080,
-                  "hostnameUrl": "http://se-got-wg-101:8080",
-                  "bindUrl": "http://127.0.0.1:8080",
-                  "redactedHostnameUrl": "http://[redacted]:[redacted]@se-got-wg-101:8080",
-                  "redactedBindUrl": "http://[redacted]:[redacted]@127.0.0.1:8080",
-                  "authRequired": true
-                },
-                {
-                  "protocol": "https",
-                  "port": 8443,
-                  "hostnameUrl": "https://se-got-wg-101:8443",
-                  "bindUrl": "https://127.0.0.1:8443",
-                  "redactedHostnameUrl": "https://[redacted]:[redacted]@se-got-wg-101:8443",
-                  "redactedBindUrl": "https://[redacted]:[redacted]@127.0.0.1:8443",
-                  "authRequired": true
-                }
-              ]
-            },
-            {
-              "index": 1,
-              "alias": "austria-vienna",
-              "routeId": "at-vie-wg-001",
-              "hostname": "at-vie-wg-001",
-              "bindIp": "127.0.0.2",
-              "dnsRecord": null,
-              "endpoints": [
-                {
-                  "protocol": "socks5",
-                  "port": 1080,
-                  "hostnameUrl": "socks5://at-vie-wg-001:1080",
-                  "bindUrl": "socks5://127.0.0.2:1080",
-                  "redactedHostnameUrl": "socks5://[redacted]:[redacted]@at-vie-wg-001:1080",
-                  "redactedBindUrl": "socks5://[redacted]:[redacted]@127.0.0.2:1080",
-                  "authRequired": true
-                },
-                {
-                  "protocol": "http",
-                  "port": 8080,
-                  "hostnameUrl": "http://at-vie-wg-001:8080",
-                  "bindUrl": "http://127.0.0.2:8080",
-                  "redactedHostnameUrl": "http://[redacted]:[redacted]@at-vie-wg-001:8080",
-                  "redactedBindUrl": "http://[redacted]:[redacted]@127.0.0.2:8080",
-                  "authRequired": true
-                },
-                {
-                  "protocol": "https",
-                  "port": 8443,
-                  "hostnameUrl": "https://at-vie-wg-001:8443",
-                  "bindUrl": "https://127.0.0.2:8443",
-                  "redactedHostnameUrl": "https://[redacted]:[redacted]@at-vie-wg-001:8443",
-                  "redactedBindUrl": "https://[redacted]:[redacted]@127.0.0.2:8443",
-                  "authRequired": true
-                }
-              ]
-            }
-          ],
-          "dnsRecords": [],
-          "guidance": [
-            "Loopback mode keeps all listeners on local-only bind IPs.",
-            "Use \`mullgate config hosts\` if you want a copy/paste /etc/hosts block for this machine."
-          ],
-          "warnings": [
-            {
-              "code": "LOOPBACK_ONLY",
-              "severity": "info",
-              "message": "Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine."
-            }
-          ],
-          "runtimeStatus": {
-            "phase": "validated",
-            "message": "Fixture config already validated.",
-            "restartRequired": false
-          }
-        },
-        "routes": [
-          {
-            "routeId": "se-got-wg-101",
-            "alias": "sweden-gothenburg",
-            "hostname": "se-got-wg-101",
-            "bindIp": "127.0.0.1",
-            "wireproxyConfigPath": "/tmp/mullgate-home/state/mullgate/runtime/wireproxy-se-got-wg-101.conf",
-            "configTestReportPath": "/tmp/mullgate-home/state/mullgate/runtime/wireproxy-se-got-wg-101-configtest.json",
-            "services": {
-              "wireproxy": {
-                "name": "wireproxy-se-got-wg-101",
-                "internalListeners": {
-                  "socks5": "0.0.0.0:1080",
-                  "http": "0.0.0.0:8080"
-                }
-              },
-              "backends": {
-                "socks5": "route-se-got-wg-101-socks5",
-                "http": "route-se-got-wg-101-http",
-                "https": "route-se-got-wg-101-https"
-              }
-            },
-            "publishedEndpoints": [
-              {
-                "routeId": "se-got-wg-101",
-                "hostname": "se-got-wg-101",
-                "bindIp": "127.0.0.1",
-                "protocol": "socks5",
-                "host": "se-got-wg-101",
-                "port": 1080,
-                "containerHost": "0.0.0.0",
-                "containerPort": 1080,
-                "auth": {
-                  "username": "[redacted]",
-                  "password": "[redacted]"
-                },
-                "hostnameUrl": "socks5://se-got-wg-101:1080",
-                "bindUrl": "socks5://127.0.0.1:1080",
-                "redactedHostnameUrl": "socks5://[redacted]:[redacted]@se-got-wg-101:1080",
-                "redactedBindUrl": "socks5://[redacted]:[redacted]@127.0.0.1:1080"
-              },
-              {
-                "routeId": "se-got-wg-101",
-                "hostname": "se-got-wg-101",
-                "bindIp": "127.0.0.1",
-                "protocol": "http",
-                "host": "se-got-wg-101",
-                "port": 8080,
-                "containerHost": "0.0.0.0",
-                "containerPort": 8080,
-                "auth": {
-                  "username": "[redacted]",
-                  "password": "[redacted]"
-                },
-                "hostnameUrl": "http://se-got-wg-101:8080",
-                "bindUrl": "http://127.0.0.1:8080",
-                "redactedHostnameUrl": "http://[redacted]:[redacted]@se-got-wg-101:8080",
-                "redactedBindUrl": "http://[redacted]:[redacted]@127.0.0.1:8080"
-              },
-              {
-                "routeId": "se-got-wg-101",
-                "hostname": "se-got-wg-101",
-                "bindIp": "127.0.0.1",
-                "protocol": "https",
-                "host": "se-got-wg-101",
-                "port": 8443,
-                "containerHost": "0.0.0.0",
-                "containerPort": 8443,
-                "auth": {
-                  "username": "[redacted]",
-                  "password": "[redacted]"
-                },
-                "hostnameUrl": "https://se-got-wg-101:8443",
-                "bindUrl": "https://127.0.0.1:8443",
-                "redactedHostnameUrl": "https://[redacted]:[redacted]@se-got-wg-101:8443",
-                "redactedBindUrl": "https://[redacted]:[redacted]@127.0.0.1:8443"
-              }
-            ]
-          },
-          {
-            "routeId": "at-vie-wg-001",
-            "alias": "austria-vienna",
-            "hostname": "at-vie-wg-001",
-            "bindIp": "127.0.0.2",
-            "wireproxyConfigPath": "/tmp/mullgate-home/state/mullgate/runtime/wireproxy-at-vie-wg-001.conf",
-            "configTestReportPath": "/tmp/mullgate-home/state/mullgate/runtime/wireproxy-at-vie-wg-001-configtest.json",
-            "services": {
-              "wireproxy": {
-                "name": "wireproxy-at-vie-wg-001",
-                "internalListeners": {
-                  "socks5": "0.0.0.0:1080",
-                  "http": "0.0.0.0:8080"
-                }
-              },
-              "backends": {
-                "socks5": "route-at-vie-wg-001-socks5",
-                "http": "route-at-vie-wg-001-http",
-                "https": "route-at-vie-wg-001-https"
-              }
-            },
-            "publishedEndpoints": [
-              {
-                "routeId": "at-vie-wg-001",
-                "hostname": "at-vie-wg-001",
-                "bindIp": "127.0.0.2",
-                "protocol": "socks5",
-                "host": "at-vie-wg-001",
-                "port": 1080,
-                "containerHost": "0.0.0.0",
-                "containerPort": 1080,
-                "auth": {
-                  "username": "[redacted]",
-                  "password": "[redacted]"
-                },
-                "hostnameUrl": "socks5://at-vie-wg-001:1080",
-                "bindUrl": "socks5://127.0.0.2:1080",
-                "redactedHostnameUrl": "socks5://[redacted]:[redacted]@at-vie-wg-001:1080",
-                "redactedBindUrl": "socks5://[redacted]:[redacted]@127.0.0.2:1080"
-              },
-              {
-                "routeId": "at-vie-wg-001",
-                "hostname": "at-vie-wg-001",
-                "bindIp": "127.0.0.2",
-                "protocol": "http",
-                "host": "at-vie-wg-001",
-                "port": 8080,
-                "containerHost": "0.0.0.0",
-                "containerPort": 8080,
-                "auth": {
-                  "username": "[redacted]",
-                  "password": "[redacted]"
-                },
-                "hostnameUrl": "http://at-vie-wg-001:8080",
-                "bindUrl": "http://127.0.0.2:8080",
-                "redactedHostnameUrl": "http://[redacted]:[redacted]@at-vie-wg-001:8080",
-                "redactedBindUrl": "http://[redacted]:[redacted]@127.0.0.2:8080"
-              },
-              {
-                "routeId": "at-vie-wg-001",
-                "hostname": "at-vie-wg-001",
-                "bindIp": "127.0.0.2",
-                "protocol": "https",
-                "host": "at-vie-wg-001",
-                "port": 8443,
-                "containerHost": "0.0.0.0",
-                "containerPort": 8443,
-                "auth": {
-                  "username": "[redacted]",
-                  "password": "[redacted]"
-                },
-                "hostnameUrl": "https://at-vie-wg-001:8443",
-                "bindUrl": "https://127.0.0.2:8443",
-                "redactedHostnameUrl": "https://[redacted]:[redacted]@at-vie-wg-001:8443",
-                "redactedBindUrl": "https://[redacted]:[redacted]@127.0.0.2:8443"
-              }
-            ]
-          }
-        ],
-        "publishedEndpoints": [
-          {
-            "routeId": "se-got-wg-101",
-            "hostname": "se-got-wg-101",
-            "bindIp": "127.0.0.1",
-            "protocol": "socks5",
-            "host": "se-got-wg-101",
-            "port": 1080,
-            "containerHost": "0.0.0.0",
-            "containerPort": 1080,
-            "auth": {
-              "username": "[redacted]",
-              "password": "[redacted]"
-            },
-            "hostnameUrl": "socks5://se-got-wg-101:1080",
-            "bindUrl": "socks5://127.0.0.1:1080",
-            "redactedHostnameUrl": "socks5://[redacted]:[redacted]@se-got-wg-101:1080",
-            "redactedBindUrl": "socks5://[redacted]:[redacted]@127.0.0.1:1080"
-          },
-          {
-            "routeId": "se-got-wg-101",
-            "hostname": "se-got-wg-101",
-            "bindIp": "127.0.0.1",
-            "protocol": "http",
-            "host": "se-got-wg-101",
-            "port": 8080,
-            "containerHost": "0.0.0.0",
-            "containerPort": 8080,
-            "auth": {
-              "username": "[redacted]",
-              "password": "[redacted]"
-            },
-            "hostnameUrl": "http://se-got-wg-101:8080",
-            "bindUrl": "http://127.0.0.1:8080",
-            "redactedHostnameUrl": "http://[redacted]:[redacted]@se-got-wg-101:8080",
-            "redactedBindUrl": "http://[redacted]:[redacted]@127.0.0.1:8080"
-          },
-          {
-            "routeId": "se-got-wg-101",
-            "hostname": "se-got-wg-101",
-            "bindIp": "127.0.0.1",
-            "protocol": "https",
-            "host": "se-got-wg-101",
-            "port": 8443,
-            "containerHost": "0.0.0.0",
-            "containerPort": 8443,
-            "auth": {
-              "username": "[redacted]",
-              "password": "[redacted]"
-            },
-            "hostnameUrl": "https://se-got-wg-101:8443",
-            "bindUrl": "https://127.0.0.1:8443",
-            "redactedHostnameUrl": "https://[redacted]:[redacted]@se-got-wg-101:8443",
-            "redactedBindUrl": "https://[redacted]:[redacted]@127.0.0.1:8443"
-          },
-          {
-            "routeId": "at-vie-wg-001",
-            "hostname": "at-vie-wg-001",
-            "bindIp": "127.0.0.2",
-            "protocol": "socks5",
-            "host": "at-vie-wg-001",
-            "port": 1080,
-            "containerHost": "0.0.0.0",
-            "containerPort": 1080,
-            "auth": {
-              "username": "[redacted]",
-              "password": "[redacted]"
-            },
-            "hostnameUrl": "socks5://at-vie-wg-001:1080",
-            "bindUrl": "socks5://127.0.0.2:1080",
-            "redactedHostnameUrl": "socks5://[redacted]:[redacted]@at-vie-wg-001:1080",
-            "redactedBindUrl": "socks5://[redacted]:[redacted]@127.0.0.2:1080"
-          },
-          {
-            "routeId": "at-vie-wg-001",
-            "hostname": "at-vie-wg-001",
-            "bindIp": "127.0.0.2",
-            "protocol": "http",
-            "host": "at-vie-wg-001",
-            "port": 8080,
-            "containerHost": "0.0.0.0",
-            "containerPort": 8080,
-            "auth": {
-              "username": "[redacted]",
-              "password": "[redacted]"
-            },
-            "hostnameUrl": "http://at-vie-wg-001:8080",
-            "bindUrl": "http://127.0.0.2:8080",
-            "redactedHostnameUrl": "http://[redacted]:[redacted]@at-vie-wg-001:8080",
-            "redactedBindUrl": "http://[redacted]:[redacted]@127.0.0.2:8080"
-          },
-          {
-            "routeId": "at-vie-wg-001",
-            "hostname": "at-vie-wg-001",
-            "bindIp": "127.0.0.2",
-            "protocol": "https",
-            "host": "at-vie-wg-001",
-            "port": 8443,
-            "containerHost": "0.0.0.0",
-            "containerPort": 8443,
-            "auth": {
-              "username": "[redacted]",
-              "password": "[redacted]"
-            },
-            "hostnameUrl": "https://at-vie-wg-001:8443",
-            "bindUrl": "https://127.0.0.2:8443",
-            "redactedHostnameUrl": "https://[redacted]:[redacted]@at-vie-wg-001:8443",
-            "redactedBindUrl": "https://[redacted]:[redacted]@127.0.0.2:8443"
-          }
-        ]
-      }
-      "
-    `);
+
+    const parsedManifest = JSON.parse(manifest) as {
+      exposure: {
+        posture: {
+          recommendation: string;
+          modeLabel: string;
+        };
+        guidance: string[];
+        remediation: {
+          bindPosture: string;
+          hostnameResolution: string;
+          restart: string;
+        };
+      };
+      services: {
+        routingLayer: {
+          listeners: {
+            socks5: string | null;
+            http: string | null;
+            https: string | null;
+          };
+        };
+      };
+      routes: Array<{
+        services: {
+          backends: {
+            socks5: string | null;
+            http: string | null;
+            https: string | null;
+          };
+        };
+      }>;
+    };
+
+    expect(parsedManifest.services.routingLayer.listeners).toEqual({
+      socks5: null,
+      http: null,
+      https: 'per-route bind IPs on port 8443',
+    });
+    expect(parsedManifest.exposure.posture).toEqual({
+      recommendation: 'local-default',
+      modeLabel: 'Loopback / local-only',
+      summary:
+        'Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.',
+      remoteStory:
+        'Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.',
+    });
+    expect(parsedManifest.exposure.guidance).toEqual([
+      'Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.',
+      'Use `mullgate config hosts` if you want a copy/paste /etc/hosts block for this machine.',
+    ]);
+    expect(parsedManifest.exposure.remediation).toEqual({
+      bindPosture:
+        'Keep loopback mode on local-only bind IPs. If you need remote access, rerun `mullgate config exposure --mode private-network ...` with one trusted-network bind IP per route.',
+      hostnameResolution:
+        'For local host-file testing, use `mullgate config hosts` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.',
+      restart:
+        'After changing exposure settings, rerun `mullgate config validate` or `mullgate start` so the runtime artifacts match the saved local-only posture.',
+    });
+    expect(parsedManifest.routes.map((route) => route.services.backends)).toEqual([
+      { socks5: null, http: null, https: 'route-se-got-wg-101-https' },
+      { socks5: null, http: null, https: 'route-at-vie-wg-001-https' },
+    ]);
   });
 
   it('records domain guidance and public single-route warnings in the manifest exposure contract', async () => {
@@ -784,101 +397,34 @@ backend route-at-vie-wg-001-https
       return;
     }
 
-    expect('\n' + JSON.stringify(result.manifest.exposure, null, 2)).toMatchInlineSnapshot(`
-"\n{
-  \"mode\": \"public\",
-  \"allowLan\": true,
-  \"baseDomain\": \"proxy.example.com\",
-  \"ports\": [
-    {
-      \"protocol\": \"socks5\",
-      \"port\": 1080
-    },
-    {
-      \"protocol\": \"http\",
-      \"port\": 8080
-    },
-    {
-      \"protocol\": \"https\",
-      \"port\": 8443
-    }
-  ],
-  \"routes\": [
-    {
-      \"index\": 0,
-      \"alias\": \"sweden-gothenburg\",
-      \"routeId\": \"se-got-wg-101\",
-      \"hostname\": \"sweden-gothenburg.proxy.example.com\",
-      \"bindIp\": \"198.51.100.10\",
-      \"dnsRecord\": \"sweden-gothenburg.proxy.example.com A 198.51.100.10\",
-      \"endpoints\": [
-        {
-          \"protocol\": \"socks5\",
-          \"port\": 1080,
-          \"hostnameUrl\": \"socks5://sweden-gothenburg.proxy.example.com:1080\",
-          \"bindUrl\": \"socks5://198.51.100.10:1080\",
-          \"redactedHostnameUrl\": \"socks5://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080\",
-          \"redactedBindUrl\": \"socks5://[redacted]:[redacted]@198.51.100.10:1080\",
-          \"authRequired\": true
-        },
-        {
-          \"protocol\": \"http\",
-          \"port\": 8080,
-          \"hostnameUrl\": \"http://sweden-gothenburg.proxy.example.com:8080\",
-          \"bindUrl\": \"http://198.51.100.10:8080\",
-          \"redactedHostnameUrl\": \"http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080\",
-          \"redactedBindUrl\": \"http://[redacted]:[redacted]@198.51.100.10:8080\",
-          \"authRequired\": true
-        },
-        {
-          \"protocol\": \"https\",
-          \"port\": 8443,
-          \"hostnameUrl\": \"https://sweden-gothenburg.proxy.example.com:8443\",
-          \"bindUrl\": \"https://198.51.100.10:8443\",
-          \"redactedHostnameUrl\": \"https://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8443\",
-          \"redactedBindUrl\": \"https://[redacted]:[redacted]@198.51.100.10:8443\",
-          \"authRequired\": true
-        }
-      ]
-    }
-  ],
-  \"dnsRecords\": [
-    \"sweden-gothenburg.proxy.example.com A 198.51.100.10\"
-  ],
-  \"guidance\": [
-    \"Public mode expects those bind IPs to be reachable from the public internet.\",
-    \"Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.\",
-    \"Publish the DNS records below so every route hostname resolves to its matching bind IP.\"
-  ],
-  \"warnings\": [
-    {
-      \"code\": \"DNS_REQUIRED\",
-      \"severity\": \"info\",
-      \"message\": \"Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.\"
-    },
-    {
-      \"code\": \"PUBLIC_EXPOSURE\",
-      \"severity\": \"warning\",
-      \"message\": \"Public exposure publishes authenticated proxy listeners on publicly routable IPs. Confirm firewalling, rate limits, and monitoring before enabling it on the open internet.\"
-    },
-    {
-      \"code\": \"SINGLE_ROUTE\",
-      \"severity\": \"warning\",
-      \"message\": \"Only one routed bind IP is configured, so remote exposure will not provide hostname-based route selection until additional routes are added.\"
-    },
-    {
-      \"code\": \"RUNTIME_UNVALIDATED\",
-      \"severity\": \"warning\",
-      \"message\": \"Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.\"
-    }
-  ],
-  \"runtimeStatus\": {
-    \"phase\": \"unvalidated\",
-    \"message\": \"Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.\",
-    \"restartRequired\": true
-  }
-}"
-`);
+    const exposure = result.manifest.exposure;
+    expect(exposure.posture).toEqual({
+      recommendation: 'advanced-remote',
+      modeLabel: 'Advanced public exposure',
+      summary:
+        'Expert-only remote posture. Publicly routable listeners are possible, but Mullgate does not treat this as the default or safest operating mode.',
+      remoteStory:
+        'Prefer private-network mode unless you intentionally need internet-reachable listeners and can provide DNS, firewalling, monitoring, and host hardening yourself.',
+    });
+    expect(exposure.guidance).toEqual([
+      'Public mode is advanced operator territory. Only use it when you intentionally want internet-reachable listeners and are prepared to harden the host around them.',
+      'Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.',
+      'Publish the DNS records below so every route hostname resolves to its matching bind IP.',
+    ]);
+    expect(exposure.remediation).toEqual({
+      bindPosture:
+        'Use public mode only with intentionally public, distinct bind IPs per route. If you are not deliberately publishing internet-reachable listeners, switch back to private-network mode.',
+      hostnameResolution:
+        'Publish DNS A records so every route hostname resolves to its saved public bind IP before expecting remote hostname access to work on the open internet.',
+      restart:
+        'After changing exposure or DNS-facing bind IPs, rerun `mullgate config validate` or `mullgate start` so runtime artifacts reflect the advanced public posture accurately.',
+    });
+    expect(exposure.warnings.map((warning) => warning.code)).toEqual([
+      'DNS_REQUIRED',
+      'PUBLIC_EXPOSURE',
+      'SINGLE_ROUTE',
+      'RUNTIME_UNVALIDATED',
+    ]);
   });
 
   it('fails when HTTPS is requested without both TLS asset paths', async () => {

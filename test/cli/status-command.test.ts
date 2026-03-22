@@ -397,60 +397,65 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
     expect(stdout.value.current).not.toContain('123456789012');
     expect(stdout.value.current).not.toContain('private-key-value-1');
     expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
-"\nMullgate runtime status
-phase: running
-config: /tmp/mullgate-home/config/mullgate/config.json
-runtime dir: /tmp/mullgate-home/state/mullgate/runtime
-docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
-runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
-last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (present)
-saved runtime status: running
-saved checked at: 2026-03-21T07:10:00.000Z
-saved message: Runtime started successfully.
-exposure source: runtime-manifest
-compose inspection: available
-compose project: mullgate
-compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
-container summary: 3 total, 3 running, 0 starting, 0 stopped, 0 unhealthy
-routing layer: running (status=Up 10 seconds, health=healthy, exit=0)
+      "
+      Mullgate runtime status
+      phase: running
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      runtime dir: /tmp/mullgate-home/state/mullgate/runtime
+      docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
+      last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (present)
+      saved runtime status: running
+      saved checked at: 2026-03-21T07:10:00.000Z
+      saved message: Runtime started successfully.
+      exposure source: runtime-manifest
+      mode label: Loopback / local-only
+      recommendation: local-default
+      posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
+      remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+      compose inspection: available
+      compose project: mullgate
+      compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
+      container summary: 3 total, 3 running, 0 starting, 0 stopped, 0 unhealthy
+      routing layer: running (status=Up 10 seconds, health=healthy, exit=0)
 
-routes
-1. se-got-wg-101 -> 127.0.0.1
-   alias: sweden-gothenburg
-   route id: se-got-wg-101
-   service: wireproxy-se-got-wg-101
-   live state: running (status=Up 10 seconds, health=healthy, exit=0)
-   socks5 backend: route-se-got-wg-101-socks5
-   http backend: route-se-got-wg-101-http
-   dns: not required; use direct bind IP entrypoints
-   socks5 hostname: socks5://[redacted]:[redacted]@se-got-wg-101:1080
-   socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
-   http hostname: http://[redacted]:[redacted]@se-got-wg-101:8080
-   http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
-2. at-vie-wg-001 -> 127.0.0.2
-   alias: austria-vienna
-   route id: at-vie-wg-001
-   service: wireproxy-at-vie-wg-001
-   live state: running (status=Up 10 seconds, health=healthy, exit=0)
-   socks5 backend: route-at-vie-wg-001-socks5
-   http backend: route-at-vie-wg-001-http
-   dns: not required; use direct bind IP entrypoints
-   socks5 hostname: socks5://[redacted]:[redacted]@at-vie-wg-001:1080
-   socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
-   http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
-   http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
+      routes
+      1. se-got-wg-101 -> 127.0.0.1
+         alias: sweden-gothenburg
+         route id: se-got-wg-101
+         service: wireproxy-se-got-wg-101
+         live state: running (status=Up 10 seconds, health=healthy, exit=0)
+         dns: not required; use direct bind IP entrypoints
+         socks5 hostname: socks5://[redacted]:[redacted]@se-got-wg-101:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
+         http hostname: http://[redacted]:[redacted]@se-got-wg-101:8080
+         http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
+      2. at-vie-wg-001 -> 127.0.0.2
+         alias: austria-vienna
+         route id: at-vie-wg-001
+         service: wireproxy-at-vie-wg-001
+         live state: running (status=Up 10 seconds, health=healthy, exit=0)
+         dns: not required; use direct bind IP entrypoints
+         socks5 hostname: socks5://[redacted]:[redacted]@at-vie-wg-001:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
+         http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
+         http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
 
-warnings
-- none
+      network-mode guidance
+      - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
+      - Use \`mullgate config hosts\` if you want a copy/paste /etc/hosts block for this machine.
 
-last start diagnostics
-status: success
-attempted at: 2026-03-21T07:10:00.000Z
-phase: compose-launch
-source: docker-compose
-code: n/a
-reason: Docker Compose launched the Mullgate runtime bundle in detached mode."
-`);
+      warnings
+      - none
+
+      last start diagnostics
+      status: success
+      attempted at: 2026-03-21T07:10:00.000Z
+      phase: compose-launch
+      source: docker-compose
+      code: n/a
+      reason: Docker Compose launched the Mullgate runtime bundle in detached mode."
+    `);
   });
 
   it('reports a degraded multi-route runtime when saved status says running but one route is stopped', async () => {
@@ -538,67 +543,72 @@ reason: Docker Compose launched the Mullgate runtime bundle in detached mode."
     expect(stdout.value.current).not.toContain('private-key-value-2');
     expect(stdout.value.current).not.toContain('BEGIN PRIVATE KEY');
     expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
-"\nMullgate runtime status
-phase: degraded
-config: /tmp/mullgate-home/config/mullgate/config.json
-runtime dir: /tmp/mullgate-home/state/mullgate/runtime
-docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
-runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
-last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (present)
-saved runtime status: running
-saved checked at: 2026-03-21T07:20:00.000Z
-saved message: Runtime started successfully.
-exposure source: runtime-manifest
-compose inspection: available
-compose project: mullgate
-compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
-container summary: 3 total, 2 running, 0 starting, 1 stopped, 0 unhealthy
-routing layer: running (status=Up 30 seconds, health=healthy, exit=0)
+      "
+      Mullgate runtime status
+      phase: degraded
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      runtime dir: /tmp/mullgate-home/state/mullgate/runtime
+      docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
+      last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (present)
+      saved runtime status: running
+      saved checked at: 2026-03-21T07:20:00.000Z
+      saved message: Runtime started successfully.
+      exposure source: runtime-manifest
+      mode label: Loopback / local-only
+      recommendation: local-default
+      posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
+      remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+      compose inspection: available
+      compose project: mullgate
+      compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
+      container summary: 3 total, 2 running, 0 starting, 1 stopped, 0 unhealthy
+      routing layer: running (status=Up 30 seconds, health=healthy, exit=0)
 
-routes
-1. se-got-wg-101 -> 127.0.0.1
-   alias: sweden-gothenburg
-   route id: se-got-wg-101
-   service: wireproxy-se-got-wg-101
-   live state: running (status=Up 30 seconds, health=healthy, exit=0)
-   socks5 backend: route-se-got-wg-101-socks5
-   http backend: route-se-got-wg-101-http
-   dns: not required; use direct bind IP entrypoints
-   socks5 hostname: socks5://[redacted]:[redacted]@se-got-wg-101:1080
-   socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
-   http hostname: http://[redacted]:[redacted]@se-got-wg-101:8080
-   http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
-2. at-vie-wg-001 -> 127.0.0.2
-   alias: austria-vienna
-   route id: at-vie-wg-001
-   service: wireproxy-at-vie-wg-001
-   live state: exited (status=Exited (2) 3 seconds ago, exit=2)
-   socks5 backend: route-at-vie-wg-001-socks5
-   http backend: route-at-vie-wg-001-http
-   dns: not required; use direct bind IP entrypoints
-   socks5 hostname: socks5://[redacted]:[redacted]@at-vie-wg-001:1080
-   socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
-   http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
-   http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
+      routes
+      1. se-got-wg-101 -> 127.0.0.1
+         alias: sweden-gothenburg
+         route id: se-got-wg-101
+         service: wireproxy-se-got-wg-101
+         live state: running (status=Up 30 seconds, health=healthy, exit=0)
+         dns: not required; use direct bind IP entrypoints
+         socks5 hostname: socks5://[redacted]:[redacted]@se-got-wg-101:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
+         http hostname: http://[redacted]:[redacted]@se-got-wg-101:8080
+         http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
+      2. at-vie-wg-001 -> 127.0.0.2
+         alias: austria-vienna
+         route id: at-vie-wg-001
+         service: wireproxy-at-vie-wg-001
+         live state: exited (status=Exited (2) 3 seconds ago, exit=2)
+         dns: not required; use direct bind IP entrypoints
+         socks5 hostname: socks5://[redacted]:[redacted]@at-vie-wg-001:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
+         http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
+         http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
 
-warnings
-- route at-vie-wg-001 is stopped: exited (status=Exited (2) 3 seconds ago, exit=2).
-- saved runtime status says running, but live compose status shows stopped or degraded route containers. Trust live compose over the saved phase and rerun \`mullgate start\` after fixing the failing route.
-- the last recorded \`mullgate start\` attempt failed; inspect the last-start diagnostics below before restarting blindly.
+      network-mode guidance
+      - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
+      - Use \`mullgate config hosts\` if you want a copy/paste /etc/hosts block for this machine.
 
-last start diagnostics
-status: failure
-attempted at: 2026-03-21T07:20:00.000Z
-phase: compose-launch
-source: docker-compose
-code: COMPOSE_UP_FAILED
-route id: at-vie-wg-001
-route hostname: at-vie-wg-001
-route bind ip: 127.0.0.2
-service: wireproxy-at-vie-wg-001
-reason: Docker Compose failed to start the Mullgate runtime bundle for [redacted] / [redacted] / [redacted].
-cause: service wireproxy-at-vie-wg-001 crashed while reading [redacted] and account [redacted]"
-`);
+      warnings
+      - route at-vie-wg-001 is stopped: exited (status=Exited (2) 3 seconds ago, exit=2).
+      - saved runtime status says running, but live compose status shows stopped or degraded route containers. Trust live compose over the saved phase and rerun \`mullgate start\` after fixing the failing route.
+      - the last recorded \`mullgate start\` attempt failed; inspect the last-start diagnostics below before restarting blindly.
+
+      last start diagnostics
+      status: failure
+      attempted at: 2026-03-21T07:20:00.000Z
+      phase: compose-launch
+      source: docker-compose
+      code: COMPOSE_UP_FAILED
+      route id: at-vie-wg-001
+      route hostname: at-vie-wg-001
+      route bind ip: 127.0.0.2
+      service: wireproxy-at-vie-wg-001
+      reason: Docker Compose failed to start the Mullgate runtime bundle for [redacted] / [redacted] / [redacted].
+      cause: service wireproxy-at-vie-wg-001 crashed while reading [redacted] and account [redacted]"
+    `);
   });
 
   it('reports a validated-but-not-started runtime as stopped when compose has no containers', async () => {
@@ -619,57 +629,62 @@ cause: service wireproxy-at-vie-wg-001 crashed while reading [redacted] and acco
     expect(process.exitCode).toBe(0);
     expect(stderr.value.current).toBe('');
     expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
-"\nMullgate runtime status
-phase: stopped
-config: /tmp/mullgate-home/config/mullgate/config.json
-runtime dir: /tmp/mullgate-home/state/mullgate/runtime
-docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
-runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
-last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (missing)
-saved runtime status: validated
-saved checked at: 2026-03-21T07:00:00.000Z
-saved message: Fixture config already validated.
-exposure source: runtime-manifest
-compose inspection: available
-compose project: n/a
-compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
-container summary: 0 total, 0 running, 0 starting, 0 stopped, 0 unhealthy
-routing layer: not present in live compose status
+      "
+      Mullgate runtime status
+      phase: stopped
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      runtime dir: /tmp/mullgate-home/state/mullgate/runtime
+      docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
+      last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (missing)
+      saved runtime status: validated
+      saved checked at: 2026-03-21T07:00:00.000Z
+      saved message: Fixture config already validated.
+      exposure source: runtime-manifest
+      mode label: Loopback / local-only
+      recommendation: local-default
+      posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
+      remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+      compose inspection: available
+      compose project: n/a
+      compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
+      container summary: 0 total, 0 running, 0 starting, 0 stopped, 0 unhealthy
+      routing layer: not present in live compose status
 
-routes
-1. se-got-wg-101 -> 127.0.0.1
-   alias: sweden-gothenburg
-   route id: se-got-wg-101
-   service: wireproxy-se-got-wg-101
-   live state: not present in live compose status
-   socks5 backend: route-se-got-wg-101-socks5
-   http backend: route-se-got-wg-101-http
-   dns: not required; use direct bind IP entrypoints
-   socks5 hostname: socks5://[redacted]:[redacted]@se-got-wg-101:1080
-   socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
-   http hostname: http://[redacted]:[redacted]@se-got-wg-101:8080
-   http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
-2. at-vie-wg-001 -> 127.0.0.2
-   alias: austria-vienna
-   route id: at-vie-wg-001
-   service: wireproxy-at-vie-wg-001
-   live state: not present in live compose status
-   socks5 backend: route-at-vie-wg-001-socks5
-   http backend: route-at-vie-wg-001-http
-   dns: not required; use direct bind IP entrypoints
-   socks5 hostname: socks5://[redacted]:[redacted]@at-vie-wg-001:1080
-   socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
-   http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
-   http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
+      routes
+      1. se-got-wg-101 -> 127.0.0.1
+         alias: sweden-gothenburg
+         route id: se-got-wg-101
+         service: wireproxy-se-got-wg-101
+         live state: not present in live compose status
+         dns: not required; use direct bind IP entrypoints
+         socks5 hostname: socks5://[redacted]:[redacted]@se-got-wg-101:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
+         http hostname: http://[redacted]:[redacted]@se-got-wg-101:8080
+         http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
+      2. at-vie-wg-001 -> 127.0.0.2
+         alias: austria-vienna
+         route id: at-vie-wg-001
+         service: wireproxy-at-vie-wg-001
+         live state: not present in live compose status
+         dns: not required; use direct bind IP entrypoints
+         socks5 hostname: socks5://[redacted]:[redacted]@at-vie-wg-001:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
+         http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
+         http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
 
-warnings
-- no persisted last-start report exists yet; run \`mullgate start\` to capture a fresh launch diagnostic.
-- routing layer is not fully healthy: not present in live compose status.
-- route se-got-wg-101 is stopped: not present in live compose status.
-- route at-vie-wg-001 is stopped: not present in live compose status.
+      network-mode guidance
+      - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
+      - Use \`mullgate config hosts\` if you want a copy/paste /etc/hosts block for this machine.
 
-last start diagnostics
-status: none persisted yet"
-`);
+      warnings
+      - no persisted last-start report exists yet; run \`mullgate start\` to capture a fresh launch diagnostic.
+      - routing layer is not fully healthy: not present in live compose status.
+      - route se-got-wg-101 is stopped: not present in live compose status.
+      - route at-vie-wg-001 is stopped: not present in live compose status.
+
+      last start diagnostics
+      status: none persisted yet"
+    `);
   });
 });

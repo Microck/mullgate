@@ -47,6 +47,7 @@ type VerificationOptions = {
   readonly targetUrl: string;
   readonly routeCheckIp: string;
   readonly keepTempHome: boolean;
+  readonly reuseTempHome?: string;
 };
 
 type VerificationContract = {
@@ -103,7 +104,7 @@ async function main(): Promise<void> {
   }
 
   const contract = resolveContract(options);
-  const root = await mkdtemp(path.join(tmpdir(), 'mullgate-s06-'));
+  const root = options.reuseTempHome ? path.resolve(options.reuseTempHome) : await mkdtemp(path.join(tmpdir(), 'mullgate-s06-'));
   const artifactsDir = path.join(root, 'verifier-artifacts');
   await mkdir(artifactsDir, { recursive: true, mode: 0o700 });
 
@@ -139,35 +140,62 @@ async function main(): Promise<void> {
     }
 
     context.phase = 'setup';
-    logPhase(context.phase, 'Running non-interactive mullgate setup inside a temp XDG home.');
-    const setupResult = await runCliCommand(context, env, ['setup', '--non-interactive'], 'setup');
+    if (options.reuseTempHome) {
+      logPhase(context.phase, `Reusing preserved temp XDG home at ${root}; skipping non-interactive setup.`);
+    } else {
+      logPhase(context.phase, 'Running non-interactive mullgate setup inside a temp XDG home.');
+      const setupResult = await runCliCommand(context, env, ['setup', '--non-interactive'], 'setup');
 
-    if (setupResult.exitCode !== 0) {
-      const guidance = setupResult.stderr.includes('KEY_LIMIT_REACHED') || setupResult.stderr.includes('maximum number of WireGuard keys')
-        ? [
-            'The configured Mullgate proof needs one free Mullvad WireGuard device slot per routed location.',
-            `Current route count: ${env.MULLGATE_LOCATIONS?.split(',').map((entry) => entry.trim()).filter(Boolean).length ?? 0}`,
-            'Revoke old Mullvad devices or reduce the routed location count before rerunning `pnpm verify:s06`.',
-          ]
-        : [];
+      if (setupResult.exitCode !== 0) {
+        const guidance = setupResult.stderr.includes('KEY_LIMIT_REACHED') || setupResult.stderr.includes('maximum number of WireGuard keys')
+          ? [
+              'The configured Mullgate proof needs one free Mullvad WireGuard device slot per routed location.',
+              `Current route count: ${env.MULLGATE_LOCATIONS?.split(',').map((entry) => entry.trim()).filter(Boolean).length ?? 0}`,
+              'Revoke old Mullvad devices or reduce the routed location count before rerunning `pnpm verify:s06`.',
+            ]
+          : [];
 
-      throw new Error(
-        [
-          `phase: ${context.phase}`,
-          'mullgate setup failed.',
-          ...guidance,
-          `stdout: ${setupResult.stdoutPath}`,
-          `stderr: ${setupResult.stderrPath}`,
-          `metadata: ${setupResult.metadataPath}`,
-        ].join('\n'),
-      );
+        throw new Error(
+          [
+            `phase: ${context.phase}`,
+            'mullgate setup failed.',
+            ...guidance,
+            `stdout: ${setupResult.stdoutPath}`,
+            `stderr: ${setupResult.stderrPath}`,
+            `metadata: ${setupResult.metadataPath}`,
+          ].join('\n'),
+        );
+      }
     }
 
     const store = new ConfigStore(paths);
-    const configAfterSetup = await loadConfig(store);
+    let configAfterSetup = await loadConfig(store);
+
+    if (options.reuseTempHome && tlsAssets) {
+      configAfterSetup = {
+        ...configAfterSetup,
+        updatedAt: new Date().toISOString(),
+        setup: {
+          ...configAfterSetup.setup,
+          https: {
+            ...configAfterSetup.setup.https,
+            enabled: true,
+            certPath: tlsAssets.certPath,
+            keyPath: tlsAssets.keyPath,
+          },
+        },
+      };
+      await store.save(configAfterSetup);
+    }
+
     context.config = configAfterSetup;
     assertAtLeastTwoRoutes(configAfterSetup);
-    assertNoSecretLeaks('setup output', `${setupResult.stdout}\n${setupResult.stderr}`, configAfterSetup);
+
+    if (!options.reuseTempHome) {
+      const setupStdout = await readFile(path.join(context.artifactsDir, 'setup.stdout.txt'), 'utf8').catch(() => '');
+      const setupStderr = await readFile(path.join(context.artifactsDir, 'setup.stderr.txt'), 'utf8').catch(() => '');
+      assertNoSecretLeaks('setup output', `${setupStdout}\n${setupStderr}`, configAfterSetup);
+    }
 
     context.phase = 'config-hosts';
     logPhase(context.phase, 'Inspecting emitted hostname → bind IP mappings.');
@@ -190,6 +218,11 @@ async function main(): Promise<void> {
 
     const configAfterStart = await loadConfig(store);
     context.config = configAfterStart;
+    await waitForRuntimeSteadyState({
+      composeFilePath: configAfterStart.runtime.runtimeBundle.dockerComposePath,
+      context,
+      timeoutMs: 30_000,
+    });
     const routeAfter = await captureRoute(contract.routeCheckIp, context);
 
     if (normalizeRoute(routeBefore) !== normalizeRoute(routeAfter)) {
@@ -356,9 +389,14 @@ function parseArgs(argv: readonly string[]): VerificationOptions | null {
   let targetUrl = process.env[VERIFY_TARGET_URL_ENV]?.trim() || DEFAULT_TARGET_URL;
   let routeCheckIp = process.env[VERIFY_ROUTE_CHECK_IP_ENV]?.trim() || DEFAULT_ROUTE_CHECK_IP;
   let keepTempHome = false;
+  let reuseTempHome: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
+
+    if (argument === '--') {
+      continue;
+    }
 
     if (argument === '--help' || argument === '-h') {
       process.stdout.write(renderHelp());
@@ -382,10 +420,17 @@ function parseArgs(argv: readonly string[]): VerificationOptions | null {
       continue;
     }
 
+    if (argument === '--reuse-temp-home') {
+      reuseTempHome = readFlagValue(argv, index, '--reuse-temp-home');
+      keepTempHome = true;
+      index += 1;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${argument}`);
   }
 
-  return { targetUrl, routeCheckIp, keepTempHome };
+  return { targetUrl, routeCheckIp, keepTempHome, ...(reuseTempHome ? { reuseTempHome } : {}) };
 }
 
 function renderHelp(): string {
@@ -423,12 +468,14 @@ function renderHelp(): string {
     'If HTTPS cert/key paths are not provided, the verifier requires `openssl` so it can',
     'generate a temporary self-signed pair without persisting raw private-key material in',
     'the saved failure bundle.',
-    'The verifier also needs one free Mullvad WireGuard device slot per routed location.',
+    'The verifier also needs one free Mullvad WireGuard device slot per routed location unless',
+    'you resume from a previously preserved temp home with --reuse-temp-home.',
     '',
     'Options:',
     `  --target-url <url>        Exit-check endpoint to query (default: ${DEFAULT_TARGET_URL})`,
     `  --route-check-ip <ip>     Direct-route IP used for host-route drift checks (default: ${DEFAULT_ROUTE_CHECK_IP})`,
     '  --keep-temp-home           Preserve the temp XDG home even on success.',
+    '  --reuse-temp-home <path>   Resume verification from an earlier preserved temp home instead of provisioning new devices.',
     '  -h, --help                 Show this help text.',
     '',
   ].join('\n');
@@ -847,6 +894,66 @@ function findEndpoint(endpoints: readonly RuntimeEndpoint[], protocol: ProxyProt
   }
 
   return endpoint;
+}
+
+async function waitForRuntimeSteadyState(input: {
+  readonly composeFilePath: string;
+  readonly context: VerificationContext;
+  readonly timeoutMs: number;
+}): Promise<void> {
+  const deadline = Date.now() + input.timeoutMs;
+  let lastSummary = 'runtime not yet checked';
+
+  while (Date.now() < deadline) {
+    const result = await runRecordedCommand(input.context, {
+      label: `compose-ps-wait-${Date.now()}`,
+      command: 'docker',
+      args: ['compose', '--file', input.composeFilePath, 'ps', '--all', '--format', 'json'],
+      cwd: repoRoot,
+      env: process.env,
+      displayCommand: `docker compose --file ${input.composeFilePath} ps --all --format json`,
+    });
+
+    if (result.exitCode !== 0) {
+      lastSummary = `compose ps failed: ${result.stderr || result.stdout || 'unknown error'}`;
+      await new Promise((resolve) => {
+        setTimeout(resolve, 1_000);
+      });
+      continue;
+    }
+
+    const lines = result.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (lines.length === 0) {
+      lastSummary = 'compose reported zero containers';
+      await new Promise((resolve) => {
+        setTimeout(resolve, 1_000);
+      });
+      continue;
+    }
+
+    const containers = lines.map((line) => JSON.parse(line) as { Service?: string; State?: string; Status?: string });
+    const expectedServices = new Set(['routing-layer', ...((input.context.config?.routing.locations ?? []).map((route) => route.runtime.wireproxyServiceName))]);
+    const liveServices = new Map(containers.map((container) => [container.Service ?? 'unknown', `${container.State ?? 'unknown'} (${container.Status ?? 'n/a'})`]));
+    const allRunning = [...expectedServices].every((service) => {
+      const status = liveServices.get(service);
+      return typeof status === 'string' && status.toLowerCase().startsWith('running');
+    });
+
+    if (allRunning) {
+      return;
+    }
+
+    lastSummary = [...expectedServices].map((service) => `${service}=${liveServices.get(service) ?? 'missing'}`).join(', ');
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1_000);
+    });
+  }
+
+  throw new Error(`Timed out waiting for runtime steady state: ${lastSummary}`);
 }
 
 async function waitForPort(host: string, port: number, timeoutMs: number): Promise<void> {

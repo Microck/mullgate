@@ -422,10 +422,17 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
   const allowLanMismatch = config.setup.exposure.allowLan !== expectedAllowLan;
   const details = [
     `mode=${exposure.mode}`,
+    `mode-label=${exposure.posture.modeLabel}`,
+    `recommendation=${exposure.posture.recommendation}`,
+    `posture-summary=${exposure.posture.summary}`,
+    `remote-story=${exposure.posture.remoteStory}`,
     `base-domain=${exposure.baseDomain ?? 'n/a'}`,
     `allow-lan=${exposure.allowLan ? 'yes' : 'no'}`,
     `dns-records=${exposure.dnsRecords.length}`,
     `routes=${exposure.routes.length}`,
+    `bind-remediation=${exposure.remediation.bindPosture}`,
+    `hostname-remediation=${exposure.remediation.hostnameResolution}`,
+    `restart-remediation=${exposure.remediation.restart}`,
     ...exposure.warnings.map((warning) => `${warning.severity}: ${warning.message}`),
   ];
 
@@ -435,7 +442,7 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
       outcome: 'degraded',
       summary: 'Saved exposure flags disagree with the configured exposure mode.',
       details,
-      remediation: 'Re-save the exposure contract with `mullgate config exposure ...` so allow-lan and the bind posture stay aligned.',
+      remediation: 'Re-save the exposure contract with `mullgate config exposure ...` so allow-lan and the saved network-mode posture stay aligned.',
     };
   }
 
@@ -445,7 +452,7 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
       outcome: 'degraded',
       summary: 'Saved exposure contract includes warning-level posture guidance that operators should resolve or consciously accept.',
       details,
-      remediation: 'Review the saved exposure mode/bind IPs and address the warning-level posture issues before relying on remote entrypoints.',
+      remediation: exposure.remediation.bindPosture,
     };
   }
 

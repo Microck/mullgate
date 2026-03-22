@@ -870,7 +870,7 @@ reason: Validated via wireproxy-binary/configtest."
 `);
 
         const renderedWireproxyConfig = await readFile(paths.wireproxyConfigFile, 'utf8');
-        expect(renderedWireproxyConfig).toContain('BindAddress = 0.0.0.0:9091');
+        expect(renderedWireproxyConfig).toContain('BindAddress = 127.0.0.1:9091');
         expect(renderedWireproxyConfig).toContain('Password = rotated-password');
       },
     );
