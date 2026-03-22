@@ -1,37 +1,52 @@
-# Mullgate
+<p align="center">
+  <img src="docs/mullgate-logo.svg" alt="Mullgate" width="160" />
+</p>
 
-Mullgate is a Linux-first, CLI-first Mullvad proxy bootstrapper. It guides setup, persists a canonical config under XDG paths, renders a Docker runtime bundle, and gives you route-aware inspection surfaces with `status`, `doctor`, and `config` commands.
+---
 
-## First-release scope
+`mullgate` turns your Mullvad subscription into authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. it is built for people who want app-level routing, named location endpoints, and a self-hosted CLI workflow without sending the whole machine through a VPN.
 
-This repository currently ships a **Linux-first runtime** with **cross-platform config/diagnostic reporting**.
+[documentation](docs/usage.md) | [source install](#install-and-run) | [release verifier](#integrated-release-verifier)
 
-- Fully supported: Linux runtime execution from a source checkout or built CLI install with Node.js 22+, pnpm, and Docker Compose.
-- Supported: guided or non-interactive setup, route-aware host mapping guidance, Docker runtime start, `status`, `doctor`, and config inspection/update commands on Linux.
-- Supported: platform-aware `config path`, runtime-manifest output, `status`, and `doctor` reporting for Linux, macOS, and Windows.
-- Limited: macOS and Windows runtime execution under the current Docker-first topology, because Docker Desktop does not provide the Linux host-networking semantics that Mullgate's per-route bind-IP runtime depends on.
-- Not shipped here: GUI flows or a separate desktop installer surface.
+## why
 
-## Prerequisites
+if you want Mullvad-backed proxy access without replacing your computer's normal network path, Mullgate gives you a practical path.
 
-Install these before following the **full runtime quick start**:
+- expose authenticated SOCKS5, HTTP, and HTTPS proxy endpoints from your own Mullvad subscription
+- route only the traffic you choose instead of tunneling the whole machine
+- use named location endpoints and route-aware diagnostics from one CLI
+- keep Linux as the truthful full runtime target while still getting cross-platform config and diagnostic reporting
+
+## first-release scope
+
+this repository currently ships a **Linux-first runtime** with **cross-platform config/diagnostic reporting**.
+
+- fully supported: Linux runtime execution from a source checkout or built CLI install with Node.js 22+, pnpm, and Docker Compose.
+- supported: guided or non-interactive setup, route-aware host mapping guidance, Docker runtime start, `status`, `doctor`, and config inspection/update commands on Linux.
+- supported: platform-aware `config path`, runtime-manifest output, `status`, and `doctor` reporting for Linux, macOS, and Windows.
+- limited: macOS and Windows runtime execution under the current Docker-first topology, because Docker Desktop does not provide the Linux host-networking semantics that Mullgate's per-route bind-IP runtime depends on.
+- not shipped here: GUI flows or a separate desktop installer surface.
+
+## prerequisites
+
+install these before following the **full runtime quick start**:
 
 - Linux
 - Node.js 22+
 - pnpm
 - Docker with the `docker compose` plugin available on `PATH`
 - curl
-- A live Mullvad account number
-- A proxy username/password you want Mullgate to require on the published SOCKS5/HTTP/HTTPS listeners
-- Enough free Mullvad WireGuard device slots for the routed locations you will verify (the default two-route proof needs two free slots)
+- a live Mullvad account number
+- a proxy username/password you want Mullgate to require on the published SOCKS5/HTTP/HTTPS listeners
+- enough free Mullvad WireGuard device slots for the routed locations you will verify (the default two-route proof needs two free slots)
 - `openssl` if you want `pnpm verify:s06` to generate its own temporary HTTPS certificate/key pair
 
-Cross-platform note:
+cross-platform note:
 
 - `config path`, `status`, `doctor`, and the runtime manifest now report truthful platform support on Linux, macOS, and Windows.
-- The current Docker-first runtime remains Linux-first. On macOS and Windows, treat the CLI and manifest surfaces as supported diagnostics/config tooling, but use a Linux host or Linux VM when you need the shipped multi-route runtime to behave truthfully end to end.
+- the current Docker-first runtime remains Linux-first. on macOS and Windows, treat the CLI and manifest surfaces as supported diagnostics/config tooling, but use a Linux host or Linux VM when you need the shipped multi-route runtime to behave truthfully end to end.
 
-## Platform support matrix
+## platform support matrix
 
 | Platform | Config paths | Runtime manifest | `status` / `doctor` | Runtime execution |
 | --- | --- | --- | --- | --- |
@@ -257,6 +272,14 @@ When something looks wrong, check these in order:
 4. `pnpm exec tsx src/cli.ts config exposure`
 5. `runtime-manifest.json` for the rendered listener/route inventory
 6. `last-start.json` for the last runtime launch result and failure context
+
+On a runtime launch failure, `last-start.json` and `status`/`doctor` are the fastest way to see the failing phase, route, bind IP, service name, compose file, and validation source without printing raw credentials.
+
+## next reading
+
+- [docs/usage.md](docs/usage.md) — non-interactive setup variables, exposure editing, validation, hostname caveats, and troubleshooting details.
+
+ure context
 
 On a runtime launch failure, `last-start.json` and `status`/`doctor` are the fastest way to see the failing phase, route, bind IP, service name, compose file, and validation source without printing raw credentials.
 
