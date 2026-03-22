@@ -9,7 +9,27 @@ This guide expands on the Linux-first flow in the repository [README](../README.
 - `mullgate doctor --help`
 - `mullgate config --help`
 
-From a source checkout, replace `mullgate` with `pnpm exec tsx src/cli.ts`.
+## Install forms
+
+Mullgate now has three truthful invocation forms, in this order of preference:
+
+1. **Installed tarball binary** — the supported distribution artifact verified by `pnpm verify:m003-install-path`
+2. **Built CLI from a checkout** — `node dist/cli.js ...`
+3. **Contributor/source-checkout path** — `pnpm exec tsx src/cli.ts ...`
+
+This guide still shows source-checkout commands because the repo examples are easiest to reproduce that way. For an installed tarball, replace those `pnpm exec tsx src/cli.ts ...` examples with your installed `mullgate ...` binary.
+
+## Platform support posture
+
+Mullgate now reports platform support truthfully on Linux, macOS, and Windows.
+
+| Platform | `config path` | `status` / `doctor` | Current runtime execution |
+| --- | --- | --- | --- |
+| Linux | Supported | Supported | **Fully supported** |
+| macOS | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
+| Windows | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
+
+Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat the CLI and runtime manifest as supported config/diagnostic surfaces, but use a Linux host or Linux VM when you need the shipped multi-route Docker runtime to behave truthfully end to end.
 
 ## Non-interactive setup inputs
 
@@ -277,6 +297,13 @@ The fastest way to find the active XDG paths is:
 ```bash
 pnpm exec tsx src/cli.ts config path
 ```
+
+That report now also prints:
+
+- the resolved platform id and whether it came from the real host or `MULLGATE_PLATFORM`
+- the current platform support level (`full` on Linux, `partial` on macOS/Windows)
+- the runtime story and host-networking limitations for the current platform
+- platform guidance and warnings that match the wording used by `status`, `doctor`, and `runtime-manifest.json`
 
 Important files:
 

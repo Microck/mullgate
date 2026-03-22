@@ -4,15 +4,17 @@ Mullgate is a Linux-first, CLI-first Mullvad proxy bootstrapper. It guides setup
 
 ## First-release scope
 
-This repository currently ships a **Linux + Docker** operator flow.
+This repository currently ships a **Linux-first runtime** with **cross-platform config/diagnostic reporting**.
 
-- Supported: running from a source checkout with Node.js 22+, pnpm, and Docker Compose.
-- Supported: guided or non-interactive setup, route-aware host mapping guidance, Docker runtime start, `status`, `doctor`, and config inspection/update commands.
-- Not shipped here: GUI flows, Windows/macOS operator docs, or a separate installer surface.
+- Fully supported: Linux runtime execution from a source checkout or built CLI install with Node.js 22+, pnpm, and Docker Compose.
+- Supported: guided or non-interactive setup, route-aware host mapping guidance, Docker runtime start, `status`, `doctor`, and config inspection/update commands on Linux.
+- Supported: platform-aware `config path`, runtime-manifest output, `status`, and `doctor` reporting for Linux, macOS, and Windows.
+- Limited: macOS and Windows runtime execution under the current Docker-first topology, because Docker Desktop does not provide the Linux host-networking semantics that Mullgate's per-route bind-IP runtime depends on.
+- Not shipped here: GUI flows or a separate desktop installer surface.
 
 ## Prerequisites
 
-Install these before following the quick start:
+Install these before following the **full runtime quick start**:
 
 - Linux
 - Node.js 22+
@@ -24,25 +26,87 @@ Install these before following the quick start:
 - Enough free Mullvad WireGuard device slots for the routed locations you will verify (the default two-route proof needs two free slots)
 - `openssl` if you want `pnpm verify:s06` to generate its own temporary HTTPS certificate/key pair
 
-## Command form used in this repo
+Cross-platform note:
 
-From a checkout, invoke the CLI with:
+- `config path`, `status`, `doctor`, and the runtime manifest now report truthful platform support on Linux, macOS, and Windows.
+- The current Docker-first runtime remains Linux-first. On macOS and Windows, treat the CLI and manifest surfaces as supported diagnostics/config tooling, but use a Linux host or Linux VM when you need the shipped multi-route runtime to behave truthfully end to end.
+
+## Platform support matrix
+
+| Platform | Config paths | Runtime manifest | `status` / `doctor` | Runtime execution |
+| --- | --- | --- | --- | --- |
+| Linux | Supported | Supported | Supported | **Fully supported** |
+| macOS | Supported | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
+| Windows | Supported | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
+
+Interpretation:
+
+- Linux is the reference runtime target for the current Mullgate topology.
+- macOS and Windows are supported for truthful path inspection and diagnostics, but not for claiming Linux-equivalent runtime parity under the current Docker-first design.
+- If you need the current multi-route runtime to behave truthfully on macOS or Windows, run it inside a Linux VM or on a separate Linux host.
+
+## Install and run
+
+### Supported distribution artifact: release tarball
+
+Mullgate’s first-class distribution surface in this repo is the packed tarball produced by `pnpm pack`. The tarball contains the built CLI (`dist/`) plus the README, and M003’s install-path verifier proves that installing that tarball into a clean prefix exposes a working `mullgate` command.
+
+To produce the tarball locally:
 
 ```bash
-pnpm exec tsx src/cli.ts --help
+pnpm build
+pnpm pack --pack-destination release-artifacts
 ```
 
-The help text and docs call the command `mullgate` because that is the CLI name exposed by the program. In a source checkout, replace `mullgate ...` with `pnpm exec tsx src/cli.ts ...`.
+That writes a file like `release-artifacts/mullgate-0.1.0.tgz`.
 
-## Quick start
+### Option 1: install the packed tarball locally
 
-### 1. Install dependencies
+```bash
+pnpm build
+pnpm pack --pack-destination release-artifacts
+npm install -g --prefix "$HOME/.local" ./release-artifacts/mullgate-0.1.0.tgz
+~/.local/bin/mullgate --help
+```
+
+This is the current supported installed-user path for the repo. If you prefer a different prefix, change `--prefix` and invoke the installed `bin/mullgate` from that prefix.
+
+### Option 2: source checkout (current contributor path)
 
 ```bash
 pnpm install
+pnpm build
+pnpm exec tsx src/cli.ts --help
+```
+
+This is the most complete path in the repository today and the one used by the current tests/verifiers.
+
+### Option 3: built CLI from this checkout
+
+After `pnpm build`, you can invoke the compiled CLI directly:
+
+```bash
+node dist/cli.js --help
+```
+
+The help text and docs call the command `mullgate` because that is the CLI name exposed by the program. In a source checkout, replace `mullgate ...` with either the installed tarball binary, `pnpm exec tsx src/cli.ts ...`, or `node dist/cli.js ...`.
+
+### Example environment file
+
+Use `.env.example` as the starting point for non-interactive setup and live verifier inputs. Copy it to `.env` for local work, then replace the example values with real secrets on your machine only.
+
+## Quick start
+
+### 1. Install dependencies and build the CLI
+
+```bash
+pnpm install
+pnpm build
 ```
 
 ### 2. Export the required setup inputs
+
+Use `.env.example` as the authoritative list of documented setup/verifier variables. You can either export them manually or copy `.env.example` to `.env` and load it in your shell.
 
 The example below provisions **two routes** so you can inspect multi-route host mapping behavior immediately:
 
