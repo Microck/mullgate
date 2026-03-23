@@ -26,16 +26,15 @@ if you want Mullvad-backed proxy access without replacing your computer's normal
 - keep one CLI for setup, named exits, runtime checks, and diagnostics
 - stay in control of the host and credentials instead of depending on a hosted relay service
 
-## what makes mullgate special
+## how mullgate differs from mullvad's socks5 proxy
 
-on the surface this can look like "just turn Mullvad into a proxy." it is not that simple.
+mullvad's socks5 proxy is a socks5 endpoint inside the mullvad vpn tunnel. you connect to mullvad first, then manually point an app or browser at that proxy.
 
-- each Mullvad account is limited to 5 WireGuard devices, so multi-route proxying has a real upstream ceiling.
-- the current `mullgate` design provisions one Mullvad WireGuard identity per routed location so each named route can keep a real, distinct exit path.
-- it also keeps the host machine's default route untouched while still exposing authenticated local SOCKS5, HTTP, and HTTPS entrypoints for selected apps.
-- the routing layer has to preserve route selection truthfully across those proxy protocols, which is why the runtime is more than a thin wrapper script.
+mullgate is a local operator layer built around a mullvad subscription. it provisions named exits, exposes authenticated socks5, http, and https proxy entrypoints on your machine, and gives you one cli surface for setup, exposure control, runtime checks, and failure diagnostics.
 
-that device-limit pressure is the reason the architecture matters at all. the current model is strong for a small set of concurrent routed exits, and the next scaling problem is explicitly documented in [the multi-exit architecture spec](docs/multi-exit-architecture-spec.md).
+the goal is not "replace mullvad's proxy page with another set of manual steps." the goal is to give self-hosters a managed proxy gateway that uses mullvad exits without forcing the whole machine through the vpn.
+
+the hard part is that mullvad only gives each account 5 wireguard devices. once you want multiple real routed exits, that limit becomes an architectural constraint, which is why mullgate is more than a thin wrapper around mullvad's socks5 proxy.
 
 ## quickstart
 
