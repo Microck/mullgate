@@ -1,0 +1,112 @@
+---
+title: Troubleshooting
+description: Practical checks for configuration drift, hostname issues, and runtime validation.
+---
+
+This page summarizes the most important troubleshooting patterns described or implied by the Mullgate usage material.
+
+## Start with the CLI
+
+The primary diagnostic surfaces are:
+
+- `mullgate status`
+- `mullgate doctor`
+- `mullgate config exposure`
+- `mullgate config hosts`
+- `mullgate config validate --refresh`
+
+## Common problems
+
+### Hostname does not select the expected route
+
+Check for:
+
+- the hostname resolving to the wrong bind IP
+- two hostnames resolving to the same bind IP
+- a missing local hosts block
+- published DNS records that do not match the configured exposure state
+
+What to do:
+
+1. run `mullgate config exposure`
+2. confirm the route-to-bind-IP mapping
+3. verify local hosts or DNS resolution
+4. run `mullgate doctor`
+
+### Remote clients cannot prove hostname-based routing
+
+Check for:
+
+- shared bind IPs in a multi-route non-loopback setup
+- missing or incorrect DNS records
+- exposure changes that have not been refreshed into runtime state
+
+What to do:
+
+1. assign one explicit bind IP per route
+2. regenerate or review exposure output
+3. publish matching DNS A records
+4. run `mullgate config validate --refresh` or `mullgate start`
+
+### Saved configuration changed but runtime does not match
+
+Likely cause:
+
+- exposure edits left runtime state marked `unvalidated`
+
+What to do:
+
+```bash
+mullgate config validate --refresh
+# or
+mullgate start
+```
+
+### macOS or Windows behaves differently from Linux
+
+This is expected for the shipped multi-route Docker runtime because Docker Desktop host networking is not equivalent to Linux host networking.
+
+What to do:
+
+- treat config and diagnostic surfaces as supported
+- use a Linux host or Linux VM for full runtime proof
+
+### `start` fails before launch
+
+Look for:
+
+- missing Docker Compose support
+- invalid exposure edits
+- validation failures
+- missing HTTPS material when HTTPS is enabled
+
+Use `mullgate status` and `mullgate doctor` to identify which layer failed.
+
+## Troubleshooting workflow
+
+A reliable sequence is:
+
+1. inspect configuration with `mullgate config exposure`
+2. inspect hostname guidance with `mullgate config hosts`
+3. refresh derived runtime state with `mullgate config validate --refresh`
+4. check runtime truth with `mullgate status`
+5. investigate routing or hostname drift with `mullgate doctor`
+6. verify with a real probe such as `curl` through the intended proxy entrypoint
+
+## Escalation questions
+
+If the issue remains unclear, answer these questions explicitly:
+
+- what exposure mode is configured?
+- does every route have a distinct bind IP?
+- what does the hostname resolve to from the failing client?
+- was the runtime refreshed after the last config edit?
+- are you testing on Linux, macOS, or Windows?
+- is HTTPS enabled, and if so are both the cert and key present?
+
+## See also
+
+- [Setup and Exposure](/docs/guides/setup-and-exposure)
+- [Platform Support](/docs/reference/platform-support)
+- [Configuration](/docs/reference/configuration)
+- [FAQ](/docs/faq)

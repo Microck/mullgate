@@ -1,0 +1,53 @@
+---
+title: Maintainer Checklist
+description: A concise operational checklist for preparing, validating, and publishing a Mullgate release.
+---
+
+Use this page as the short-form companion to [Publishing](/docs/operations/publishing).
+
+## Before release
+
+- confirm `package.json` version is correct
+- move release notes from `Unreleased` into a versioned changelog section
+- verify README install instructions still match reality
+- run the full local release check
+
+```bash
+make release-check
+```
+
+## Before npm publish
+
+- confirm npm access to the `mullgate` package
+- confirm the branch and tag state are correct
+- decide whether publishing is local or GitHub Actions-driven
+
+## Local npm publish
+
+```bash
+pnpm publish --no-git-checks --access public --provenance=false
+```
+
+## GitHub automation prerequisites
+
+Automatic npm publishing only runs when the repository has:
+
+- `NPM_TOKEN`
+- `NPM_PUBLISH_ENABLED=true`
+
+## Release asset expectations
+
+A tagged release is expected to verify builds and tests, then attach:
+
+- raw binaries
+- platform archives
+- checksums file
+- `release-notes.md`
+- `release-notes.json`
+
+## After release
+
+- verify the npm package is available
+- verify GitHub release assets uploaded correctly
+- verify documentation still reflects the shipped install and runtime surface
+- sanity-check the README and docs landing page for any version-specific changes

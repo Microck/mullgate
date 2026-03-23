@@ -1,0 +1,90 @@
+---
+title: Installation
+description: Set up the Mullgate documentation site and prepare a local working environment.
+---
+
+This page covers the practical prerequisites for working with the Mullgate docs and the surrounding project materials.
+
+## What is in this repository?
+
+The documentation sources that matter most for Mullgate are:
+
+- `usage.md`
+- `publishing.md`
+- `multi-exit-architecture-spec.md`
+- `mullgate-docs/`
+
+The `mullgate-docs` directory is the FumaDocs application used to publish the site.
+
+## Prerequisites
+
+To work on the documentation site locally, have the following installed:
+
+- Git
+- Node.js
+- a package manager such as `pnpm` or `npm`
+
+If you plan to validate the runtime behavior described in the docs, use a Linux environment for the full end-to-end workflow.
+
+## Open the docs app
+
+From the repository root:
+
+```bash
+cd docs/mullgate-docs
+```
+
+## Install dependencies
+
+If you use `pnpm`:
+
+```bash
+pnpm install
+```
+
+If you use `npm`:
+
+```bash
+npm install
+```
+
+## Run the docs site
+
+```bash
+pnpm dev
+```
+
+Or:
+
+```bash
+npm run dev
+```
+
+Then open the local URL shown in the terminal.
+
+## Production build
+
+```bash
+pnpm build
+```
+
+Or:
+
+```bash
+npm run build
+```
+
+## What this installs
+
+The documentation app uses:
+
+- Next.js
+- `fumadocs-core`
+- `fumadocs-mdx`
+- `fumadocs-ui`
+
+These packages provide the routing, MDX rendering, and navigation experience for the docs site.
+
+## Next step
+
+Continue with [Quickstart](/docs/getting-started/quickstart).

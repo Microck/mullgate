@@ -1,0 +1,71 @@
+---
+title: Architecture Overview
+description: High-level design goals, traffic flow, and trust boundaries for Mullgate.
+---
+
+Mullgate is a gateway-oriented proxy system. It presents local route-specific proxy entrypoints while keeping the operator in control of how traffic is exposed, validated, and observed.
+
+## Design goals
+
+Mullgate's documented design goals include:
+
+- CLI-first operation
+- truthful exposure and routing semantics
+- support for SOCKS5, HTTP, and HTTPS-capable proxy surfaces
+- standalone proxy behavior without taking over host routing
+- explicit runtime and diagnostic visibility
+- release and operations surfaces that are easy to inspect and maintain
+
+## Conceptual flow
+
+At a high level, traffic moves through the system like this:
+
+```txt
+Client
+  |
+  v
+Route-specific local entrypoint
+  |
+  v
+Mullgate routing layer
+  |
+  v
+Selected upstream backend
+  |
+  v
+Destination / observed exit
+```
+
+That flow matters because Mullgate is not trying to hide routing. It is trying to make routing legible.
+
+## Why bind IPs matter
+
+A major architectural point in Mullgate is that route selection is tied to destination bind IPs. That is what allows hostname-selected behavior to stay consistent across multiple proxy protocols, including cases where protocol-level hostname hints are not reliable enough for routing decisions.
+
+In practice, that means the DNS or `/etc/hosts` mapping is part of the route contract.
+
+## Operational surfaces
+
+The architecture is not just a runtime. It also includes operator-facing truth surfaces such as:
+
+- `mullgate status`
+- `mullgate doctor`
+- `mullgate config exposure`
+- runtime manifests and validation metadata
+
+Those surfaces are part of the product, not just debugging tools.
+
+## Current and future architecture
+
+There are two important architecture stories in this documentation:
+
+- the **current runtime model**, which uses one WireGuard identity per route
+- the **proposed multi-exit direction**, which investigates one shared entry tunnel plus many logical exits
+
+Read [Current Runtime Model](/docs/architecture/current-runtime) first, then [Multi-exit Architecture Spec](/docs/architecture/multi-exit).
+
+## See also
+
+- [Usage](/docs/guides/usage)
+- [Setup and Exposure](/docs/guides/setup-and-exposure)
+- [Platform Support](/docs/reference/platform-support)

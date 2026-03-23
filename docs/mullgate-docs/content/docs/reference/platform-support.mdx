@@ -1,0 +1,42 @@
+---
+title: Platform Support
+description: Truthful platform support posture for Mullgate CLI and runtime behavior.
+---
+
+Mullgate documents platform support differently for CLI surfaces and for full runtime execution.
+
+## Support matrix
+
+| Platform | `config path` | `status` / `doctor` | Current runtime execution |
+| --- | --- | --- | --- |
+| Linux | Supported | Supported | **Fully supported** |
+| macOS | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
+| Windows | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
+
+## Recommended usage by platform
+
+### Linux
+
+Use Linux when you need the full setup, runtime, and probe workflow to behave truthfully end to end.
+
+### macOS and Windows
+
+Use macOS or Windows for:
+
+- CLI exploration
+- config inspection
+- status and diagnostic surfaces
+- documentation and workflow review
+
+Do **not** assume the shipped multi-route Docker runtime behaves the same as Linux host networking on these platforms.
+
+## Practical recommendation
+
+If you need to validate the real multi-route runtime, use:
+
+- a Linux host, or
+- a Linux VM
+
+## Why the docs keep repeating this
+
+The platform warning is not an implementation quirk. It is part of the truthfulness contract for the current runtime model and a key part of interpreting the docs correctly.

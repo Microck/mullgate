@@ -1,0 +1,49 @@
+---
+title: Current Runtime Model
+description: Summary of the current Mullgate runtime architecture and its scaling limit.
+---
+
+The current Mullgate runtime, as described by the architecture spec and usage material, is built around a route-per-backend model.
+
+## Core characteristics
+
+The documented current design includes:
+
+- canonical routed config in `routing.locations[]`
+- one rendered backend per configured route
+- one Mullvad-provisioned WireGuard identity per route
+- routing by destination bind IP
+- a Docker-first runtime bundle that connects local proxy surfaces to route-specific upstream backends
+
+## Why this model is coherent
+
+This design is operationally understandable because it keeps route identity explicit:
+
+- each route maps to a specific local entrypoint
+- each local entrypoint maps to a specific upstream backend
+- the diagnostic surfaces can report route behavior consistently
+- the runtime bundle can be rendered and verified in a deterministic way
+
+## The scaling limit
+
+The architecture spec also explains the central limitation:
+
+- 1 location = 1 Mullvad WireGuard key or device
+- 2 locations = 2 Mullvad WireGuard keys or devices
+- 10 locations = 10 Mullvad WireGuard keys or devices
+
+Because Mullvad limits the number of WireGuard keys per account, this model does not scale to many simultaneous country-specific proxies on one account.
+
+## Practical consequence
+
+The current design works for a small number of routes, but it cannot satisfy the target use case of exposing many concurrent country-specific local proxies from a single Mullvad account.
+
+## Why the project needs a new architecture investigation
+
+That scaling ceiling is not just an implementation detail. It is the reason the repository contains a dedicated [Multi-exit Architecture Spec](/docs/architecture/multi-exit) for the next milestone.
+
+## See also
+
+- [Architecture Overview](/docs/architecture/overview)
+- [Usage](/docs/guides/usage)
+- [FAQ](/docs/faq)

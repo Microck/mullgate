@@ -1,0 +1,131 @@
+---
+title: Setup and Exposure
+description: How Mullgate setup, bind IPs, hostnames, and exposure modes fit together.
+---
+
+This guide extracts the setup and exposure model from the main usage document and presents it as an operator-oriented walkthrough.
+
+## Exposure modes
+
+Mullgate describes exposure in terms of how clients reach per-route listeners.
+
+The main modes referenced in the CLI are:
+
+- `loopback`
+- `private-network`
+- `public`
+
+## Loopback mode
+
+Use loopback mode when everything runs on one host and you want the easiest way to prove the workflow.
+
+Typical characteristics:
+
+- route 1 binds to `127.0.0.1`
+- additional routes bind to other loopback addresses such as `127.0.0.2`
+- route aliases act as local hostnames after you install the generated hosts block
+
+This is the best starting point for local validation.
+
+## Private-network mode
+
+Use private-network mode when clients are on a LAN, VPN, or overlay network and should reach route-specific entrypoints from outside the local host.
+
+Typical characteristics:
+
+- each route needs its own explicit bind IP
+- bind IPs must be distinct for multi-route setups
+- a base domain can be used to produce route-aware hostnames such as `sweden-gothenburg.proxy.example.com`
+
+## Public mode
+
+Use public mode when listeners are intentionally exposed on publicly reachable IP addresses.
+
+This should be treated with additional operational care because it expands the attack surface.
+
+## Hostnames versus direct IPs
+
+Mullgate supports both:
+
+- hostname-based entrypoints
+- direct-IP entrypoints
+
+The same route can be reached through either form, but hostname-based routing only remains truthful when the hostname resolves to the route's assigned bind IP.
+
+## Why distinct bind IPs matter
+
+The runtime dispatches by destination bind IP. That is the key design constraint behind the exposure model.
+
+As a result:
+
+- each route must have its own bind IP in non-loopback multi-route setups
+- two hostnames pointing at one bind IP do not represent two distinct routes
+- DNS correctness is part of route correctness
+
+## Inspect current exposure
+
+```bash
+mullgate config exposure
+```
+
+Use this report to verify:
+
+- mode
+- base domain
+- route-to-bind-IP mapping
+- generated hostname inventory
+- DNS records to publish
+- whether runtime validation or restart is needed
+
+## Update exposure safely
+
+Make changes with the CLI instead of editing JSON files manually.
+
+Example:
+
+```bash
+mullgate config exposure \
+  --mode private-network \
+  --base-domain proxy.example.com \
+  --route-bind-ip 192.168.10.10 \
+  --route-bind-ip 192.168.10.11
+```
+
+Then refresh runtime state:
+
+```bash
+mullgate config validate --refresh
+```
+
+Or start the runtime again:
+
+```bash
+mullgate start
+```
+
+## Route planning checklist
+
+Before you finalize exposure settings, make sure you can answer these questions:
+
+- How many routes are you exposing?
+- Does each route have a distinct bind IP?
+- Which hostnames should clients use?
+- Do those hostnames resolve to the intended bind IPs?
+- Is the environment loopback, private network, or public?
+
+## Remote-proof checklist
+
+Before claiming hostname-selected routing works remotely, verify all of the following:
+
+- every route has a distinct bind IP
+- every hostname resolves to the intended bind IP
+- `mullgate config exposure` matches your DNS plan
+- `mullgate doctor` shows no hostname drift
+- real proxy probes produce the expected route behavior
+
+## See also
+
+- [Usage](/docs/guides/usage)
+- [Troubleshooting](/docs/guides/troubleshooting)
+- [Platform Support](/docs/reference/platform-support)
+- [Configuration](/docs/reference/configuration)

@@ -1,0 +1,65 @@
+---
+title: Quickstart
+description: The fastest way to understand Mullgate's setup, routing model, and workflow.
+---
+
+Use this page to get oriented quickly before reading the full usage guide.
+
+## Read the key commands
+
+The usage guide is anchored to these CLI help surfaces:
+
+- `mullgate --help`
+- `mullgate setup --help`
+- `mullgate start --help`
+- `mullgate status --help`
+- `mullgate doctor --help`
+- `mullgate config --help`
+
+## Know the invocation forms
+
+Mullgate has three truthful invocation forms:
+
+1. installed `mullgate` command
+2. packed release asset
+3. contributor or source-checkout path
+
+This documentation uses installed `mullgate ...` examples by default.
+
+## Simple mental model
+
+A normal Mullgate workflow looks like this:
+
+1. run `mullgate setup`
+2. inspect generated configuration and exposure details
+3. start the runtime with `mullgate start`
+4. verify behavior with `mullgate status` and `mullgate doctor`
+5. access routes by hostname or direct bind IP
+
+## Recommended first run
+
+For a low-friction Linux proof, start with a local loopback setup using two routes. That gives you:
+
+- one machine
+- multiple route entrypoints
+- hostname mapping through a generated hosts block
+- a safe environment for verifying the CLI and runtime lifecycle
+
+See the full examples in [Usage](/docs/guides/usage) and [Setup and Exposure](/docs/guides/setup-and-exposure).
+
+## Important platform note
+
+Linux is the fully supported runtime environment.
+
+macOS and Windows support the CLI, config path, and diagnostic surfaces, but Docker Desktop host networking differs from Linux, so the shipped multi-route runtime should not be treated as fully equivalent there.
+
+For the exact support posture, see [Platform Support](/docs/reference/platform-support).
+
+## Suggested next pages
+
+1. [Usage](/docs/guides/usage)
+2. [Setup and Exposure](/docs/guides/setup-and-exposure)
+3. [Architecture Overview](/docs/architecture/overview)
+4. [Current Runtime Model](/docs/architecture/current-runtime)
+5. [Multi-exit Architecture Spec](/docs/architecture/multi-exit)
+6. [Publishing](/docs/operations/publishing)

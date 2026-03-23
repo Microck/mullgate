@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind v4 theme tokens use @theme */
+@theme {
+  --color-fd-background: #f8f4eb;
+  --color-fd-foreground: #192e45;
+  --color-fd-muted: #ece4d5;
+  --color-fd-muted-foreground: #294d73;
+  --color-fd-popover: #fffaf2;
+  --color-fd-popover-foreground: #192e45;
+  --color-fd-card: #fffdf8;
+  --color-fd-card-foreground: #192e45;
+  --color-fd-border: rgba(25, 46, 69, 0.14);
+  --color-fd-primary: #294d73;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #dbe6f0;
+  --color-fd-secondary-foreground: #192e45;
+  --color-fd-accent: #ffefbf;
+  --color-fd-accent-foreground: #192e45;
+  --color-fd-ring: #44ad4d;
+}
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  --color-fd-background: #192e45;
+  --color-fd-foreground: #f8f4eb;
+  --color-fd-muted: #223b59;
+  --color-fd-muted-foreground: #d7e0ea;
+  --color-fd-popover: #20354f;
+  --color-fd-popover-foreground: #f8f4eb;
+  --color-fd-card: #223b59;
+  --color-fd-card-foreground: #f8f4eb;
+  --color-fd-border: rgba(255, 213, 36, 0.18);
+  --color-fd-primary: #ffd524;
+  --color-fd-primary-foreground: #192e45;
+  --color-fd-secondary: #294d73;
+  --color-fd-secondary-foreground: #f8f4eb;
+  --color-fd-accent: #294d73;
+  --color-fd-accent-foreground: #f8f4eb;
+  --color-fd-ring: #44ad4d;
+  color-scheme: dark;
+}
+
+html {
+  background: var(--color-fd-background);
+  font-family: var(--font-mullvad-body), "Open Sans", sans-serif;
+}
+
+body {
+  background: var(--color-fd-background);
+  background-image: none;
+  color: var(--color-fd-foreground);
+  font-family: var(--font-mullvad-body), "Open Sans", sans-serif;
+}
+
+.dark body {
+  background: var(--color-fd-background);
+  background-image: none;
+}
+
+:where(h1, h2, h3, h4, h5, h6, button, [role="button"]) {
+  font-family: var(--font-mullvad-heading), "Source Sans 3", sans-serif;
+}
+
+:where(::selection) {
+  background: rgba(255, 213, 36, 0.45);
+  color: #192e45;
+}

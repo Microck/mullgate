@@ -1,0 +1,66 @@
+---
+title: Commands
+description: Command surfaces referenced throughout the Mullgate documentation.
+---
+
+The documentation repeatedly anchors itself to the following CLI help contract:
+
+- `mullgate --help`
+- `mullgate setup --help`
+- `mullgate start --help`
+- `mullgate status --help`
+- `mullgate doctor --help`
+- `mullgate config --help`
+
+## Core workflow commands
+
+### `mullgate setup`
+
+Used to create or update the base configuration, including account, proxy credentials, routes, and exposure-related settings.
+
+### `mullgate start`
+
+Used to render or launch the runtime environment.
+
+### `mullgate status`
+
+Used to inspect current runtime state.
+
+### `mullgate doctor`
+
+Used to diagnose runtime, routing, and hostname or exposure drift.
+
+### `mullgate config`
+
+Used to inspect and modify configuration surfaces.
+
+Important subcommands referenced in the docs include:
+
+- `mullgate config exposure`
+- `mullgate config hosts`
+- `mullgate config validate --refresh`
+- `mullgate config path`
+
+## Invocation forms
+
+Mullgate can be invoked in three documented ways:
+
+1. installed `mullgate` command
+2. packed release asset
+3. source-checkout execution using `node dist/cli.js ...` or `pnpm exec tsx src/cli.ts ...`
+
+## How the commands fit together
+
+A practical workflow usually looks like this:
+
+1. `mullgate setup`
+2. `mullgate config exposure`
+3. `mullgate config hosts`
+4. `mullgate config validate --refresh`
+5. `mullgate start`
+6. `mullgate status`
+7. `mullgate doctor`
+
+## Reference practice
+
+When in doubt, prefer the live CLI help output as the source of truth for flags, defaults, and command wording.

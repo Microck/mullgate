@@ -1,0 +1,62 @@
+---
+title: FAQ
+description: Common questions about Mullgate's routing model, platform support, and release workflow.
+---
+
+## What is Mullgate?
+
+Mullgate is a CLI-first proxy and gateway product. It exposes local proxy entrypoints, keeps route selection explicit, and provides status and diagnostic surfaces so operators can verify what is happening.
+
+## Is Mullgate a VPN client?
+
+Not in the usual full-device sense. Mullgate's documented goal is standalone proxy behavior without taking over host routing.
+
+## How do I choose a route?
+
+Use the route's configured hostname or its direct bind IP entrypoint. The name-to-route mapping is only truthful when the hostname resolves to the bind IP assigned to that route.
+
+## Why are bind IPs so important?
+
+Mullgate's routing layer dispatches by destination bind IP. That is what keeps hostname-selected behavior stable across SOCKS5, HTTP, and HTTPS surfaces.
+
+## What is the easiest way to test Mullgate locally?
+
+Use a Linux machine and start with a two-route loopback setup. Then run `mullgate config hosts`, install the emitted hosts block, and probe the published entrypoints with a real client such as `curl`.
+
+## Does Mullgate fully support macOS and Windows runtime behavior?
+
+The CLI, config inspection, and diagnostic surfaces are supported, but the current shipped multi-route Docker runtime is Linux-first. Docker Desktop host networking does not match Linux networking behavior closely enough to treat it as equivalent.
+
+## Why is there a multi-exit architecture spec?
+
+Because the current route-per-WireGuard-key model does not scale to many simultaneous country-specific routes on a single Mullvad account. The spec documents the next feasibility question and the proposed direction.
+
+## Which pages should I read first?
+
+A good path is:
+
+1. [Quickstart](/docs/getting-started/quickstart)
+2. [Usage](/docs/guides/usage)
+3. [Setup and Exposure](/docs/guides/setup-and-exposure)
+4. [Current Runtime Model](/docs/architecture/current-runtime)
+5. [Multi-exit Architecture Spec](/docs/architecture/multi-exit)
+
+## Where do release and publishing details live?
+
+See [Publishing](/docs/operations/publishing) and [Maintainer Checklist](/docs/operations/maintainer-checklist).
+
+## What if hostname-based routing is not working?
+
+Check the output from:
+
+- `mullgate config exposure`
+- `mullgate config hosts`
+- `mullgate doctor`
+
+Most hostname issues come down to a missing hosts block, incorrect DNS, or a hostname resolving to the wrong bind IP.
+
+## See also
+
+- [Troubleshooting](/docs/guides/troubleshooting)
+- [Platform Support](/docs/reference/platform-support)
+- [Configuration](/docs/reference/configuration)

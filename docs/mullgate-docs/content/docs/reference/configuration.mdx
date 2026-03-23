@@ -1,0 +1,97 @@
+---
+title: Configuration
+description: Canonical configuration concepts and input surfaces used by Mullgate.
+---
+
+This page summarizes the configuration model that appears throughout the usage and architecture documentation.
+
+## Major configuration areas
+
+### Account and credentials
+
+Required non-interactive setup inputs include:
+
+- Mullvad account number
+- proxy username
+- proxy password
+- one or more route locations
+
+### Routing inventory
+
+The architecture material references a canonical routed config in `routing.locations[]`.
+
+That route inventory is what drives:
+
+- local entrypoint naming
+- bind IP allocation
+- rendered route-specific backends
+- runtime status and manifests
+
+### Exposure configuration
+
+Exposure settings define how routes are reachable.
+
+Key inputs include:
+
+- exposure mode
+- base domain
+- bind host
+- per-route bind IPs
+- listener ports for SOCKS5, HTTP, and HTTPS
+
+### HTTPS listener inputs
+
+When HTTPS-capable proxy support is configured, the docs reference:
+
+- HTTPS port
+- HTTPS certificate path
+- HTTPS key path
+
+### Mullvad endpoints
+
+Optional setup inputs include:
+
+- provisioning endpoint URL
+- relay metadata endpoint URL
+
+## Non-interactive environment variables
+
+The usage guide documents these variables:
+
+- `MULLGATE_ACCOUNT_NUMBER`
+- `MULLGATE_PROXY_USERNAME`
+- `MULLGATE_PROXY_PASSWORD`
+- `MULLGATE_LOCATION`
+- `MULLGATE_LOCATIONS`
+- `MULLGATE_DEVICE_NAME`
+- `MULLGATE_BIND_HOST`
+- `MULLGATE_ROUTE_BIND_IPS`
+- `MULLGATE_EXPOSURE_MODE`
+- `MULLGATE_EXPOSURE_BASE_DOMAIN`
+- `MULLGATE_SOCKS_PORT`
+- `MULLGATE_HTTP_PORT`
+- `MULLGATE_HTTPS_PORT`
+- `MULLGATE_HTTPS_CERT_PATH`
+- `MULLGATE_HTTPS_KEY_PATH`
+- `MULLGATE_MULLVAD_WG_URL`
+- `MULLGATE_MULLVAD_RELAYS_URL`
+
+## Rules worth remembering
+
+- `MULLGATE_LOCATION` is shorthand for route 1
+- `MULLGATE_LOCATIONS` is ordered and comma-separated
+- `MULLGATE_ROUTE_BIND_IPS` is ordered and comma-separated
+- non-loopback exposure requires one explicit bind IP per routed location
+- multi-route non-loopback exposure requires distinct bind IPs
+- CLI commands are the preferred way to mutate configuration state
+
+## Operational guidance
+
+Change configuration through Mullgate CLI commands where possible instead of editing generated JSON by hand.
+
+For operators, the important validation loop is:
+
+1. inspect with `mullgate config exposure`
+2. review hostnames with `mullgate config hosts`
+3. refresh derived state with `mullgate config validate --refresh`
+4. confirm runtime with `mullgate status` and `mullgate doctor`
