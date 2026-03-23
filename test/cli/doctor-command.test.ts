@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -31,12 +31,8 @@ type BufferSink = {
 };
 
 function cleanupWindowsFixturePaths(): void {
-  readdirSync('.').forEach((entry) => {
-    if (!windowsFixturePrefixes.some((prefix) => entry.startsWith(prefix))) {
-      return;
-    }
-
-    rmSync(entry, { recursive: true, force: true });
+  windowsFixturePrefixes.forEach((fixturePath) => {
+    rmSync(fixturePath, { recursive: true, force: true });
   });
 }
 

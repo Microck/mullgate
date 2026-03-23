@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -82,12 +82,8 @@ function createPlatformEnvironment(platform: 'linux' | 'macos' | 'windows'): Nod
 }
 
 function cleanupWindowsFixturePaths(): void {
-  readdirSync('.').forEach((entry) => {
-    if (!windowsFixturePrefixes.some((prefix) => entry.startsWith(prefix))) {
-      return;
-    }
-
-    rmSync(entry, { recursive: true, force: true });
+  windowsFixturePrefixes.forEach((fixturePath) => {
+    rmSync(fixturePath, { recursive: true, force: true });
   });
 }
 
