@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, statSync } from 'node:fs';
 import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,7 +8,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
 import { planRuntimeBundle, renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
-import { expectPrivateFileMode, normalizeFixtureHomePath } from '../helpers/platform-test-utils.js';
+import {
+  cleanupWindowsFixtureArtifacts,
+  expectPrivateFileMode,
+  normalizeFixtureHomePath,
+} from '../helpers/platform-test-utils.js';
 
 const temporaryDirectories: string[] = [];
 const windowsFixturePrefixes = [
@@ -64,9 +68,7 @@ function createPlatformEnvironment(platform: 'macos' | 'windows'): NodeJS.Proces
 }
 
 function cleanupWindowsFixturePaths(): void {
-  windowsFixturePrefixes.forEach((fixturePath) => {
-    rmSync(fixturePath, { recursive: true, force: true });
-  });
+  cleanupWindowsFixtureArtifacts(windowsFixturePrefixes);
 }
 
 function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {

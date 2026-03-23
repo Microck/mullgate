@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, statSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -11,7 +11,10 @@ import { resolveMullgatePaths, resolveRouteWireproxyPaths } from '../src/config/
 import { formatRedactedConfig, redactConfig } from '../src/config/redact.js';
 import { CONFIG_VERSION, type MullgateConfig, mullgateConfigSchema } from '../src/config/schema.js';
 import { ConfigStore, listTemporaryArtifacts } from '../src/config/store.js';
-import { expectPrivateFileMode } from './helpers/platform-test-utils.js';
+import {
+  cleanupWindowsFixtureArtifacts,
+  expectPrivateFileMode,
+} from './helpers/platform-test-utils.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
@@ -82,9 +85,7 @@ function createPlatformEnvironment(platform: 'linux' | 'macos' | 'windows'): Nod
 }
 
 function cleanupWindowsFixturePaths(): void {
-  windowsFixturePrefixes.forEach((fixturePath) => {
-    rmSync(fixturePath, { recursive: true, force: true });
-  });
+  cleanupWindowsFixtureArtifacts(windowsFixturePrefixes);
 }
 
 function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -17,7 +17,10 @@ import type { MullvadRelayCatalog } from '../../src/mullvad/fetch-relays.js';
 import type { DockerComposeStatusResult } from '../../src/runtime/docker-runtime.js';
 import { renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
 import type { ValidateWireproxyResult } from '../../src/runtime/validate-wireproxy.js';
-import { normalizeFixtureHomePath } from '../helpers/platform-test-utils.js';
+import {
+  cleanupWindowsFixtureArtifacts,
+  normalizeFixtureHomePath,
+} from '../helpers/platform-test-utils.js';
 
 const temporaryDirectories: string[] = [];
 const windowsFixturePrefixes = [
@@ -31,9 +34,7 @@ type BufferSink = {
 };
 
 function cleanupWindowsFixturePaths(): void {
-  windowsFixturePrefixes.forEach((fixturePath) => {
-    rmSync(fixturePath, { recursive: true, force: true });
-  });
+  cleanupWindowsFixtureArtifacts(windowsFixturePrefixes);
 }
 
 function createTempEnvironment(): NodeJS.ProcessEnv {

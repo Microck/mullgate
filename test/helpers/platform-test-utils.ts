@@ -1,4 +1,4 @@
-import { chmodSync } from 'node:fs';
+import { chmodSync, readdirSync, rmSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -71,6 +71,26 @@ export function normalizeFixtureHomePath(value: string, home?: string): string {
     .split(windowsHome)
     .join('/tmp/mullgate-home')
     .replaceAll('\\', '/');
+}
+
+export function cleanupWindowsFixtureArtifacts(
+  fixturePrefixes: readonly string[],
+  cwd: string = process.cwd(),
+): void {
+  fixturePrefixes.forEach((fixturePath) => {
+    rmSync(fixturePath, { recursive: true, force: true });
+  });
+
+  if (process.platform === 'win32') {
+    return;
+  }
+
+  // On POSIX, Windows-style paths become literal cwd entries like `C:\Users\...`.
+  readdirSync(cwd)
+    .filter((entry) => fixturePrefixes.some((fixturePrefix) => entry.startsWith(fixturePrefix)))
+    .forEach((entry) => {
+      rmSync(path.join(cwd, entry), { recursive: true, force: true });
+    });
 }
 
 export function expectPrivateFileMode(mode: number): void {
