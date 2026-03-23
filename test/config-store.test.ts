@@ -13,6 +13,8 @@ import { CONFIG_VERSION, type MullgateConfig, mullgateConfigSchema } from '../sr
 import { ConfigStore, listTemporaryArtifacts } from '../src/config/store.js';
 import { expectPrivateFileMode } from './helpers/platform-test-utils.js';
 
+const repoRoot = path.resolve(import.meta.dirname, '..');
+const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
 const temporaryDirectories: string[] = [];
 const windowsFixturePrefixes = [
   'C:\\Users\\alice\\AppData\\Local\\mullgate',
@@ -749,8 +751,8 @@ describe('mullgate config store', () => {
 
   it('prints a clear empty-home message from the real CLI entrypoint', () => {
     const env = createTempEnvironment();
-    const result = spawnSync('pnpm', ['exec', 'tsx', 'src/cli.ts', 'config', 'show'], {
-      cwd: path.resolve(import.meta.dirname, '..'),
+    const result = spawnSync(process.execPath, [tsxCliPath, 'src/cli.ts', 'config', 'show'], {
+      cwd: repoRoot,
       env,
       encoding: 'utf8',
     });

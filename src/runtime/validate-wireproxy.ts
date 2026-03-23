@@ -143,9 +143,14 @@ function runConfigTest(input: {
 }): { kind: 'result'; result: ValidateWireproxyResult } | { kind: 'missing-binary' } {
   const result = input.runner(input.command, input.args, {
     encoding: 'utf8',
+    shell: process.platform === 'win32',
   });
 
   if (result.error && 'code' in result.error && result.error.code === 'ENOENT') {
+    return { kind: 'missing-binary' };
+  }
+
+  if (isWindowsShellMissingBinary(result)) {
     return { kind: 'missing-binary' };
   }
 
@@ -190,6 +195,22 @@ function runConfigTest(input: {
       cause: message,
     },
   };
+}
+
+function isWindowsShellMissingBinary(result: ReturnType<typeof spawnSync>): boolean {
+  if (process.platform !== 'win32') {
+    return false;
+  }
+
+  const message = [result.stderr, result.stdout]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join('\n');
+
+  return (
+    message.includes('is not recognized as an internal or external command') ||
+    message.includes('The system cannot find the file specified') ||
+    message.includes('The system cannot find the path specified')
+  );
 }
 
 async function persistValidationReport(
