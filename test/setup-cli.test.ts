@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import { chmodSync, mkdtempSync } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtempSync } from 'node:fs';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,6 +9,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveMullgatePaths } from '../src/config/paths.js';
 import type { MullgateConfig } from '../src/config/schema.js';
+import {
+  createFakeWireproxyBinary,
+  normalizeFixtureHomePath,
+} from './helpers/platform-test-utils.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const fixturesDir = path.join(repoRoot, 'test/fixtures/mullvad');
@@ -68,31 +72,6 @@ async function readTextFixture(name: string): Promise<string> {
 async function readSavedConfig(env: NodeJS.ProcessEnv): Promise<MullgateConfig> {
   const paths = resolveMullgatePaths(env);
   return JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
-}
-
-async function createFakeWireproxyBinary(env: NodeJS.ProcessEnv): Promise<void> {
-  const binDir = env.PATH?.split(path.delimiter)[0]!;
-  await mkdir(binDir, { recursive: true });
-  const scriptPath = path.join(binDir, 'wireproxy');
-  await writeFile(
-    scriptPath,
-    [
-      '#!/bin/sh',
-      'if [ "$1" != "--configtest" ]; then',
-      '  echo "unsupported fake wireproxy invocation" >&2',
-      '  exit 1',
-      'fi',
-      'config="$2"',
-      'if grep -q "^Address = " "$config" && grep -q "^\\[Peer\\]" "$config" && grep -q "^\\[Socks5\\]" "$config" && grep -q "^\\[http\\]" "$config"; then',
-      '  exit 0',
-      'fi',
-      'echo "fake wireproxy configtest: invalid rendered config at $config" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
-    'utf8',
-  );
-  chmodSync(scriptPath, 0o755);
 }
 
 async function withJsonServer(
@@ -184,7 +163,7 @@ async function runCli(args: string[], options: CliRunOptions): Promise<CliResult
 }
 
 function normalizeOutput(value: string, env: NodeJS.ProcessEnv): string {
-  return value.split(env.HOME!).join('/tmp/mullgate-home').trimEnd();
+  return normalizeFixtureHomePath(value, env.HOME).trimEnd();
 }
 
 function _coerceProcessOutput(value: string | NodeJS.ArrayBufferView | null): string {
@@ -225,7 +204,7 @@ describe('mullgate setup CLI flow', () => {
     { timeout: 10000 },
     async () => {
       const env = createTempEnvironment();
-      await createFakeWireproxyBinary(env);
+      await createFakeWireproxyBinary(env.HOME!);
 
       const provisionFixture = await readTextFixture('wg-provision-response.txt');
       const relayFixture = await readJsonFixture<unknown>('app-relays.json');
@@ -417,7 +396,7 @@ reason: Validated via wireproxy-binary/configtest."
     { timeout: 10000 },
     async () => {
       const env = createTempEnvironment();
-      await createFakeWireproxyBinary(env);
+      await createFakeWireproxyBinary(env.HOME!);
 
       const provisionFixture = JSON.parse(
         await readTextFixture('wg-provision-response.txt'),
@@ -597,7 +576,7 @@ routes: 2
 
   it('persists a domain-backed multi-route exposure contract from the real CLI flow', async () => {
     const env = createTempEnvironment();
-    await createFakeWireproxyBinary(env);
+    await createFakeWireproxyBinary(env.HOME!);
 
     const provisionFixture = JSON.parse(
       await readTextFixture('wg-provision-response.txt'),
@@ -773,7 +752,7 @@ cause: Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a
 
   it('reports route-aware provisioning failures without leaking secrets', async () => {
     const env = createTempEnvironment();
-    await createFakeWireproxyBinary(env);
+    await createFakeWireproxyBinary(env.HOME!);
 
     const provisionFixture = JSON.parse(
       await readTextFixture('wg-provision-response.txt'),
@@ -866,7 +845,7 @@ cause: account [redacted-account] for mullgate-lab-austria-vienna failed upstrea
 
   it('updates saved config values safely and refreshes derived artifacts on validate', async () => {
     const env = createTempEnvironment();
-    await createFakeWireproxyBinary(env);
+    await createFakeWireproxyBinary(env.HOME!);
 
     const provisionFixture = await readTextFixture('wg-provision-response.txt');
     const relayFixture = await readJsonFixture<unknown>('app-relays.json');
@@ -958,7 +937,7 @@ reason: Validated via wireproxy-binary/configtest."
 
   it('reports corrupted rendered artifacts with phase, source, and secret-safe diagnostics', async () => {
     const env = createTempEnvironment();
-    await createFakeWireproxyBinary(env);
+    await createFakeWireproxyBinary(env.HOME!);
 
     const provisionFixture = await readTextFixture('wg-provision-response.txt');
     const relayFixture = await readJsonFixture<unknown>('app-relays.json');
@@ -1022,7 +1001,7 @@ cause: fake wireproxy configtest: invalid rendered config at /tmp/mullgate-home/
 
   it('explains the missing-config validate failure from a clean XDG home', async () => {
     const env = createTempEnvironment();
-    await createFakeWireproxyBinary(env);
+    await createFakeWireproxyBinary(env.HOME!);
 
     const result = await runCli(['config', 'validate'], { env });
 

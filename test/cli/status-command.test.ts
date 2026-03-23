@@ -15,6 +15,7 @@ import {
 import { ConfigStore } from '../../src/config/store.js';
 import type { DockerComposeStatusResult } from '../../src/runtime/docker-runtime.js';
 import { renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
+import { normalizeFixtureHomePath } from '../helpers/platform-test-utils.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -254,7 +255,7 @@ async function seedSavedConfig(
 }
 
 function normalizeOutput(value: string, env: NodeJS.ProcessEnv): string {
-  return value.split(env.HOME!).join('/tmp/mullgate-home').trimEnd();
+  return normalizeFixtureHomePath(value, env.HOME).trimEnd();
 }
 
 function createComposeStatusSuccess(

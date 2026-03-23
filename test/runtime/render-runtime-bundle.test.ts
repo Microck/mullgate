@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
 import { planRuntimeBundle, renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
+import { expectPrivateFileMode, normalizeFixtureHomePath } from '../helpers/platform-test-utils.js';
 
 const temporaryDirectories: string[] = [];
 const windowsFixturePrefixes = [
@@ -236,7 +237,7 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
 }
 
 function normalizePaths(value: string, env: NodeJS.ProcessEnv): string {
-  return value.split(env.HOME!).join('/tmp/mullgate-home');
+  return normalizeFixtureHomePath(value, env.HOME);
 }
 
 afterEach(async () => {
@@ -275,8 +276,8 @@ describe('renderRuntimeBundle', () => {
     const composeStats = statSync(result.artifactPaths.dockerComposePath);
     const manifestStats = statSync(result.artifactPaths.manifestPath);
 
-    expect(composeStats.mode & 0o777).toBe(0o600);
-    expect(manifestStats.mode & 0o777).toBe(0o600);
+    expectPrivateFileMode(composeStats.mode);
+    expectPrivateFileMode(manifestStats.mode);
     expect(manifest).not.toContain('super-secret-password');
     expect(manifest).not.toContain('alice');
 

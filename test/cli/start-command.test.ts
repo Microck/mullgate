@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -14,6 +14,10 @@ import {
 } from '../../src/config/schema.js';
 import { ConfigStore } from '../../src/config/store.js';
 import { normalizeRelayPayload } from '../../src/mullvad/fetch-relays.js';
+import {
+  createFakeWireproxyBinary,
+  normalizeFixtureHomePath,
+} from '../helpers/platform-test-utils.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const fixturesDir = path.join(repoRoot, 'test/fixtures/mullvad');
@@ -216,32 +220,6 @@ async function readRelayCatalogFixture(): Promise<unknown> {
   return JSON.parse(await readFile(path.join(fixturesDir, 'app-relays.json'), 'utf8')) as unknown;
 }
 
-async function createFakeWireproxyBinary(root: string): Promise<string> {
-  const binDir = path.join(root, 'bin');
-  const binaryPath = path.join(binDir, 'wireproxy');
-  await mkdir(binDir, { recursive: true });
-  await writeFile(
-    binaryPath,
-    [
-      '#!/bin/sh',
-      'if [ "$1" != "--configtest" ]; then',
-      '  echo "unsupported fake wireproxy invocation" >&2',
-      '  exit 1',
-      'fi',
-      'config="$2"',
-      'if grep -q "^Address = " "$config" && grep -q "^\\[Peer\\]" "$config" && grep -q "^\\[Socks5\\]" "$config" && grep -q "^\\[http\\]" "$config"; then',
-      '  exit 0',
-      'fi',
-      'echo "fake wireproxy configtest: invalid rendered config at $config" >&2',
-      'exit 1',
-      '',
-    ].join('\n'),
-    'utf8',
-  );
-  chmodSync(binaryPath, 0o755);
-  return binaryPath;
-}
-
 async function seedSavedConfig(
   env: NodeJS.ProcessEnv,
   configure?: (config: MullgateConfig) => MullgateConfig,
@@ -286,11 +264,11 @@ async function seedSavedConfig(
 }
 
 function normalizeOutput(value: string, env: NodeJS.ProcessEnv): string {
-  return value.split(env.HOME!).join('/tmp/mullgate-home').trimEnd();
+  return normalizeFixtureHomePath(value, env.HOME).trimEnd();
 }
 
 function normalizeReport(report: RuntimeStartDiagnostic, env: NodeJS.ProcessEnv): string {
-  return JSON.stringify(report, null, 2).split(env.HOME!).join('/tmp/mullgate-home');
+  return normalizeFixtureHomePath(JSON.stringify(report, null, 2), env.HOME);
 }
 
 afterEach(async () => {

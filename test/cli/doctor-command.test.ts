@@ -17,6 +17,7 @@ import type { MullvadRelayCatalog } from '../../src/mullvad/fetch-relays.js';
 import type { DockerComposeStatusResult } from '../../src/runtime/docker-runtime.js';
 import { renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
 import type { ValidateWireproxyResult } from '../../src/runtime/validate-wireproxy.js';
+import { normalizeFixtureHomePath } from '../helpers/platform-test-utils.js';
 
 const temporaryDirectories: string[] = [];
 const windowsFixturePrefixes = [
@@ -374,7 +375,7 @@ async function seedSavedConfig(
 }
 
 function normalizeOutput(value: string, env: NodeJS.ProcessEnv): string {
-  return value.split(env.HOME!).join('/tmp/mullgate-home').trimEnd();
+  return normalizeFixtureHomePath(value, env.HOME).trimEnd();
 }
 
 function createComposeStatusSuccess(

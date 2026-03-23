@@ -7,10 +7,11 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { renderPathReport } from '../src/commands/config.js';
-import { resolveMullgatePaths } from '../src/config/paths.js';
+import { resolveMullgatePaths, resolveRouteWireproxyPaths } from '../src/config/paths.js';
 import { formatRedactedConfig, redactConfig } from '../src/config/redact.js';
 import { CONFIG_VERSION, type MullgateConfig, mullgateConfigSchema } from '../src/config/schema.js';
 import { ConfigStore, listTemporaryArtifacts } from '../src/config/store.js';
+import { expectPrivateFileMode } from './helpers/platform-test-utils.js';
 
 const temporaryDirectories: string[] = [];
 const windowsFixturePrefixes = [
@@ -437,6 +438,38 @@ describe('mullgate config store', () => {
     });
   });
 
+  it('preserves the incoming runtime-dir separator style for per-route artifacts', () => {
+    expect(
+      resolveRouteWireproxyPaths(
+        { runtimeDir: '/tmp/mullgate/runtime' },
+        { routeId: 'se-got-wg-101', wireproxyConfigFile: 'wireproxy-se-got-wg-101.conf' },
+      ),
+    ).toEqual({
+      wireproxyConfigPath: '/tmp/mullgate/runtime/wireproxy-se-got-wg-101.conf',
+      configTestReportPath: '/tmp/mullgate/runtime/wireproxy-se-got-wg-101-configtest.json',
+    });
+
+    expect(
+      resolveRouteWireproxyPaths(
+        { runtimeDir: 'C:/tmp/mullgate/runtime' },
+        { routeId: 'se-got-wg-101', wireproxyConfigFile: 'wireproxy-se-got-wg-101.conf' },
+      ),
+    ).toEqual({
+      wireproxyConfigPath: 'C:/tmp/mullgate/runtime/wireproxy-se-got-wg-101.conf',
+      configTestReportPath: 'C:/tmp/mullgate/runtime/wireproxy-se-got-wg-101-configtest.json',
+    });
+
+    expect(
+      resolveRouteWireproxyPaths(
+        { runtimeDir: 'C:\\tmp\\mullgate\\runtime' },
+        { routeId: 'se-got-wg-101', wireproxyConfigFile: 'wireproxy-se-got-wg-101.conf' },
+      ),
+    ).toEqual({
+      wireproxyConfigPath: 'C:\\tmp\\mullgate\\runtime\\wireproxy-se-got-wg-101.conf',
+      configTestReportPath: 'C:\\tmp\\mullgate\\runtime\\wireproxy-se-got-wg-101-configtest.json',
+    });
+  });
+
   it('loads a legacy single-location config and persists the routed form with intact legacy mirrors', async () => {
     const env = createTempEnvironment();
     const paths = resolveMullgatePaths(env);
@@ -616,7 +649,7 @@ describe('mullgate config store', () => {
       },
     });
     expect(saved.routing.locations).toHaveLength(2);
-    expect(stats.mode & 0o777).toBe(0o600);
+    expectPrivateFileMode(stats.mode);
     expect(await listTemporaryArtifacts(store.paths.appConfigDir)).toEqual([]);
   });
 

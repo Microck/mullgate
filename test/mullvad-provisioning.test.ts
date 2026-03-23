@@ -18,6 +18,7 @@ import { fetchRelays, normalizeRelayPayload } from '../src/mullvad/fetch-relays.
 import { provisionWireguard } from '../src/mullvad/provision-wireguard.js';
 import { renderWireproxyArtifacts } from '../src/runtime/render-wireproxy.js';
 import { validateWireproxyConfig } from '../src/runtime/validate-wireproxy.js';
+import { expectPrivateFileMode, normalizeFixtureHomePath } from './helpers/platform-test-utils.js';
 
 const fixturesDir = join(process.cwd(), 'test/fixtures/mullvad');
 const temporaryDirectories: string[] = [];
@@ -218,7 +219,7 @@ function createConfig(
 }
 
 function normalizePathInput(value: string, home: string): string {
-  return value.split(home).join('/tmp/mullgate-home');
+  return normalizeFixtureHomePath(value, home);
 }
 
 function createSpawnStub(
@@ -494,7 +495,7 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
         ) as { relayCount: number };
         const configStats = statSync(renderResult.artifactPaths.wireproxyConfigPath);
 
-        expect(configStats.mode & 0o777).toBe(0o600);
+        expectPrivateFileMode(configStats.mode);
         expect(relayCache.relayCount).toBe(5);
 
         const validation = await validateWireproxyConfig({

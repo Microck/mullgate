@@ -58,14 +58,17 @@ export function resolveRouteWireproxyConfigPath(
   paths: Pick<MullgatePaths, 'runtimeDir'>,
   wireproxyConfigFile: string,
 ): string {
-  return path.join(paths.runtimeDir, wireproxyConfigFile);
+  return selectPathModuleFromBase(paths.runtimeDir).join(paths.runtimeDir, wireproxyConfigFile);
 }
 
 export function resolveRouteWireproxyConfigTestReportPath(
   paths: Pick<MullgatePaths, 'runtimeDir'>,
   routeId: string,
 ): string {
-  return path.join(paths.runtimeDir, `wireproxy-${routeId}-configtest.json`);
+  return selectPathModuleFromBase(paths.runtimeDir).join(
+    paths.runtimeDir,
+    `wireproxy-${routeId}-configtest.json`,
+  );
 }
 
 export function resolveRouteWireproxyPaths(
@@ -173,6 +176,10 @@ function selectPathModule(platform: MullgatePlatform): PathModule {
   }
 
   return path.posix;
+}
+
+function selectPathModuleFromBase(basePath: string): PathModule {
+  return basePath.includes('\\') ? path.win32 : path.posix;
 }
 
 function resolveHomeDirectory(input: {
