@@ -1,9 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/mullgate-logo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset=".github/assets/mullgate-logo-light.svg">
-    <img src=".github/assets/mullgate-logo-light.svg" alt="mullgate" width="720">
-  </picture>
+  <img src=".github/assets/mullgate-logo.png" alt="mullgate" width="720">
 </p>
 
 
