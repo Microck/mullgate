@@ -15,7 +15,7 @@
 
 the main setup path is `mullgate setup`. on a real terminal it opens a guided flow that collects your Mullvad account number, proxy credentials, route aliases, bind posture, and optional HTTPS settings, then persists canonical config plus the derived runtime artifacts needed for `start`, `status`, and `doctor`. if you prefer automation, the same surface also supports a fully non-interactive env-driven setup path.
 
-[documentation](docs/usage.md) | [npm](https://www.npmjs.com/package/mullgate) | [github](https://github.com/Microck/mullgate)
+[documentation](https://mullgate.micr.dev) | [npm](https://www.npmjs.com/package/mullgate) | [github](https://github.com/Microck/mullgate)
 
 ## why
 
@@ -138,28 +138,13 @@ curl \
   https://am.i.mullvad.net/json
 ```
 
-## install and release notes
-
-- npm is the canonical install surface for the published CLI
-- GitHub Releases attach standalone binaries, platform archives, checksums, and extracted release notes
-- `scripts/install.sh` and `scripts/install.ps1` are convenience wrappers around the published npm package
-- `pnpm verify:s06` remains the Linux-first end-to-end proof for the assembled runtime
-
 ## documentation
 
-- [usage guide](docs/usage.md)
+- [documentation site](https://mullgate.micr.dev)
+- [usage guide](https://mullgate.micr.dev/docs)
 - [publishing guide](docs/publishing.md)
 - [multi-exit architecture spec](docs/multi-exit-architecture-spec.md)
 - [`.env.example`](.env.example) - documented setup inputs for local runs
-- `pnpm verify:s06` - integrated Linux-first runtime proof
-- `pnpm verify:m003-install-path` - packed release/install-path proof
-
-## community
-
-- [contributing guide](CONTRIBUTING.md)
-- [security policy](SECURITY.md)
-- [support guide](SUPPORT.md)
-- [code of conduct](CODE_OF_CONDUCT.md)
 
 ## disclaimer
 
