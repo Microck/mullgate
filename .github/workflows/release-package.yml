@@ -1,44 +1,94 @@
-name: release-package
+name: Release
 
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: tag to release, e.g. v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
-  package:
+  release:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
         with:
-          version: 10.18.3
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify install path
-        run: pnpm verify:m003-install-path
+      - name: Build
+        run: pnpm build
 
-      - name: Pack tarball
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test --run
+
+      - id: tag
+        name: Determine tag
         run: |
-          mkdir -p release-artifacts
-          pnpm pack --pack-destination release-artifacts
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Upload tarball artifact
-        uses: actions/upload-artifact@v4
+      - id: notes
+        name: Extract release notes from CHANGELOG
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${TAG#v}"
+          VERSION_REGEX="$(printf '%s\n' "$VERSION" | sed 's/[][(){}.+*?^$|\\]/\\&/g')"
+          NOTES="$(awk -v version="$VERSION_REGEX" '
+            $0 ~ "^##[[:space:]]+\\[?" version "\\]?([[:space:]]+-.*)?$" { capture=1; next }
+            capture && /^##[[:space:]]+/ { exit }
+            capture { print }
+          ' CHANGELOG.md)"
+          {
+            echo "notes<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pack release tarball
+        run: |
+          pnpm pack
+          TARFILE="$(ls -t ./*.tgz | head -n 1)"
+          mv "$TARFILE" "mullgate-${{ steps.tag.outputs.tag }}.tgz"
+
+      - name: Generate checksums
+        run: sha256sum "mullgate-${{ steps.tag.outputs.tag }}.tgz" > checksums.txt
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
         with:
-          name: mullgate-tarball
-          path: release-artifacts/*.tgz
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: mullgate (${{ steps.tag.outputs.tag }})
+          body: ${{ steps.notes.outputs.notes }}
+          files: |
+            mullgate-${{ steps.tag.outputs.tag }}.tgz
+            checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

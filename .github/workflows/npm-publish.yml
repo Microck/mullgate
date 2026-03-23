@@ -1,0 +1,59 @@
+name: Publish to npm
+
+on:
+  workflow_run:
+    workflows:
+      - Release
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  publish:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - id: check-publish-flag
+        name: Check publish flag
+        env:
+          NPM_PUBLISH_ENABLED: ${{ secrets.NPM_PUBLISH_ENABLED }}
+        run: |
+          if [[ "$NPM_PUBLISH_ENABLED" != "true" ]]; then
+            echo "NPM_PUBLISH_ENABLED not set to true — skipping"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install pnpm
+        if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
+        run: pnpm build
+
+      - name: Publish package
+        if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
+        run: pnpm publish --no-git-checks --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
