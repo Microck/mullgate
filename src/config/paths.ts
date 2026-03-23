@@ -341,9 +341,17 @@ function resolveWindowsBaseDir(input: {
 function normalizeAbsolutePath(value: string | undefined, pathModule: PathModule): string | null {
   const trimmed = value?.trim();
 
-  if (!trimmed || !pathModule.isAbsolute(trimmed)) {
+  if (!trimmed) {
+    return null;
+  }
+
+  if (!pathModule.isAbsolute(trimmed) && !isWindowsDriveAbsolutePath(trimmed)) {
     return null;
   }
 
   return trimmed;
+}
+
+function isWindowsDriveAbsolutePath(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(value);
 }

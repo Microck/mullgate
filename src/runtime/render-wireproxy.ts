@@ -460,6 +460,12 @@ async function writeFileAtomic(filePath: string, content: string, mode: number):
     await rename(temporaryPath, filePath);
     await chmod(filePath, mode);
 
+    // Windows does not support syncing directory handles the same way POSIX does.
+    // The rename still gives us the atomic replacement we need for these artifacts.
+    if (process.platform === 'win32') {
+      return;
+    }
+
     const directoryHandle = await open(directory, 'r');
     try {
       await directoryHandle.sync();
