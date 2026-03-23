@@ -1,14 +1,24 @@
 <p align="center">
-  <img src="docs/mullgate-logo.svg" alt="mullgate" width="160" />
+  <img src="docs/mullgate-hero-logo.png" alt="mullgate" width="220" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/Microck/mullgate/releases"><img src="https://img.shields.io/github/v/release/Microck/mullgate?display_name=tag&color=000000" alt="release" /></a>
+  <a href="https://github.com/Microck/mullgate/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Microck/mullgate/ci.yml?branch=main&label=ci&color=000000" alt="ci" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Microck/mullgate?color=000000" alt="license" /></a>
+</p>
+
+<p align="center">
+  <code>mullgate</code> turns your Mullvad subscription into authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. it is built for people who want one command surface for setup, app-level routing, named location endpoints, and a self-hosted workflow without sending the whole machine through a VPN.
+</p>
+
+<p align="center">
+  <a href="docs/usage.md">documentation</a> |
+  <a href="#install-and-run">install</a> |
+  <a href="#integrated-release-verifier">release verifier</a>
 </p>
 
 ---
-
-[![release](https://img.shields.io/github/v/release/Microck/mullgate?display_name=tag&color=000000)](https://github.com/Microck/mullgate/releases) [![ci](https://img.shields.io/github/actions/workflow/status/Microck/mullgate/ci.yml?branch=main&label=ci&color=000000)](https://github.com/Microck/mullgate/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/Microck/mullgate?color=000000)](LICENSE)
-
-`mullgate` turns your Mullvad subscription into authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. it is built for people who want one command surface for setup, app-level routing, named location endpoints, and a self-hosted workflow without sending the whole machine through a VPN.
-
-[documentation](docs/usage.md) | [install](#install-and-run) | [release verifier](#integrated-release-verifier)
 
 ## why
 
