@@ -26,15 +26,16 @@ type BufferSink = {
 
 function createTempEnvironment(): NodeJS.ProcessEnv {
   const root = mkdtempSync(path.join(tmpdir(), 'mullgate-start-command-'));
+  const linuxRoot = root.replaceAll('\\', '/');
   temporaryDirectories.push(root);
 
   return {
     ...process.env,
     MULLGATE_PLATFORM: 'linux',
-    HOME: root,
-    XDG_CONFIG_HOME: path.join(root, 'config'),
-    XDG_STATE_HOME: path.join(root, 'state'),
-    XDG_CACHE_HOME: path.join(root, 'cache'),
+    HOME: linuxRoot,
+    XDG_CONFIG_HOME: `${linuxRoot}/config`,
+    XDG_STATE_HOME: `${linuxRoot}/state`,
+    XDG_CACHE_HOME: `${linuxRoot}/cache`,
   };
 }
 
