@@ -96,6 +96,8 @@ What to expect:
 - the configured hostnames default to the route aliases in loopback mode
 - hostname access on the local machine works only after you install the emitted hosts block
 
+![Private-network exposure demo](/images/demos/exposure-private-network.gif)
+
 ### Example: private-network hostnames with a base domain
 
 Use this when clients should reach the proxies from your LAN, VPN, or overlay network and you want real hostnames per route:
@@ -233,6 +235,12 @@ mullgate config validate --refresh
 # or
 mullgate start
 ```
+
+## Runtime inspection demo
+
+The runtime status and diagnostics surfaces are easiest to read when you see them on a seeded healthy install:
+
+![Status and doctor demo](/images/demos/status-doctor.gif)
 
 ## Validation and runtime lifecycle
 

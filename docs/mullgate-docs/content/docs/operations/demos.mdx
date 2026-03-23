@@ -1,0 +1,44 @@
+---
+title: Demos
+description: Recorded terminal GIFs for the README and docs site, plus the regeneration workflow.
+---
+
+These demos are fixture-backed on purpose. They do not require a live Mullvad account, a real Docker runtime, or any secret material.
+
+## Preview
+
+### Setup
+
+![Setup demo](/images/demos/setup-guided.gif)
+
+### Private-network exposure
+
+![Private-network exposure demo](/images/demos/exposure-private-network.gif)
+
+### Status and doctor
+
+![Status and doctor demo](/images/demos/status-doctor.gif)
+
+## Regenerate
+
+Prerequisites:
+
+- `asciinema`
+- `agg`
+- `ffmpeg`
+- project dependencies installed with `pnpm install`
+
+From the repo root:
+
+```bash
+pnpm demo:record
+pnpm demo:verify
+```
+
+The recording flow writes canonical assets to `images/demos/` and mirrors the same files into `docs/mullgate-docs/public/images/demos/`.
+
+## Notes
+
+- The setup GIF runs the real `mullgate setup --non-interactive` path against local fixture endpoints.
+- The exposure GIF seeds a local config first, then records the real `mullgate config exposure ...` output.
+- The status and doctor GIF seeds a validated config plus a fake Docker Compose surface so the output stays deterministic and secret-safe.

@@ -17,6 +17,8 @@ the main setup path is `mullgate setup`. on a real terminal it opens a guided fl
 
 [documentation](https://mullgate.micr.dev) | [npm](https://www.npmjs.com/package/mullgate) | [github](https://github.com/Microck/mullgate)
 
+![setup demo](images/demos/setup-guided.gif)
+
 ## why
 
 if you want Mullvad-backed proxy access without replacing your computer's normal network path, `mullgate` gives you a practical path.

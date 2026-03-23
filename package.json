@@ -41,6 +41,8 @@
     "format:check": "biome format --check .",
     "test": "tsx scripts/test.ts",
     "test:coverage": "tsx scripts/test.ts -- --run --coverage",
+    "demo:record": "tsx scripts/record-demos.ts",
+    "demo:verify": "tsx scripts/verify-demos.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test -- --run",
     "cli": "tsx src/cli.ts",
     "verify:s06": "tsx scripts/verify-s06-release.ts",
