@@ -97,9 +97,10 @@ function renderHelp(): string {
   return [
     'Usage: pnpm exec tsx scripts/verify-m003-install-path.ts [options]',
     '',
-    'Run the M003 S02 install-path verifier: build Mullgate, pack a release tarball,',
-    'reject junk package contents, install that tarball into a temp global prefix,',
-    'and prove the installed `mullgate` binary exposes the expected help surface.',
+    'Run the M003 S02 install-path verifier: build Mullgate, pack the GitHub release',
+    'tarball artifact, reject junk package contents, install that tarball into a temp',
+    'global prefix, and prove the installed `mullgate` binary exposes the expected',
+    'help surface.',
     '',
     'Options:',
     '  --check-only  Still runs the full install-path verification flow, but tags the output as audit mode.',

@@ -1,6 +1,6 @@
 {
   "name": "mullgate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Microck",
   "keywords": [
     "mullvad",
@@ -19,12 +19,12 @@
   "bugs": {
     "url": "https://github.com/Microck/mullgate/issues"
   },
+  "license": "MIT",
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
-  "private": true,
-  "description": "CLI-first Mullvad proxy bootstrap and runtime management",
+  "description": "Authenticated Mullvad-backed SOCKS5, HTTP, and HTTPS proxy CLI",
   "type": "module",
   "bin": {
     "mullgate": "dist/cli.js"
@@ -46,7 +46,8 @@
     "verify:m002-platform-surfaces": "tsx scripts/verify-m002-platform-surfaces.ts",
     "verify:m002-final": "tsx scripts/verify-m002-final.ts",
     "verify:m003-repo-baseline": "tsx scripts/verify-m003-repo-baseline.ts",
-    "verify:m003-install-path": "tsx scripts/verify-m003-install-path.ts"
+    "verify:m003-install-path": "tsx scripts/verify-m003-install-path.ts",
+    "verify:install-smoke": "tsx scripts/verify-install-smoke.ts"
   },
   "engines": {
     "node": ">=22.0.0"

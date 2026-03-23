@@ -1,6 +1,6 @@
 # Mullgate usage guide
 
-This guide expands on the Linux-first flow in the repository [README](../README.md). It is written against the CLI help contract exposed by:
+This guide expands on the consumer-facing repository [README](../README.md). It keeps the deeper setup, platform, runtime, verifier, and troubleshooting detail out of the landing page while staying anchored to the CLI help contract exposed by:
 
 - `mullgate --help`
 - `mullgate setup --help`
@@ -13,11 +13,11 @@ This guide expands on the Linux-first flow in the repository [README](../README.
 
 Mullgate now has three truthful invocation forms, in this order of preference:
 
-1. **Installed tarball binary** — the supported distribution artifact verified by `pnpm verify:m003-install-path`
-2. **Built CLI from a checkout** — `node dist/cli.js ...`
-3. **Contributor/source-checkout path** — `pnpm exec tsx src/cli.ts ...`
+1. **Installed `mullgate` command** — the published npm package installed via `npm`, `pnpm`, `bun`, or the convenience installer scripts
+2. **Packed release asset** — the GitHub release `.tgz` artifact verified by `pnpm verify:m003-install-path`
+3. **Contributor/source-checkout path** — `node dist/cli.js ...` or `pnpm exec tsx src/cli.ts ...`
 
-This guide still shows source-checkout commands because the repo examples are easiest to reproduce that way. For an installed tarball, replace those `pnpm exec tsx src/cli.ts ...` examples with your installed `mullgate ...` binary.
+This guide uses installed `mullgate ...` commands by default. If you are working from a checkout instead, replace `mullgate ...` with either `node dist/cli.js ...` after `pnpm build`, or `pnpm exec tsx src/cli.ts ...` while developing.
 
 ## Platform support posture
 
@@ -82,8 +82,8 @@ export MULLGATE_PROXY_PASSWORD='replace-me'
 export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
 export MULLGATE_DEVICE_NAME=mullgate-loopback
 
-pnpm exec tsx src/cli.ts setup --non-interactive
-pnpm exec tsx src/cli.ts config hosts
+mullgate setup --non-interactive
+mullgate config hosts
 ```
 
 What to expect:
@@ -106,8 +106,8 @@ export MULLGATE_ROUTE_BIND_IPS=192.168.10.10,192.168.10.11
 export MULLGATE_EXPOSURE_MODE=private-network
 export MULLGATE_EXPOSURE_BASE_DOMAIN=proxy.example.com
 
-pnpm exec tsx src/cli.ts setup --non-interactive
-pnpm exec tsx src/cli.ts config exposure
+mullgate setup --non-interactive
+mullgate config exposure
 ```
 
 What to expect:
@@ -121,7 +121,7 @@ What to expect:
 If you do not set a base domain in `private-network` or `public` mode, Mullgate falls back to the bind IPs as the hostnames clients should use:
 
 ```bash
-pnpm exec tsx src/cli.ts config exposure \
+mullgate config exposure \
   --mode private-network \
   --clear-base-domain \
   --route-bind-ip 192.168.10.10 \
@@ -189,7 +189,7 @@ Use `mullgate config exposure` instead of editing JSON by hand.
 ### Inspect the current posture
 
 ```bash
-pnpm exec tsx src/cli.ts config exposure
+mullgate config exposure
 ```
 
 The report includes:
@@ -206,7 +206,7 @@ The report includes:
 Example: switch from loopback to private-network hostnames:
 
 ```bash
-pnpm exec tsx src/cli.ts config exposure \
+mullgate config exposure \
   --mode private-network \
   --base-domain proxy.example.com \
   --route-bind-ip 192.168.10.10 \
@@ -216,7 +216,7 @@ pnpm exec tsx src/cli.ts config exposure \
 Example: switch to direct-IP public exposure:
 
 ```bash
-pnpm exec tsx src/cli.ts config exposure \
+mullgate config exposure \
   --mode public \
   --clear-base-domain \
   --route-bind-ip 203.0.113.10 \
@@ -226,9 +226,9 @@ pnpm exec tsx src/cli.ts config exposure \
 After an exposure edit, Mullgate marks the runtime state as `unvalidated`. Do one of these before trusting the saved/runtime surfaces again:
 
 ```bash
-pnpm exec tsx src/cli.ts config validate --refresh
+mullgate config validate --refresh
 # or
-pnpm exec tsx src/cli.ts start
+mullgate start
 ```
 
 ## Validation and runtime lifecycle
@@ -238,8 +238,8 @@ pnpm exec tsx src/cli.ts start
 Use this when you want to refresh or verify derived runtime artifacts without starting Docker immediately.
 
 ```bash
-pnpm exec tsx src/cli.ts config validate --help
-pnpm exec tsx src/cli.ts config validate --refresh
+mullgate config validate --help
+mullgate config validate --refresh
 ```
 
 It validates the rendered wireproxy config and persists validation metadata under the runtime directory.
@@ -247,7 +247,7 @@ It validates the rendered wireproxy config and persists validation metadata unde
 ### `mullgate start`
 
 ```bash
-pnpm exec tsx src/cli.ts start
+mullgate start
 ```
 
 This command:
@@ -263,7 +263,7 @@ This command:
 ### `mullgate status`
 
 ```bash
-pnpm exec tsx src/cli.ts status
+mullgate status
 ```
 
 Use it to compare:
@@ -276,7 +276,7 @@ Use it to compare:
 ### `mullgate doctor`
 
 ```bash
-pnpm exec tsx src/cli.ts doctor
+mullgate doctor
 ```
 
 Use it when you need deterministic diagnostics for:
@@ -295,7 +295,7 @@ Use it when you need deterministic diagnostics for:
 The fastest way to find the active XDG paths is:
 
 ```bash
-pnpm exec tsx src/cli.ts config path
+mullgate config path
 ```
 
 That report now also prints:
@@ -373,9 +373,9 @@ The verifier intentionally does **not** hide hostname drift.
 
 If it fails on hostname resolution:
 
-1. run `pnpm exec tsx src/cli.ts config hosts`
+1. run `mullgate config hosts`
 2. install the emitted hosts block locally, or publish/update DNS when using a base domain
-3. rerun `pnpm exec tsx src/cli.ts doctor`
+3. rerun `mullgate doctor`
 4. rerun `pnpm verify:s06`
 
 On failure, the verifier preserves its temp XDG home and prints the paths to the saved config, `runtime-manifest.json`, `last-start.json`, and captured CLI/probe outputs so a later agent can localize the break quickly.
@@ -405,8 +405,8 @@ Common causes:
 Run these next:
 
 ```bash
-pnpm exec tsx src/cli.ts status
-pnpm exec tsx src/cli.ts doctor
+mullgate status
+mullgate doctor
 ```
 
 Then inspect:
@@ -432,17 +432,17 @@ Symptoms:
 
 What to do:
 
-1. run `pnpm exec tsx src/cli.ts config hosts`
+1. run `mullgate config hosts`
 2. install the emitted hosts block locally, or publish/update DNS so every hostname resolves to its saved bind IP
-3. rerun `pnpm exec tsx src/cli.ts doctor`
+3. rerun `mullgate doctor`
 
 ### Runtime state looks stale after an exposure or config edit
 
 If `status` or `config exposure` shows `runtime status: unvalidated` or `restart needed: yes`, rerun one of:
 
 ```bash
-pnpm exec tsx src/cli.ts config validate --refresh
-pnpm exec tsx src/cli.ts start
+mullgate config validate --refresh
+mullgate start
 ```
 
 That is the supported way to bring saved config, derived artifacts, and the Docker runtime back into sync.

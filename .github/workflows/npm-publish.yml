@@ -39,6 +39,7 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+          cache: pnpm
 
       - name: Install pnpm
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
@@ -51,6 +52,10 @@ jobs:
       - name: Build
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
         run: pnpm build
+
+      - name: Verify package metadata
+        if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
+        run: npm pack --dry-run
 
       - name: Publish package
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}

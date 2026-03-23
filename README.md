@@ -9,13 +9,13 @@
 </p>
 
 <p align="center">
-  <code>mullgate</code> turns your Mullvad subscription into authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. it is built for people who want one command surface for setup, app-level routing, named location endpoints, and a self-hosted workflow without sending the whole machine through a VPN.
+  <code>mullgate</code> turns your Mullvad subscription into authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. it is built for people who want one command surface for setup, named exit locations, and app-level routing without sending the whole machine through a VPN.
 </p>
 
 <p align="center">
   <a href="docs/usage.md">documentation</a> |
-  <a href="#install-and-run">install</a> |
-  <a href="#integrated-release-verifier">release verifier</a>
+  <a href="#quickstart">install</a> |
+  <a href="#platform-support">platform support</a>
 </p>
 
 ---
@@ -26,145 +26,66 @@ if you want Mullvad-backed proxy access without replacing your computer's normal
 
 - expose authenticated SOCKS5, HTTP, and HTTPS proxy endpoints from your own Mullvad subscription
 - route only the traffic you choose instead of tunneling the whole machine
-- use named location endpoints and route-aware diagnostics from one CLI
-- keep Linux as the truthful full runtime target while still getting cross-platform config and diagnostic reporting
+- keep one CLI for setup, named exits, runtime checks, and diagnostics
+- stay in control of the host and credentials instead of depending on a hosted relay service
 
 ## quickstart
 
-### install the verified tarball artifact
+Mullgate currently requires Node.js 22+.
+
+The commands below describe the public install surface that the repo now targets. until the first npm publish lands, use the GitHub release `.tgz` asset or a source checkout from the usage guide.
+
+### Linux or macOS
 
 ```bash
-pnpm build
-pnpm pack --pack-destination release-artifacts
-npm install -g --prefix "$HOME/.local" ./release-artifacts/mullgate-0.1.0.tgz
-~/.local/bin/mullgate --help
+curl -fsSL https://raw.githubusercontent.com/Microck/mullgate/main/scripts/install.sh | sh
+mullgate --help
 ```
 
-### build from a checkout
+### Windows
+
+```powershell
+irm https://raw.githubusercontent.com/Microck/mullgate/main/scripts/install.ps1 | iex
+mullgate --help
+```
+
+### using a package manager
 
 ```bash
-pnpm install
-pnpm build
-node dist/cli.js --help
+npm install -g mullgate
+pnpm add -g mullgate
+bun add -g mullgate
 ```
 
-### non-interactive setup
+### first run
 
-use `.env.example` as the starting point for local setup inputs.
+for an interactive setup flow:
 
 ```bash
-export MULLGATE_ACCOUNT_NUMBER=123456789012
-export MULLGATE_PROXY_USERNAME=alice
-export MULLGATE_PROXY_PASSWORD='replace-me'
-export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
-export MULLGATE_DEVICE_NAME=mullgate-local
-
-pnpm exec tsx src/cli.ts setup --non-interactive
-pnpm exec tsx src/cli.ts config hosts
-pnpm exec tsx src/cli.ts start
-pnpm exec tsx src/cli.ts status
-pnpm exec tsx src/cli.ts doctor
+mullgate setup
 ```
 
-## first-release scope
-
-this repository currently ships a **Linux-first runtime** with **cross-platform config/diagnostic reporting**.
-
-- fully supported: Linux runtime execution from a source checkout or built CLI install with Node.js 22+, pnpm, and Docker Compose.
-- supported: guided or non-interactive setup, route-aware host mapping guidance, Docker runtime start, `status`, `doctor`, and config inspection/update commands on Linux.
-- supported: platform-aware `config path`, runtime-manifest output, `status`, and `doctor` reporting for Linux, macOS, and Windows.
-- limited: macOS and Windows runtime execution under the current Docker-first topology, because Docker Desktop does not provide the Linux host-networking semantics that Mullgate's per-route bind-IP runtime depends on.
-- not shipped here: GUI flows or a separate desktop installer surface.
-
-## platform support matrix
-
-| platform | config paths | runtime manifest | `status` / `doctor` | runtime execution |
-| --- | --- | --- | --- | --- |
-| Linux | Supported | Supported | Supported | **Fully supported** |
-| macOS | Supported | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
-| Windows | Supported | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
-
-notes:
-
-- Linux is the reference runtime target for the current Mullgate topology.
-- macOS and Windows are supported for truthful path inspection and diagnostics, but not for claiming Linux-equivalent runtime parity under the current Docker-first design.
-- if you need the current multi-route runtime to behave truthfully on macOS or Windows, run it inside a Linux VM or on a separate Linux host.
-
-## install and run
-
-### supported distribution artifact: release tarball
-
-Mullgate’s first-class distribution surface in this repo is the packed tarball produced by `pnpm pack`. the tarball contains the built CLI (`dist/`) plus the README, and `pnpm verify:m003-install-path` proves that installing that tarball into a clean prefix exposes a working `mullgate` command.
-
-produce the tarball locally:
+for non-interactive setup, start from [`.env.example`](.env.example) and then run:
 
 ```bash
-pnpm build
-pnpm pack --pack-destination release-artifacts
+mullgate setup --non-interactive
+mullgate config hosts
+mullgate start
+mullgate status
+mullgate doctor
 ```
 
-that writes a file like `release-artifacts/mullgate-0.1.0.tgz`.
+## platform support
 
-install it locally:
+Mullgate is currently a Linux-first runtime with truthful cross-platform install, config, and diagnostics surfaces.
 
-```bash
-npm install -g --prefix "$HOME/.local" ./release-artifacts/mullgate-0.1.0.tgz
-~/.local/bin/mullgate --help
-```
+| platform | install | `config path` / `status` / `doctor` | full runtime execution |
+| --- | --- | --- | --- |
+| Linux | Supported | Supported | **Supported** |
+| macOS | Supported | Supported | **Partial** |
+| Windows | Supported | Supported | **Partial** |
 
-if you prefer a different prefix, change `--prefix` and invoke the installed `bin/mullgate` from that prefix.
-
-### source checkout
-
-```bash
-pnpm install
-pnpm build
-pnpm exec tsx src/cli.ts --help
-```
-
-this is the most complete path in the repository today and the one used by the current tests and verifiers.
-
-### built CLI from this checkout
-
-```bash
-node dist/cli.js --help
-```
-
-in a source checkout, replace `mullgate ...` with either the installed tarball binary, `pnpm exec tsx src/cli.ts ...`, or `node dist/cli.js ...`.
-
-### example environment file
-
-use `.env.example` as the starting point for non-interactive setup and live verifier inputs. copy it to `.env` for local work, then replace the example values with real secrets on your machine only.
-
-## integrated release verifier
-
-when you want one Linux-first proof command for the assembled product, use:
-
-```bash
-export MULLGATE_ACCOUNT_NUMBER=123456789012
-export MULLGATE_PROXY_USERNAME=alice
-export MULLGATE_PROXY_PASSWORD='replace-me'
-export MULLGATE_DEVICE_NAME=mullgate-s06-proof
-pnpm verify:s06
-```
-
-what the verifier does:
-
-- creates a temp XDG home so it does not reuse your normal Mullgate state
-- runs `mullgate setup --non-interactive` against the real CLI and real Mullvad/Docker/curl prerequisites
-- prints/checks `mullgate config hosts`
-- starts the Docker runtime and verifies `mullgate status` + `mullgate doctor`
-- probes authenticated SOCKS5, HTTP, and HTTPS traffic against `https://am.i.mullvad.net/json`
-- confirms the host route to `1.1.1.1` did not change when Mullgate started
-- compares the exits for the first two routed hostnames when they resolve locally to distinct bind IPs
-
-verifier notes:
-
-- if `MULLGATE_LOCATIONS` is unset, the verifier defaults to `sweden-gothenburg,austria-vienna`.
-- the verifier needs one free Mullvad WireGuard device slot per routed location. the default two-route proof therefore needs two free slots on the account before setup can succeed.
-- if `MULLGATE_HTTPS_CERT_PATH` and `MULLGATE_HTTPS_KEY_PATH` are unset, the verifier generates a temporary self-signed cert/key via `openssl` so HTTPS proxy proof stays real without persisting raw key material in the saved failure bundle.
-- on failure, the verifier preserves the temp XDG home and prints the paths to the saved config, `runtime-manifest.json`, `last-start.json`, and captured CLI/probe outputs.
-- if the proof fails on hostname resolution, fix that with `mullgate config hosts` (or real DNS when using a base domain), then rerun `pnpm verify:s06`.
+macOS and Windows can install the CLI and report config/runtime state truthfully, but the current Docker-first multi-route runtime still depends on Linux host-networking behavior. use Linux for the full setup and live runtime path.
 
 ## command surface
 
@@ -179,45 +100,52 @@ verifier notes:
 | `mullgate config exposure` | inspect or update loopback, private-network, and public exposure posture |
 | `mullgate config validate` | validate rendered wireproxy config and refresh runtime validation metadata |
 
-## quick operator notes
+## examples
 
-- Mullgate is a **proxy tool**, not a full-device VPN client.
-- hostname-selected routing depends on each hostname resolving to the correct route bind IP.
-- the current runtime is Linux-first; macOS and Windows are truthful config/diagnostic surfaces, not Linux-equivalent runtime targets.
-- HTTPS, HTTP, and SOCKS5 are all part of the supported proxy surface.
-
-## troubleshooting
-
-when something looks wrong, check these in order:
-
-1. `mullgate status`
-2. `mullgate doctor`
-3. `mullgate config hosts`
-4. `mullgate config exposure`
-5. `runtime-manifest.json`
-6. `last-start.json`
-
-on a runtime launch failure, `last-start.json` and `status`/`doctor` are the fastest way to see the failing phase, route, bind IP, service name, compose file, and validation source without printing raw credentials.
-
-## building from source
-
-if you are working on Mullgate itself:
+set up two named exits and inspect the generated hostname mappings:
 
 ```bash
-git clone https://github.com/Microck/mullgate.git
-cd mullgate
-pnpm install
-pnpm build
-node dist/cli.js --help
+export MULLGATE_ACCOUNT_NUMBER=123456789012
+export MULLGATE_PROXY_USERNAME=alice
+export MULLGATE_PROXY_PASSWORD='replace-me'
+export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
+
+mullgate setup --non-interactive
+mullgate config hosts
 ```
+
+start the runtime and inspect its current posture:
+
+```bash
+mullgate start
+mullgate status
+mullgate doctor
+```
+
+use one of the exposed routes from another client or shell:
+
+```bash
+curl \
+  --proxy socks5h://sweden-gothenburg:1080 \
+  --proxy-user "$MULLGATE_PROXY_USERNAME:$MULLGATE_PROXY_PASSWORD" \
+  https://am.i.mullvad.net/json
+```
+
+## install and release notes
+
+- npm is the canonical install surface for the published CLI
+- GitHub Releases attach the packed `.tgz` artifact and checksums for users who want a pinned release asset
+- `scripts/install.sh` and `scripts/install.ps1` are convenience wrappers around the published npm package
+- until the first npm publish lands, install from the GitHub release `.tgz` asset or from a source checkout instead
+- `pnpm verify:s06` remains the Linux-first end-to-end proof for the assembled runtime
 
 ## documentation
 
 - [usage guide](docs/usage.md)
-- `.env.example` — documented setup/verifier environment template
-- `pnpm verify:s06` — integrated Linux-first runtime proof
-- `pnpm verify:m003-repo-baseline` — public repo baseline proof
-- `pnpm verify:m003-install-path` — tarball/install-path proof
+- [multi-exit architecture spec](docs/multi-exit-architecture-spec.md)
+- [`.env.example`](.env.example) - documented setup inputs for local runs
+- `pnpm verify:s06` - integrated Linux-first runtime proof
+- `pnpm verify:m003-install-path` - packed release/install-path proof
 
 ## disclaimer
 

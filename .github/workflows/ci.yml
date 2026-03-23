@@ -16,6 +16,7 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
+          - windows-latest
 
     steps:
       - name: Checkout
@@ -43,3 +44,6 @@ jobs:
 
       - name: Verify CLI/help contracts
         run: pnpm test -- --run test/cli/help-command.test.ts test/cli/verify-s06-release-help.test.ts test/cli/verify-m002-final-help.test.ts
+
+      - name: Verify install surface
+        run: pnpm verify:install-smoke
