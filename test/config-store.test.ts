@@ -1,4 +1,4 @@
-import { mkdtempSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -13,6 +13,10 @@ import { ConfigStore, listTemporaryArtifacts } from '../src/config/store.js';
 import { CONFIG_VERSION, mullgateConfigSchema, type MullgateConfig } from '../src/config/schema.js';
 
 const temporaryDirectories: string[] = [];
+const windowsFixturePaths = [
+  'C:\\Users\\alice\\AppData\\Local\\mullgate',
+  'C:\\Users\\alice\\AppData\\Roaming\\mullgate',
+] as const;
 
 function createTempEnvironment(): NodeJS.ProcessEnv {
   const root = mkdtempSync(path.join(tmpdir(), 'mullgate-test-'));
@@ -31,6 +35,10 @@ function createPlatformEnvironment(platform: 'linux' | 'macos' | 'windows'): Nod
   temporaryDirectories.push(root);
 
   if (platform === 'windows') {
+    // These tests intentionally use fixed fake Windows paths in snapshots, so clear any
+    // repo-root artifacts from earlier tests before checking the fallback-path contract.
+    cleanupWindowsFixturePaths();
+
     return {
       ...process.env,
       MULLGATE_PLATFORM: 'windows',
@@ -66,6 +74,12 @@ function createPlatformEnvironment(platform: 'linux' | 'macos' | 'windows'): Nod
     XDG_CACHE_HOME: undefined,
     TMPDIR: root,
   };
+}
+
+function cleanupWindowsFixturePaths(): void {
+  windowsFixturePaths.forEach((target) => {
+    rmSync(target, { recursive: true, force: true });
+  });
 }
 
 function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
@@ -208,6 +222,7 @@ function createLegacyFixtureConfig(env: NodeJS.ProcessEnv): Record<string, unkno
 }
 
 afterEach(async () => {
+  cleanupWindowsFixturePaths();
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
