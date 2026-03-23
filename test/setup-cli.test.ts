@@ -47,6 +47,7 @@ function createTempEnvironment(): NodeJS.ProcessEnv {
 
   return {
     ...process.env,
+    MULLGATE_PLATFORM: 'linux',
     HOME: root,
     PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
     XDG_CONFIG_HOME: path.join(root, 'config'),
@@ -334,37 +335,37 @@ describe('mullgate setup CLI flow', () => {
           expect(getPasswordResult.stdout.trim()).toBe('[redacted]');
           expect(getLocationResult.stdout.trim()).toBe('sweden-gothenburg');
           expect(`\n${normalizeOutput(pathResult.stdout, env)}`).toMatchInlineSnapshot(`
-          "
-          Mullgate path report
-          phase: resolve-paths
-          source: canonical-path-contract
-          platform: linux
-          platform source: process.platform
-          platform support: full
-          platform mode: Linux-first runtime support
-          platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
-          runtime story: Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.
-          host networking: Native host networking available
-          host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
-          config home: /tmp/mullgate-home/config (env:XDG_CONFIG_HOME)
-          state home: /tmp/mullgate-home/state (env:XDG_STATE_HOME)
-          cache home: /tmp/mullgate-home/cache (env:XDG_CACHE_HOME)
-          config file: /tmp/mullgate-home/config/mullgate/config.json (present)
-          state dir: /tmp/mullgate-home/state/mullgate
-          cache dir: /tmp/mullgate-home/cache/mullgate
-          runtime dir: /tmp/mullgate-home/state/mullgate/runtime (present)
-          wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-          wireproxy configtest report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
-          docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
-          relay cache: /tmp/mullgate-home/cache/mullgate/relays.json (present)
+            "
+            Mullgate path report
+            phase: resolve-paths
+            source: canonical-path-contract
+            platform: linux
+            platform source: env:MULLGATE_PLATFORM
+            platform support: full
+            platform mode: Linux-first runtime support
+            platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
+            runtime story: Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.
+            host networking: Native host networking available
+            host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
+            config home: /tmp/mullgate-home/config (env:XDG_CONFIG_HOME)
+            state home: /tmp/mullgate-home/state (env:XDG_STATE_HOME)
+            cache home: /tmp/mullgate-home/cache (env:XDG_CACHE_HOME)
+            config file: /tmp/mullgate-home/config/mullgate/config.json (present)
+            state dir: /tmp/mullgate-home/state/mullgate
+            cache dir: /tmp/mullgate-home/cache/mullgate
+            runtime dir: /tmp/mullgate-home/state/mullgate/runtime (present)
+            wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+            wireproxy configtest report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
+            docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+            relay cache: /tmp/mullgate-home/cache/mullgate/relays.json (present)
 
-          platform guidance
-          - Linux is the reference runtime target for the current Mullgate topology and verification flow.
-          - Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
+            platform guidance
+            - Linux is the reference runtime target for the current Mullgate topology and verification flow.
+            - Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
 
-          platform warnings
-          - none"
-        `);
+            platform warnings
+            - none"
+          `);
           expect(`\n${normalizeOutput(locationsResult.stdout, env)}`).toMatchInlineSnapshot(`
 "\nMullgate routed locations
 phase: inspect-config

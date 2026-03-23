@@ -21,6 +21,7 @@ function createTempEnvironment(): NodeJS.ProcessEnv {
 
   return {
     ...process.env,
+    MULLGATE_PLATFORM: 'linux',
     HOME: root,
     XDG_CONFIG_HOME: path.join(root, 'config'),
     XDG_STATE_HOME: path.join(root, 'state'),
@@ -429,7 +430,7 @@ backend route-at-vie-wg-001-https
     });
     expect(parsedManifest.platform).toEqual({
       platform: 'linux',
-      platformSource: 'process.platform',
+      platformSource: 'env:MULLGATE_PLATFORM',
       pathSources: {
         configHome: 'env:XDG_CONFIG_HOME',
         stateHome: 'env:XDG_STATE_HOME',

@@ -29,6 +29,7 @@ function createTempEnvironment(): NodeJS.ProcessEnv {
 
   return {
     ...process.env,
+    MULLGATE_PLATFORM: 'linux',
     HOME: root,
     XDG_CONFIG_HOME: path.join(root, 'config'),
     XDG_STATE_HOME: path.join(root, 'state'),
@@ -435,7 +436,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
       remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
       platform: linux
-      platform source: process.platform
+      platform source: env:MULLGATE_PLATFORM
       platform support: full
       platform mode: Linux-first runtime support
       platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
@@ -594,7 +595,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
       remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
       platform: linux
-      platform source: process.platform
+      platform source: env:MULLGATE_PLATFORM
       platform support: full
       platform mode: Linux-first runtime support
       platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
@@ -733,7 +734,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
       remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
       platform: linux
-      platform source: process.platform
+      platform source: env:MULLGATE_PLATFORM
       platform support: full
       platform mode: Linux-first runtime support
       platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.

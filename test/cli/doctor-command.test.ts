@@ -45,6 +45,7 @@ function createTempEnvironment(): NodeJS.ProcessEnv {
 
   return {
     ...process.env,
+    MULLGATE_PLATFORM: 'linux',
     HOME: root,
     XDG_CONFIG_HOME: path.join(root, 'config'),
     XDG_STATE_HOME: path.join(root, 'state'),
@@ -545,7 +546,7 @@ describe('mullgate doctor command', () => {
       2. platform-support: pass
          summary: Current platform matches the fully supported Linux runtime contract.
          detail: platform=linux
-         detail: platform-source=process.platform
+         detail: platform-source=env:MULLGATE_PLATFORM
          detail: support-level=full
          detail: mode-label=Linux-first runtime support
          detail: summary=Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
@@ -737,7 +738,7 @@ checks
       2. platform-support: pass
          summary: Current platform matches the fully supported Linux runtime contract.
          detail: platform=linux
-         detail: platform-source=process.platform
+         detail: platform-source=env:MULLGATE_PLATFORM
          detail: support-level=full
          detail: mode-label=Linux-first runtime support
          detail: summary=Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
@@ -933,7 +934,7 @@ checks
       2. platform-support: pass
          summary: Current platform matches the fully supported Linux runtime contract.
          detail: platform=linux
-         detail: platform-source=process.platform
+         detail: platform-source=env:MULLGATE_PLATFORM
          detail: support-level=full
          detail: mode-label=Linux-first runtime support
          detail: summary=Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
@@ -1130,7 +1131,7 @@ checks
       2. platform-support: pass
          summary: Current platform matches the fully supported Linux runtime contract.
          detail: platform=linux
-         detail: platform-source=process.platform
+         detail: platform-source=env:MULLGATE_PLATFORM
          detail: support-level=full
          detail: mode-label=Linux-first runtime support
          detail: summary=Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.

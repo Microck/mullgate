@@ -42,6 +42,7 @@ function createTempEnvironment(): NodeJS.ProcessEnv {
 
   return {
     ...process.env,
+    MULLGATE_PLATFORM: 'linux',
     HOME: root,
     XDG_CONFIG_HOME: path.join(root, 'config'),
     XDG_STATE_HOME: path.join(root, 'state'),

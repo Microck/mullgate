@@ -19,18 +19,29 @@ the main setup path is `mullgate setup`. on a real terminal it opens a guided fl
 
 ## why
 
-if you want Mullvad-backed proxy access without replacing your computer's normal network path, Mullgate gives you a practical path.
+if you want Mullvad-backed proxy access without replacing your computer's normal network path, `mullgate` gives you a practical path.
 
 - expose authenticated SOCKS5, HTTP, and HTTPS proxy endpoints from your own Mullvad subscription
 - route only the traffic you choose instead of tunneling the whole machine
 - keep one CLI for setup, named exits, runtime checks, and diagnostics
 - stay in control of the host and credentials instead of depending on a hosted relay service
 
+## what makes mullgate special
+
+on the surface this can look like "just turn Mullvad into a proxy." it is not that simple.
+
+- each Mullvad account is limited to 5 WireGuard devices, so multi-route proxying has a real upstream ceiling.
+- the current `mullgate` design provisions one Mullvad WireGuard identity per routed location so each named route can keep a real, distinct exit path.
+- it also keeps the host machine's default route untouched while still exposing authenticated local SOCKS5, HTTP, and HTTPS entrypoints for selected apps.
+- the routing layer has to preserve route selection truthfully across those proxy protocols, which is why the runtime is more than a thin wrapper script.
+
+that device-limit pressure is the reason the architecture matters at all. the current model is strong for a small set of concurrent routed exits, and the next scaling problem is explicitly documented in [the multi-exit architecture spec](docs/multi-exit-architecture-spec.md).
+
 ## quickstart
 
-Mullgate currently requires Node.js 22+.
+`mullgate` currently requires Node.js 22+.
 
-Install from npm for the normal path, or use a GitHub release standalone binary/archive when you want a pinned platform artifact.
+install from npm for the normal path, or use a GitHub release standalone binary/archive when you want a pinned platform artifact.
 
 ### Linux or macOS
 
@@ -74,7 +85,7 @@ mullgate doctor
 
 ## platform support
 
-Mullgate is currently a Linux-first runtime with truthful cross-platform install, config, and diagnostics surfaces.
+`mullgate` is currently a Linux-first runtime with truthful cross-platform install, config, and diagnostics surfaces.
 
 | platform | install | `config path` / `status` / `doctor` | full runtime execution |
 | --- | --- | --- | --- |

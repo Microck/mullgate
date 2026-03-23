@@ -15,6 +15,7 @@ import { ConfigStore } from '../../src/config/store.js';
 function createFixtureConfig(): MullgateConfig {
   const env = {
     ...process.env,
+    MULLGATE_PLATFORM: 'linux',
     HOME: '/tmp/mullgate-home',
     XDG_CONFIG_HOME: '/tmp/mullgate-home/config',
     XDG_STATE_HOME: '/tmp/mullgate-home/state',
