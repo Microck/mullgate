@@ -1,6 +1,28 @@
 {
   "name": "mullgate",
   "version": "0.1.0",
+  "author": "Microck",
+  "keywords": [
+    "mullvad",
+    "proxy",
+    "cli",
+    "vpn",
+    "socks5",
+    "wireguard",
+    "mullgate"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Microck/mullgate"
+  },
+  "homepage": "https://github.com/Microck/mullgate#readme",
+  "bugs": {
+    "url": "https://github.com/Microck/mullgate/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "private": true,
   "description": "CLI-first Mullvad proxy bootstrap and runtime management",
   "type": "module",
