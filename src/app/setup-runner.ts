@@ -1,22 +1,41 @@
-import { access, readFile } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+import { access, readFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
 
-import { cancel as clackCancel, confirm, intro, isCancel, outro, password, text } from '@clack/prompts';
-
-import { createLocationAliasCatalog, normalizeLocationToken, resolveLocationAlias, type LocationAliasCatalog, type LocationAliasTarget } from '../domain/location-aliases.js';
-import type { MullgatePaths } from '../config/paths.js';
+import {
+  cancel as clackCancel,
+  confirm,
+  intro,
+  isCancel,
+  outro,
+  password,
+  text,
+} from '@clack/prompts';
 import {
   deriveExposureHostname,
   normalizeExposureBaseDomain,
   validateExposureSettings,
 } from '../config/exposure-contract.js';
-import { ConfigStore, normalizeMullgateConfig } from '../config/store.js';
+import type { MullgatePaths } from '../config/paths.js';
 import { CONFIG_VERSION, type ExposureMode, type MullgateConfig } from '../config/schema.js';
+import { ConfigStore, normalizeMullgateConfig } from '../config/store.js';
+import {
+  createLocationAliasCatalog,
+  type LocationAliasCatalog,
+  type LocationAliasTarget,
+  normalizeLocationToken,
+  resolveLocationAlias,
+} from '../domain/location-aliases.js';
 import { fetchRelays, type MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
-import { provisionWireguard, type ProvisionWireguardResult } from '../mullvad/provision-wireguard.js';
+import {
+  type ProvisionWireguardResult,
+  provisionWireguard,
+} from '../mullvad/provision-wireguard.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
-import { validateWireproxyConfig, type ValidateWireproxyOptions } from '../runtime/validate-wireproxy.js';
+import {
+  type ValidateWireproxyOptions,
+  validateWireproxyConfig,
+} from '../runtime/validate-wireproxy.js';
 
 const DEFAULT_BIND_HOST = '127.0.0.1';
 const DEFAULT_SOCKS_PORT = 1080;
@@ -46,7 +65,10 @@ export type SetupInputValues = {
   readonly deviceName?: string;
 };
 
-export type RawSetupInputValues = Omit<SetupInputValues, 'routeBindIps' | 'exposureMode' | 'exposureBaseDomain'> & {
+export type RawSetupInputValues = Omit<
+  SetupInputValues,
+  'routeBindIps' | 'exposureMode' | 'exposureBaseDomain'
+> & {
   readonly routeBindIps?: readonly string[];
   readonly exposureMode?: ExposureMode;
   readonly exposureBaseDomain?: string | null;
@@ -148,7 +170,10 @@ export type RunSetupFlowOptions = {
   readonly provisioningBaseUrl?: string | URL;
   readonly relayCatalogUrl?: string | URL;
   readonly fetch?: typeof globalThis.fetch;
-  readonly validateOptions?: Pick<ValidateWireproxyOptions, 'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'spawn'>;
+  readonly validateOptions?: Pick<
+    ValidateWireproxyOptions,
+    'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'spawn'
+  >;
   readonly checkedAt?: string;
 };
 
@@ -214,7 +239,9 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
   const setupInputs = resolvedInputs.value;
 
   const httpsCheck = await verifyHttpsAssets({
-    enabled: setupInputs.httpsPort !== null || Boolean(setupInputs.httpsCertPath || setupInputs.httpsKeyPath),
+    enabled:
+      setupInputs.httpsPort !== null ||
+      Boolean(setupInputs.httpsCertPath || setupInputs.httpsKeyPath),
     certPath: setupInputs.httpsCertPath,
     keyPath: setupInputs.httpsKeyPath,
   });
@@ -283,7 +310,9 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
       paths: store.paths,
       code: plannedRoutesResult.code,
       message: plannedRoutesResult.message,
-      ...(plannedRoutesResult.artifactPath ? { artifactPath: plannedRoutesResult.artifactPath } : {}),
+      ...(plannedRoutesResult.artifactPath
+        ? { artifactPath: plannedRoutesResult.artifactPath }
+        : {}),
       ...(plannedRoutesResult.route ? { route: plannedRoutesResult.route } : {}),
     };
   }
@@ -342,7 +371,12 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
   });
 
   if (!renderResult.ok) {
-    const erroredConfig = withRuntimeStatus(initialConfig, 'error', renderResult.checkedAt, renderResult.message);
+    const erroredConfig = withRuntimeStatus(
+      initialConfig,
+      'error',
+      renderResult.checkedAt,
+      renderResult.message,
+    );
     await saveConfigSafely(store, erroredConfig);
 
     return {
@@ -403,7 +437,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     paths: store.paths,
     config: finalConfig,
     routes: provisionedRoutes.map(toSetupSuccessRoute),
-    selectedLocation: renderResult.selectedTarget ?? provisionedRoutes[0]!.resolvedLocation,
+    selectedLocation: renderResult.selectedTarget ?? provisionedRoutes[0]?.resolvedLocation,
     selectedRelayHostname: renderResult.selectedRelay.hostname,
     relayCatalog: relayResult.value,
     configPath: store.paths.configFile,
@@ -421,7 +455,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
       `relay cache: ${renderResult.artifactPaths.relayCachePath}`,
       `docker compose: ${store.paths.runtimeComposeFile}`,
       `validation report: ${renderResult.artifactPaths.configTestReportPath}`,
-      `location: ${provisionedRoutes[0]!.alias}`,
+      `location: ${provisionedRoutes[0]?.alias}`,
       `exposure: ${setupInputs.exposureMode}`,
       `base domain: ${setupInputs.exposureBaseDomain ?? 'n/a'}`,
       `routes: ${provisionedRoutes.length}`,
@@ -463,7 +497,12 @@ function planSetupRoutes(input: {
       index,
       requested,
       alias: provisionalAlias,
-      hostname: deriveExposureHostname(provisionalAlias, input.routeBindIps[index]!, input.exposureBaseDomain, input.exposureMode),
+      hostname: deriveExposureHostname(
+        provisionalAlias,
+        input.routeBindIps[index]!,
+        input.exposureBaseDomain,
+        input.exposureMode,
+      ),
       bindIp: input.routeBindIps[index]!,
       deviceName: deriveRouteDeviceName(input.baseDeviceName, provisionalAlias, routeCount),
     } satisfies SetupRouteMetadata;
@@ -486,15 +525,27 @@ function planSetupRoutes(input: {
       };
     }
 
-    const routeLabel = chooseUniqueRouteLabel(deriveCanonicalRouteLabel(resolvedLocation.value), usedRouteLabels);
+    const routeLabel = chooseUniqueRouteLabel(
+      deriveCanonicalRouteLabel(resolvedLocation.value),
+      usedRouteLabels,
+    );
 
     plannedRoutes.push({
       ...provisionalRoute,
       alias: routeLabel,
-      hostname: deriveExposureHostname(routeLabel, provisionalRoute.bindIp, input.exposureBaseDomain, input.exposureMode),
+      hostname: deriveExposureHostname(
+        routeLabel,
+        provisionalRoute.bindIp,
+        input.exposureBaseDomain,
+        input.exposureMode,
+      ),
       deviceName: deriveRouteDeviceName(input.baseDeviceName, routeLabel, routeCount),
       resolvedLocation: resolvedLocation.value,
-      relayPreference: createRouteRelayPreference(provisionalRoute.requested, routeLabel, resolvedLocation.value),
+      relayPreference: createRouteRelayPreference(
+        provisionalRoute.requested,
+        routeLabel,
+        resolvedLocation.value,
+      ),
       routeId: routeLabel,
     });
   }
@@ -542,7 +593,11 @@ async function provisionRouteWithRetries(input: {
 
     lastResult = provisionResult;
 
-    if (!provisionResult.retryable || !shouldRetryProvisioningFailure(provisionResult) || attempt >= PROVISION_RETRY_LIMIT) {
+    if (
+      !provisionResult.retryable ||
+      !shouldRetryProvisioningFailure(provisionResult) ||
+      attempt >= PROVISION_RETRY_LIMIT
+    ) {
       return provisionResult;
     }
 
@@ -550,17 +605,19 @@ async function provisionRouteWithRetries(input: {
     await delay(retryDelayMs);
   }
 
-  return lastResult ?? {
-    ok: false,
-    phase: 'wireguard-provision',
-    source: 'mullvad-wg-endpoint',
-    endpoint: new URL(input.provisioningBaseUrl ?? 'https://api.mullvad.net/wg').toString(),
-    checkedAt: input.checkedAt ?? new Date().toISOString(),
-    code: 'NETWORK_ERROR',
-    message: `Provisioning failed for routed location ${input.route.alias}.`,
-    cause: 'Provisioning retries exhausted without a recorded Mullvad response.',
-    retryable: true,
-  };
+  return (
+    lastResult ?? {
+      ok: false,
+      phase: 'wireguard-provision',
+      source: 'mullvad-wg-endpoint',
+      endpoint: new URL(input.provisioningBaseUrl ?? 'https://api.mullvad.net/wg').toString(),
+      checkedAt: input.checkedAt ?? new Date().toISOString(),
+      code: 'NETWORK_ERROR',
+      message: `Provisioning failed for routed location ${input.route.alias}.`,
+      cause: 'Provisioning retries exhausted without a recorded Mullvad response.',
+      retryable: true,
+    }
+  );
 }
 
 async function delay(milliseconds: number): Promise<void> {
@@ -569,7 +626,9 @@ async function delay(milliseconds: number): Promise<void> {
   });
 }
 
-function shouldRetryProvisioningFailure(result: Extract<ProvisionWireguardResult, { ok: false }>): boolean {
+function shouldRetryProvisioningFailure(
+  result: Extract<ProvisionWireguardResult, { ok: false }>,
+): boolean {
   if (result.code === 'NETWORK_ERROR') {
     return true;
   }
@@ -591,7 +650,9 @@ function toSetupSuccessRoute(route: ProvisionedSetupRoute): SetupSuccessRoute {
     ...summarizeSetupRoute(route),
     publicKey: route.provisioning.value.publicKey,
     ipv4Address: route.provisioning.value.ipv4Address,
-    ...(route.provisioning.value.ipv6Address ? { ipv6Address: route.provisioning.value.ipv6Address } : {}),
+    ...(route.provisioning.value.ipv6Address
+      ? { ipv6Address: route.provisioning.value.ipv6Address }
+      : {}),
   };
 }
 
@@ -706,7 +767,9 @@ function createCanonicalConfig(input: {
   checkedAt?: string;
 }): MullgateConfig {
   const timestamp = input.checkedAt ?? new Date().toISOString();
-  const httpsEnabled = input.inputs.httpsPort !== null || Boolean(input.inputs.httpsCertPath || input.inputs.httpsKeyPath);
+  const httpsEnabled =
+    input.inputs.httpsPort !== null ||
+    Boolean(input.inputs.httpsCertPath || input.inputs.httpsKeyPath);
   const primaryRoute = input.routes[0]!;
   const routingLocations = input.routes.map((route) => ({
     alias: route.alias,
@@ -758,7 +821,7 @@ function createCanonicalConfig(input: {
         ...(input.inputs.httpsKeyPath ? { keyPath: input.inputs.httpsKeyPath } : {}),
       },
     },
-    mullvad: structuredClone(routingLocations[0]!.mullvad),
+    mullvad: structuredClone(routingLocations[0]?.mullvad),
     routing: {
       locations: routingLocations,
     },
@@ -795,7 +858,12 @@ async function collectSetupInputs(input: {
 }): Promise<
   | typeof PROMPT_CANCELLED
   | { readonly ok: true; readonly value: SetupInputValues }
-  | { readonly ok: false; readonly source: 'input'; readonly message: string; readonly artifactPath?: string }
+  | {
+      readonly ok: false;
+      readonly source: 'input';
+      readonly message: string;
+      readonly artifactPath?: string;
+    }
 > {
   const values = normalizeInitialSetupValues(input.initialValues);
   const configuredLocations = values.locations ?? ['se-gothenburg'];
@@ -805,7 +873,10 @@ async function collectSetupInputs(input: {
       ['account number', values.accountNumber],
       ['proxy username', values.username],
       ['proxy password', values.password],
-      ['location alias', configuredLocations.length > 0 ? configuredLocations.join(', ') : undefined],
+      [
+        'location alias',
+        configuredLocations.length > 0 ? configuredLocations.join(', ') : undefined,
+      ],
     ].filter(([, value]) => !value || value.trim().length === 0);
 
     if (missing.length > 0) {
@@ -828,7 +899,8 @@ async function collectSetupInputs(input: {
   const accountNumber = await password({
     message: 'Mullvad account number',
     mask: '•',
-    validate: (value) => (/^\d{6,16}$/.test((value ?? '').trim()) ? undefined : 'Enter 6-16 digits.'),
+    validate: (value) =>
+      /^\d{6,16}$/.test((value ?? '').trim()) ? undefined : 'Enter 6-16 digits.',
   });
 
   if (isCancel(accountNumber)) {
@@ -872,7 +944,8 @@ async function collectSetupInputs(input: {
   const username = await text({
     message: 'Proxy username',
     initialValue: values.username,
-    validate: (value) => ((value ?? '').trim().length > 0 ? undefined : 'Proxy username is required.'),
+    validate: (value) =>
+      (value ?? '').trim().length > 0 ? undefined : 'Proxy username is required.',
   });
 
   if (isCancel(username)) {
@@ -883,7 +956,8 @@ async function collectSetupInputs(input: {
   const proxyPassword = await password({
     message: 'Proxy password',
     mask: '•',
-    validate: (value) => ((value ?? '').trim().length > 0 ? undefined : 'Proxy password is required.'),
+    validate: (value) =>
+      (value ?? '').trim().length > 0 ? undefined : 'Proxy password is required.',
   });
 
   if (isCancel(proxyPassword)) {
@@ -896,7 +970,9 @@ async function collectSetupInputs(input: {
     initialValue: configuredLocations.join(', '),
     placeholder: 'sweden-gothenburg, austria-vienna',
     validate: (value) =>
-      parseLocationList(value).length > 0 ? undefined : 'Enter at least one country, city, or relay alias.',
+      parseLocationList(value).length > 0
+        ? undefined
+        : 'Enter at least one country, city, or relay alias.',
   });
 
   if (isCancel(locationAliases)) {
@@ -935,7 +1011,9 @@ async function collectSetupInputs(input: {
           initialValue: values.routeBindIps?.join(', ') ?? values.bindHost,
           placeholder: '192.168.10.10, 192.168.10.11',
           validate: (value) =>
-            parseBindIpList(value).length > 0 ? undefined : 'Enter at least one bind IP for non-loopback exposure.',
+            parseBindIpList(value).length > 0
+              ? undefined
+              : 'Enter at least one bind IP for non-loopback exposure.',
         });
 
   if (isCancel(routeBindIpInput)) {
@@ -963,7 +1041,10 @@ async function collectSetupInputs(input: {
     const certPath = await text({
       message: 'HTTPS certificate path',
       initialValue: values.httpsCertPath,
-      validate: (value) => ((value ?? '').trim().length > 0 ? undefined : 'Certificate path is required when HTTPS is enabled.'),
+      validate: (value) =>
+        (value ?? '').trim().length > 0
+          ? undefined
+          : 'Certificate path is required when HTTPS is enabled.',
     });
 
     if (isCancel(certPath)) {
@@ -974,7 +1055,8 @@ async function collectSetupInputs(input: {
     const keyPath = await text({
       message: 'HTTPS key path',
       initialValue: values.httpsKeyPath,
-      validate: (value) => ((value ?? '').trim().length > 0 ? undefined : 'Key path is required when HTTPS is enabled.'),
+      validate: (value) =>
+        (value ?? '').trim().length > 0 ? undefined : 'Key path is required when HTTPS is enabled.',
     });
 
     if (isCancel(keyPath)) {
@@ -1029,10 +1111,10 @@ async function collectSetupInputs(input: {
   };
 }
 
-async function saveConfigSafely(store: ConfigStore, config: MullgateConfig): Promise<
-  | { readonly ok: true }
-  | SetupFailure
-> {
+async function saveConfigSafely(
+  store: ConfigStore,
+  config: MullgateConfig,
+): Promise<{ readonly ok: true } | SetupFailure> {
   try {
     await store.save(config);
     return { ok: true };
@@ -1051,9 +1133,16 @@ async function saveConfigSafely(store: ConfigStore, config: MullgateConfig): Pro
   }
 }
 
-function normalizeInitialSetupValues(initialValues: Partial<RawSetupInputValues> | undefined): Partial<RawSetupInputValues> {
-  const normalizedLocations = parseLocationList(initialValues?.locations ?? initialValues?.location);
-  const locations = (normalizedLocations.length > 0 ? normalizedLocations : ['se-gothenburg']) as [string, ...string[]];
+function normalizeInitialSetupValues(
+  initialValues: Partial<RawSetupInputValues> | undefined,
+): Partial<RawSetupInputValues> {
+  const normalizedLocations = parseLocationList(
+    initialValues?.locations ?? initialValues?.location,
+  );
+  const locations = (normalizedLocations.length > 0 ? normalizedLocations : ['se-gothenburg']) as [
+    string,
+    ...string[],
+  ];
   const routeBindIps = parseBindIpList(initialValues?.routeBindIps ?? initialValues?.bindHost);
 
   return {
@@ -1077,19 +1166,44 @@ function normalizeInitialSetupValues(initialValues: Partial<RawSetupInputValues>
 
 function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputValues {
   const parsedLocations = parseLocationList(values.locations ?? values.location);
-  const locations = (parsedLocations.length > 0 ? parsedLocations : ['se-gothenburg']) as [string, ...string[]];
+  const locations = (parsedLocations.length > 0 ? parsedLocations : ['se-gothenburg']) as [
+    string,
+    ...string[],
+  ];
   const routeBindIps = parseBindIpList(values.routeBindIps ?? values.bindHost);
+  const accountNumber = values.accountNumber?.trim();
+  const bindHost = values.bindHost?.trim();
+  const socksPort = values.socksPort;
+  const httpPort = values.httpPort;
+  const username = values.username?.trim();
+  const password = values.password?.trim();
+
+  if (
+    !accountNumber ||
+    !bindHost ||
+    socksPort === undefined ||
+    httpPort === undefined ||
+    !username ||
+    !password
+  ) {
+    throw new Error('Setup values are incomplete. Missing one or more required setup inputs.');
+  }
+
+  const finalizedRouteBindIps = (routeBindIps.length > 0 ? routeBindIps : [bindHost]) as [
+    string,
+    ...string[],
+  ];
 
   return {
-    accountNumber: values.accountNumber!.trim(),
-    bindHost: values.bindHost!.trim(),
-    routeBindIps: (routeBindIps.length > 0 ? routeBindIps : [values.bindHost!.trim()]) as [string, ...string[]],
+    accountNumber,
+    bindHost,
+    routeBindIps: finalizedRouteBindIps,
     exposureMode: values.exposureMode ?? DEFAULT_EXPOSURE_MODE,
     exposureBaseDomain: normalizeExposureBaseDomain(values.exposureBaseDomain),
-    socksPort: values.socksPort!,
-    httpPort: values.httpPort!,
-    username: values.username!.trim(),
-    password: values.password!.trim(),
+    socksPort,
+    httpPort,
+    username,
+    password,
     locations,
     location: locations[0],
     httpsPort: values.httpsPort ?? null,
@@ -1183,7 +1297,9 @@ function parseExposureMode(value: string): ExposureMode {
 
 function validateBaseDomainInput(value: string | undefined): string | undefined {
   const normalized = normalizeExposureBaseDomain(value);
-  return !normalized || isValidBaseDomain(normalized) ? undefined : 'Enter a valid DNS suffix like proxy.example.com.';
+  return !normalized || isValidBaseDomain(normalized)
+    ? undefined
+    : 'Enter a valid DNS suffix like proxy.example.com.';
 }
 
 function isValidBaseDomain(value: string): boolean {
@@ -1226,7 +1342,11 @@ function deriveCanonicalRouteLabel(target: LocationAliasTarget): string {
   return normalizeLocationToken(target.hostname);
 }
 
-function deriveRouteDeviceName(baseDeviceName: string, routeLabel: string, routeCount: number): string {
+function deriveRouteDeviceName(
+  baseDeviceName: string,
+  routeLabel: string,
+  routeCount: number,
+): string {
   return routeCount > 1 ? `${baseDeviceName}-${routeLabel}` : baseDeviceName;
 }
 
@@ -1244,7 +1364,9 @@ function createRouteRelayPreference(
   };
 }
 
-function parseStoredRelayCatalog(payload: unknown):
+function parseStoredRelayCatalog(
+  payload: unknown,
+):
   | { readonly ok: true; readonly value: MullvadRelayCatalog }
   | { readonly ok: false; readonly message: string; readonly cause?: string } {
   if (!payload || typeof payload !== 'object') {
@@ -1275,27 +1397,35 @@ function parseStoredRelayCatalog(payload: unknown):
 }
 
 function readStringProperty(value: unknown, key: string): string | null {
-  return typeof value === 'object' && value !== null && key in value && typeof (value as Record<string, unknown>)[key] === 'string'
+  return typeof value === 'object' &&
+    value !== null &&
+    key in value &&
+    typeof (value as Record<string, unknown>)[key] === 'string'
     ? ((value as Record<string, unknown>)[key] as string)
     : null;
 }
 
 function readNumberProperty(value: unknown, key: string): number | null {
-  return typeof value === 'object' && value !== null && key in value && typeof (value as Record<string, unknown>)[key] === 'number'
+  return typeof value === 'object' &&
+    value !== null &&
+    key in value &&
+    typeof (value as Record<string, unknown>)[key] === 'number'
     ? ((value as Record<string, unknown>)[key] as number)
     : null;
 }
 
 function readArrayProperty(value: unknown, key: string): unknown[] | null {
-  return typeof value === 'object' && value !== null && key in value && Array.isArray((value as Record<string, unknown>)[key])
+  return typeof value === 'object' &&
+    value !== null &&
+    key in value &&
+    Array.isArray((value as Record<string, unknown>)[key])
     ? ((value as Record<string, unknown>)[key] as unknown[])
     : null;
 }
 
-export function summarizeValidationSource(result: Awaited<ReturnType<typeof validateWireproxyConfig>>):
-  | 'wireproxy-binary/configtest'
-  | 'docker/configtest'
-  | 'internal-syntax' {
+export function summarizeValidationSource(
+  result: Awaited<ReturnType<typeof validateWireproxyConfig>>,
+): 'wireproxy-binary/configtest' | 'docker/configtest' | 'internal-syntax' {
   if (result.source === 'wireproxy-binary') {
     return 'wireproxy-binary/configtest';
   }
@@ -1309,7 +1439,9 @@ export function summarizeValidationSource(result: Awaited<ReturnType<typeof vali
 
 function validatePortInput(value: string | undefined): string | undefined {
   const numeric = Number((value ?? '').trim());
-  return Number.isInteger(numeric) && numeric >= 1 && numeric <= 65535 ? undefined : 'Enter a port between 1 and 65535.';
+  return Number.isInteger(numeric) && numeric >= 1 && numeric <= 65535
+    ? undefined
+    : 'Enter a port between 1 and 65535.';
 }
 
 function defaultDeviceName(): string {

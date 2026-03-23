@@ -159,7 +159,9 @@ const composePsContainerSchema = z
   })
   .passthrough();
 
-export async function startDockerRuntime(options: StartDockerRuntimeOptions): Promise<DockerRuntimeResult> {
+export async function startDockerRuntime(
+  options: StartDockerRuntimeOptions,
+): Promise<DockerRuntimeResult> {
   const checkedAt = options.checkedAt ?? new Date().toISOString();
   const dockerBinary = options.dockerBinary ?? DEFAULT_DOCKER_BINARY;
   const cwd = options.cwd ?? path.dirname(options.composeFilePath);
@@ -171,16 +173,24 @@ export async function startDockerRuntime(options: StartDockerRuntimeOptions): Pr
     dockerBinary,
     cwd,
     runner,
-    missingBinaryMessage: 'Docker CLI is not installed or is not on PATH, so Mullgate cannot launch the runtime bundle.',
-    detectFailureMessage: 'Docker is installed but `docker compose` is unavailable, so Mullgate cannot launch the runtime bundle.',
+    missingBinaryMessage:
+      'Docker CLI is not installed or is not on PATH, so Mullgate cannot launch the runtime bundle.',
+    detectFailureMessage:
+      'Docker is installed but `docker compose` is unavailable, so Mullgate cannot launch the runtime bundle.',
   });
 
   if (detectFailure) {
     return detectFailure;
   }
 
-  const launchCommand = buildCommand(dockerBinary, ['compose', '--file', options.composeFilePath, 'up', '--detach'], cwd);
-  const launchResult = await runner(launchCommand.binary, launchCommand.args, { cwd: launchCommand.cwd });
+  const launchCommand = buildCommand(
+    dockerBinary,
+    ['compose', '--file', options.composeFilePath, 'up', '--detach'],
+    cwd,
+  );
+  const launchResult = await runner(launchCommand.binary, launchCommand.args, {
+    cwd: launchCommand.cwd,
+  });
 
   if (launchResult.error?.code === 'ENOENT') {
     return {
@@ -226,7 +236,9 @@ export async function startDockerRuntime(options: StartDockerRuntimeOptions): Pr
   };
 }
 
-export async function queryDockerComposeStatus(options: QueryDockerComposeStatusOptions): Promise<DockerComposeStatusResult> {
+export async function queryDockerComposeStatus(
+  options: QueryDockerComposeStatusOptions,
+): Promise<DockerComposeStatusResult> {
   const checkedAt = options.checkedAt ?? new Date().toISOString();
   const dockerBinary = options.dockerBinary ?? DEFAULT_DOCKER_BINARY;
   const cwd = options.cwd ?? path.dirname(options.composeFilePath);
@@ -238,8 +250,10 @@ export async function queryDockerComposeStatus(options: QueryDockerComposeStatus
     dockerBinary,
     cwd,
     runner,
-    missingBinaryMessage: 'Docker CLI is not installed or is not on PATH, so Mullgate cannot inspect the runtime bundle.',
-    detectFailureMessage: 'Docker is installed but `docker compose` is unavailable, so Mullgate cannot inspect the runtime bundle.',
+    missingBinaryMessage:
+      'Docker CLI is not installed or is not on PATH, so Mullgate cannot inspect the runtime bundle.',
+    detectFailureMessage:
+      'Docker is installed but `docker compose` is unavailable, so Mullgate cannot inspect the runtime bundle.',
   });
 
   if (detectFailure) {
@@ -251,7 +265,9 @@ export async function queryDockerComposeStatus(options: QueryDockerComposeStatus
     ['compose', '--file', options.composeFilePath, 'ps', '--all', '--format', 'json'],
     cwd,
   );
-  const statusResult = await runner(statusCommand.binary, statusCommand.args, { cwd: statusCommand.cwd });
+  const statusResult = await runner(statusCommand.binary, statusCommand.args, {
+    cwd: statusCommand.cwd,
+  });
 
   if (statusResult.error?.code === 'ENOENT') {
     return {
@@ -287,7 +303,9 @@ export async function queryDockerComposeStatus(options: QueryDockerComposeStatus
   let parsedContainers: z.infer<typeof composePsContainerSchema>[];
 
   try {
-    parsedContainers = parseComposePsOutput(statusResult.stdout).map((entry) => composePsContainerSchema.parse(entry));
+    parsedContainers = parseComposePsOutput(statusResult.stdout).map((entry) =>
+      composePsContainerSchema.parse(entry),
+    );
   } catch (error) {
     return {
       ok: false,
@@ -297,7 +315,8 @@ export async function queryDockerComposeStatus(options: QueryDockerComposeStatus
       code: 'COMPOSE_PS_INVALID_JSON',
       composeFilePath: options.composeFilePath,
       command: statusCommand,
-      message: 'Docker Compose returned runtime status that Mullgate could not parse as typed JSON.',
+      message:
+        'Docker Compose returned runtime status that Mullgate could not parse as typed JSON.',
       cause: error instanceof Error ? error.message : String(error),
       artifactPath: options.composeFilePath,
     };
@@ -333,7 +352,9 @@ async function detectDockerCompose(input: {
   readonly detectFailureMessage: string;
 }): Promise<DockerComposeDetectFailure | null> {
   const detectCommand = buildCommand(input.dockerBinary, ['compose', 'version'], input.cwd);
-  const detectResult = await input.runner(detectCommand.binary, detectCommand.args, { cwd: detectCommand.cwd });
+  const detectResult = await input.runner(detectCommand.binary, detectCommand.args, {
+    cwd: detectCommand.cwd,
+  });
 
   if (detectResult.error?.code === 'ENOENT') {
     return {
@@ -411,7 +432,9 @@ function parseComposePsOutput(stdout: string): unknown[] {
     .map((line) => JSON.parse(line) as unknown);
 }
 
-function normalizeComposeContainer(container: z.infer<typeof composePsContainerSchema>): DockerComposeContainer {
+function normalizeComposeContainer(
+  container: z.infer<typeof composePsContainerSchema>,
+): DockerComposeContainer {
   return {
     name: container.Name,
     service: container.Service ?? container.Name,
@@ -429,7 +452,9 @@ function normalizeComposeContainer(container: z.infer<typeof composePsContainerS
   };
 }
 
-function summarizeComposeContainers(containers: readonly DockerComposeContainer[]): DockerComposeStatusSuccess['summary'] {
+function summarizeComposeContainers(
+  containers: readonly DockerComposeContainer[],
+): DockerComposeStatusSuccess['summary'] {
   let running = 0;
   let healthy = 0;
   let starting = 0;

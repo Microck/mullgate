@@ -7,7 +7,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { resolveMullgatePaths, resolveRouteWireproxyPaths } from '../src/config/paths.js';
-import { CONFIG_VERSION, type MullgateConfig, type RoutedLocation, type RuntimeStartDiagnostic } from '../src/config/schema.js';
+import {
+  CONFIG_VERSION,
+  type MullgateConfig,
+  type RoutedLocation,
+  type RuntimeStartDiagnostic,
+} from '../src/config/schema.js';
 import { ConfigStore } from '../src/config/store.js';
 import type { MullvadRelayCatalog } from '../src/mullvad/fetch-relays.js';
 import { renderRuntimeBundle } from '../src/runtime/render-runtime-bundle.js';
@@ -41,7 +46,7 @@ type FixtureConfigOptions = {
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
-const REDACTED = '[redacted]';
+const _REDACTED = '[redacted]';
 const TLS_PRIVATE_KEY_FIXTURE = '-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----';
 const PRIMARY_ROUTE = {
   alias: 'sweden-gothenburg',
@@ -143,10 +148,22 @@ async function verifyUnconfiguredScenario(): Promise<string> {
 
     assertExitCode(status, 0, 'unconfigured: status should succeed with an explanatory report');
     assertExitCode(doctor, 1, 'unconfigured: doctor should fail cleanly on a missing config');
-    assertContains(status.stdout, 'phase: unconfigured', 'unconfigured: status report did not classify the install as unconfigured.');
-    assertContains(status.stdout, 'next step: run `mullgate setup` before expecting runtime artifacts or Docker containers.', 'unconfigured: status report did not explain the next step.');
+    assertContains(
+      status.stdout,
+      'phase: unconfigured',
+      'unconfigured: status report did not classify the install as unconfigured.',
+    );
+    assertContains(
+      status.stdout,
+      'next step: run `mullgate setup` before expecting runtime artifacts or Docker containers.',
+      'unconfigured: status report did not explain the next step.',
+    );
     assertContains(doctor.stderr, 'overall: fail', 'unconfigured: doctor did not fail loudly.');
-    assertContains(doctor.stderr, 'Run `mullgate setup` first, then rerun `mullgate doctor` once a canonical config exists.', 'unconfigured: doctor remediation drifted.');
+    assertContains(
+      doctor.stderr,
+      'Run `mullgate setup` first, then rerun `mullgate doctor` once a canonical config exists.',
+      'unconfigured: doctor remediation drifted.',
+    );
 
     return '- unconfigured: ok (`mullgate status` and `mullgate doctor` both explain the missing-config path and point operators back to `mullgate setup`)';
   } catch (error) {
@@ -164,17 +181,24 @@ async function verifyHealthyScenario(options: VerificationOptions): Promise<stri
   let preserveRoot = false;
 
   try {
-    const seeded = await seedConfiguredScenario(root, 'healthy', {
-      routeHostnames: ['127.0.0.1', '127.0.0.2'],
-      routeBindIps: ['127.0.0.1', '127.0.0.2'],
-      runtimePhase: 'running',
-      runtimeCheckedAt: '2026-03-21T09:00:00.000Z',
-      runtimeMessage: 'Runtime is already up.',
-    }, {
-      relayFetchedAt: '2026-03-21T08:55:00.000Z',
-      writeValidationReports: true,
-      lastStart: createSuccessfulLastStart(resolveMullgatePaths(await createTempEnvironment(root, 'healthy')).runtimeComposeFile),
-    });
+    const seeded = await seedConfiguredScenario(
+      root,
+      'healthy',
+      {
+        routeHostnames: ['127.0.0.1', '127.0.0.2'],
+        routeBindIps: ['127.0.0.1', '127.0.0.2'],
+        runtimePhase: 'running',
+        runtimeCheckedAt: '2026-03-21T09:00:00.000Z',
+        runtimeMessage: 'Runtime is already up.',
+      },
+      {
+        relayFetchedAt: '2026-03-21T08:55:00.000Z',
+        writeValidationReports: true,
+        lastStart: createSuccessfulLastStart(
+          resolveMullgatePaths(await createTempEnvironment(root, 'healthy')).runtimeComposeFile,
+        ),
+      },
+    );
 
     const status = await runCliCommand(seeded.env, ['status']);
     const doctor = await runCliCommand(seeded.env, ['doctor']);
@@ -183,23 +207,74 @@ async function verifyHealthyScenario(options: VerificationOptions): Promise<stri
 
     assertExitCode(status, 0, 'healthy: status should exit successfully.');
     assertExitCode(doctor, 0, 'healthy: doctor should exit successfully.');
-    assertContains(status.stdout, 'phase: running', 'healthy: status did not classify the runtime as running.');
-    assertContains(status.stdout, 'container summary: 3 total, 3 running, 0 starting, 0 stopped, 0 unhealthy', 'healthy: status runtime summary drifted.');
+    assertContains(
+      status.stdout,
+      'phase: running',
+      'healthy: status did not classify the runtime as running.',
+    );
+    assertContains(
+      status.stdout,
+      'container summary: 3 total, 3 running, 0 starting, 0 stopped, 0 unhealthy',
+      'healthy: status runtime summary drifted.',
+    );
     assertContains(doctor.stdout, 'overall: pass', 'healthy: doctor did not stay green.');
-    assertContains(doctor.stdout, '7. runtime: pass', 'healthy: doctor runtime check drifted away from pass.');
-    assertContains(doctor.stdout, '8. last-start: pass', 'healthy: doctor last-start success check drifted.');
-    assertSharedFact(status.stdout, doctor.stdout, `config: ${seeded.paths.configFile}`, 'healthy: status/doctor config path drifted.');
-    assertSharedFact(status.stdout, doctor.stdout, `runtime dir: ${seeded.paths.runtimeDir}`, 'healthy: status/doctor runtime dir drifted.');
-    assertSharedFact(status.stdout, doctor.stdout, seeded.paths.runtimeComposeFile, 'healthy: status/doctor compose path drifted.');
-    assertContains(status.stdout, `service: ${PRIMARY_ROUTE.wireproxyServiceName}`, 'healthy: status did not expose the primary route service.');
-    assertContains(doctor.stdout, `route ${PRIMARY_ROUTE.routeId} (${PRIMARY_ROUTE.wireproxyServiceName})=running`, 'healthy: doctor did not expose the primary route service.');
-    assertContains(status.stdout, `service: ${SECONDARY_ROUTE.wireproxyServiceName}`, 'healthy: status did not expose the secondary route service.');
-    assertContains(doctor.stdout, `route ${SECONDARY_ROUTE.routeId} (${SECONDARY_ROUTE.wireproxyServiceName})=running`, 'healthy: doctor did not expose the secondary route service.');
+    assertContains(
+      doctor.stdout,
+      '7. runtime: pass',
+      'healthy: doctor runtime check drifted away from pass.',
+    );
+    assertContains(
+      doctor.stdout,
+      '8. last-start: pass',
+      'healthy: doctor last-start success check drifted.',
+    );
+    assertSharedFact(
+      status.stdout,
+      doctor.stdout,
+      `config: ${seeded.paths.configFile}`,
+      'healthy: status/doctor config path drifted.',
+    );
+    assertSharedFact(
+      status.stdout,
+      doctor.stdout,
+      `runtime dir: ${seeded.paths.runtimeDir}`,
+      'healthy: status/doctor runtime dir drifted.',
+    );
+    assertSharedFact(
+      status.stdout,
+      doctor.stdout,
+      seeded.paths.runtimeComposeFile,
+      'healthy: status/doctor compose path drifted.',
+    );
+    assertContains(
+      status.stdout,
+      `service: ${PRIMARY_ROUTE.wireproxyServiceName}`,
+      'healthy: status did not expose the primary route service.',
+    );
+    assertContains(
+      doctor.stdout,
+      `route ${PRIMARY_ROUTE.routeId} (${PRIMARY_ROUTE.wireproxyServiceName})=running`,
+      'healthy: doctor did not expose the primary route service.',
+    );
+    assertContains(
+      status.stdout,
+      `service: ${SECONDARY_ROUTE.wireproxyServiceName}`,
+      'healthy: status did not expose the secondary route service.',
+    );
+    assertContains(
+      doctor.stdout,
+      `route ${SECONDARY_ROUTE.routeId} (${SECONDARY_ROUTE.wireproxyServiceName})=running`,
+      'healthy: doctor did not expose the secondary route service.',
+    );
     assertNoSecretLeaks('healthy status', status.stdout, seeded.config);
     assertNoSecretLeaks('healthy doctor', doctor.stdout, seeded.config);
 
     if (options.simulateDrift) {
-      assertContains(status.stdout, 'phase: degraded', 'simulate-drift: intentionally expecting the healthy status report to classify as degraded.');
+      assertContains(
+        status.stdout,
+        'phase: degraded',
+        'simulate-drift: intentionally expecting the healthy status report to classify as degraded.',
+      );
     }
 
     return '- healthy: ok (`mullgate status` and `mullgate doctor` agree on a running routed install, expose matching route/container facts, and keep secrets redacted)';
@@ -220,33 +295,39 @@ async function verifyDegradedAuthScenario(): Promise<string> {
   try {
     const envForPaths = await createTempEnvironment(root, 'degraded-auth');
     const paths = resolveMullgatePaths(envForPaths);
-    const seeded = await seedConfiguredScenario(root, 'degraded-auth', {
-      routeHostnames: ['127.0.0.1', '127.0.0.2'],
-      routeBindIps: ['127.0.0.1', '127.0.0.2'],
-      runtimePhase: 'running',
-      runtimeCheckedAt: '2026-03-21T09:10:00.000Z',
-      runtimeMessage: 'Runtime started successfully.',
-    }, {
-      relayFetchedAt: '2026-03-21T09:05:00.000Z',
-      writeValidationReports: true,
-      lastStart: {
-        attemptedAt: '2026-03-21T09:10:00.000Z',
-        status: 'failure',
-        phase: 'compose-launch',
-        source: 'docker-compose',
-        code: 'COMPOSE_UP_FAILED',
-        message: 'Docker Compose failed for multi-route-secret / 123456789012 / private-key-value-2 while authenticating route at-vie-wg-001.',
-        cause: `service ${SECONDARY_ROUTE.wireproxyServiceName} rejected username alice password multi-route-secret while reading ${TLS_PRIVATE_KEY_FIXTURE}`,
-        artifactPath: null,
-        composeFilePath: null,
-        validationSource: 'internal-syntax',
-        routeId: SECONDARY_ROUTE.routeId,
-        routeHostname: '127.0.0.2',
-        routeBindIp: '127.0.0.2',
-        serviceName: SECONDARY_ROUTE.wireproxyServiceName,
-        command: `docker compose --file ${paths.runtimeComposeFile} up --detach`,
+    const seeded = await seedConfiguredScenario(
+      root,
+      'degraded-auth',
+      {
+        routeHostnames: ['127.0.0.1', '127.0.0.2'],
+        routeBindIps: ['127.0.0.1', '127.0.0.2'],
+        runtimePhase: 'running',
+        runtimeCheckedAt: '2026-03-21T09:10:00.000Z',
+        runtimeMessage: 'Runtime started successfully.',
       },
-    });
+      {
+        relayFetchedAt: '2026-03-21T09:05:00.000Z',
+        writeValidationReports: true,
+        lastStart: {
+          attemptedAt: '2026-03-21T09:10:00.000Z',
+          status: 'failure',
+          phase: 'compose-launch',
+          source: 'docker-compose',
+          code: 'COMPOSE_UP_FAILED',
+          message:
+            'Docker Compose failed for multi-route-secret / 123456789012 / private-key-value-2 while authenticating route at-vie-wg-001.',
+          cause: `service ${SECONDARY_ROUTE.wireproxyServiceName} rejected username alice password multi-route-secret while reading ${TLS_PRIVATE_KEY_FIXTURE}`,
+          artifactPath: null,
+          composeFilePath: null,
+          validationSource: 'internal-syntax',
+          routeId: SECONDARY_ROUTE.routeId,
+          routeHostname: '127.0.0.2',
+          routeBindIp: '127.0.0.2',
+          serviceName: SECONDARY_ROUTE.wireproxyServiceName,
+          command: `docker compose --file ${paths.runtimeComposeFile} up --detach`,
+        },
+      },
+    );
 
     const status = await runCliCommand(seeded.env, ['status']);
     const doctor = await runCliCommand(seeded.env, ['doctor']);
@@ -254,19 +335,67 @@ async function verifyDegradedAuthScenario(): Promise<string> {
     await writeScenarioArtifacts(root, { status, doctor });
 
     assertExitCode(status, 0, 'degraded-auth: status should still return a rendered report.');
-    assertExitCode(doctor, 1, 'degraded-auth: doctor should fail on degraded runtime/auth evidence.');
-    assertContains(status.stdout, 'phase: degraded', 'degraded-auth: status did not classify the runtime as degraded.');
-    assertContains(status.stdout, `route ${SECONDARY_ROUTE.routeId} is stopped`, 'degraded-auth: status warning lost the failing route context.');
-    assertContains(status.stdout, `service: ${SECONDARY_ROUTE.wireproxyServiceName}`, 'degraded-auth: status stopped exposing the failing service name.');
-    assertContains(status.stdout, 'the last recorded `mullgate start` attempt failed; inspect the last-start diagnostics below before restarting blindly.', 'degraded-auth: status remediation drifted.');
+    assertExitCode(
+      doctor,
+      1,
+      'degraded-auth: doctor should fail on degraded runtime/auth evidence.',
+    );
+    assertContains(
+      status.stdout,
+      'phase: degraded',
+      'degraded-auth: status did not classify the runtime as degraded.',
+    );
+    assertContains(
+      status.stdout,
+      `route ${SECONDARY_ROUTE.routeId} is stopped`,
+      'degraded-auth: status warning lost the failing route context.',
+    );
+    assertContains(
+      status.stdout,
+      `service: ${SECONDARY_ROUTE.wireproxyServiceName}`,
+      'degraded-auth: status stopped exposing the failing service name.',
+    );
+    assertContains(
+      status.stdout,
+      'the last recorded `mullgate start` attempt failed; inspect the last-start diagnostics below before restarting blindly.',
+      'degraded-auth: status remediation drifted.',
+    );
     assertContains(doctor.stderr, 'overall: fail', 'degraded-auth: doctor did not fail.');
-    assertContains(doctor.stderr, '7. runtime: fail', 'degraded-auth: doctor runtime check drifted away from fail.');
-    assertContains(doctor.stderr, '8. last-start: fail', 'degraded-auth: doctor last-start check drifted away from fail.');
-    assertContains(doctor.stderr, `route-id=${SECONDARY_ROUTE.routeId}`, 'degraded-auth: doctor lost the failing route id.');
-    assertContains(doctor.stderr, `service=${SECONDARY_ROUTE.wireproxyServiceName}`, 'degraded-auth: doctor lost the failing service name.');
-    assertContains(doctor.stderr, 'If credentials changed, update `setup.auth.username` / `setup.auth.password` with `mullgate config set`, then rerun `mullgate config validate` and `mullgate start`.', 'degraded-auth: doctor auth remediation drifted.');
-    assertContains(status.stdout, 'route bind ip: 127.0.0.2', 'degraded-auth: status lost the failing route bind-ip context.');
-    assertContains(doctor.stderr, 'route-bind-ip=127.0.0.2', 'degraded-auth: doctor lost the failing route bind-ip context.');
+    assertContains(
+      doctor.stderr,
+      '7. runtime: fail',
+      'degraded-auth: doctor runtime check drifted away from fail.',
+    );
+    assertContains(
+      doctor.stderr,
+      '8. last-start: fail',
+      'degraded-auth: doctor last-start check drifted away from fail.',
+    );
+    assertContains(
+      doctor.stderr,
+      `route-id=${SECONDARY_ROUTE.routeId}`,
+      'degraded-auth: doctor lost the failing route id.',
+    );
+    assertContains(
+      doctor.stderr,
+      `service=${SECONDARY_ROUTE.wireproxyServiceName}`,
+      'degraded-auth: doctor lost the failing service name.',
+    );
+    assertContains(
+      doctor.stderr,
+      'If credentials changed, update `setup.auth.username` / `setup.auth.password` with `mullgate config set`, then rerun `mullgate config validate` and `mullgate start`.',
+      'degraded-auth: doctor auth remediation drifted.',
+    );
+    assertContains(
+      status.stdout,
+      'route bind ip: 127.0.0.2',
+      'degraded-auth: status lost the failing route bind-ip context.',
+    );
+    assertContains(
+      doctor.stderr,
+      'route-bind-ip=127.0.0.2',
+      'degraded-auth: doctor lost the failing route bind-ip context.',
+    );
     assertNoSecretLeaks('degraded-auth status', status.stdout, seeded.config);
     assertNoSecretLeaks('degraded-auth doctor', doctor.stderr, seeded.config);
 
@@ -286,17 +415,23 @@ async function verifyHostnameDriftScenario(): Promise<string> {
   let preserveRoot = false;
 
   try {
-    const seeded = await seedConfiguredScenario(root, 'hostname-drift', {
-      routeHostnames: ['127.0.0.1', 'localhost'],
-      routeBindIps: ['127.0.0.1', '127.0.0.2'],
-      runtimePhase: 'unvalidated',
-      runtimeCheckedAt: '2026-03-21T09:20:00.000Z',
-      runtimeMessage: 'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
-    }, {
-      relayFetchedAt: '2026-03-21T09:15:00.000Z',
-      writeValidationReports: false,
-      lastStart: null,
-    });
+    const seeded = await seedConfiguredScenario(
+      root,
+      'hostname-drift',
+      {
+        routeHostnames: ['127.0.0.1', 'localhost'],
+        routeBindIps: ['127.0.0.1', '127.0.0.2'],
+        runtimePhase: 'unvalidated',
+        runtimeCheckedAt: '2026-03-21T09:20:00.000Z',
+        runtimeMessage:
+          'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+      },
+      {
+        relayFetchedAt: '2026-03-21T09:15:00.000Z',
+        writeValidationReports: false,
+        lastStart: null,
+      },
+    );
 
     const status = await runCliCommand(seeded.env, ['status']);
     const doctor = await runCliCommand(seeded.env, ['doctor']);
@@ -305,17 +440,59 @@ async function verifyHostnameDriftScenario(): Promise<string> {
 
     assertExitCode(status, 0, 'hostname-drift: status should still render a report.');
     assertExitCode(doctor, 1, 'hostname-drift: doctor should fail on hostname drift.');
-    assertContains(status.stdout, 'phase: stopped', 'hostname-drift: status no longer classifies an unvalidated no-container install as stopped.');
-    assertContains(status.stdout, 'saved config is still marked unvalidated, so runtime artifacts may lag behind recent config or exposure edits.', 'hostname-drift: status lost the unvalidated warning.');
-    assertContains(status.stdout, '2. localhost -> 127.0.0.2', 'hostname-drift: status lost the drifting hostname/bind mapping.');
+    assertContains(
+      status.stdout,
+      'phase: stopped',
+      'hostname-drift: status no longer classifies an unvalidated no-container install as stopped.',
+    );
+    assertContains(
+      status.stdout,
+      'saved config is still marked unvalidated, so runtime artifacts may lag behind recent config or exposure edits.',
+      'hostname-drift: status lost the unvalidated warning.',
+    );
+    assertContains(
+      status.stdout,
+      '2. localhost -> 127.0.0.2',
+      'hostname-drift: status lost the drifting hostname/bind mapping.',
+    );
     assertContains(doctor.stderr, 'overall: fail', 'hostname-drift: doctor did not fail.');
-    assertContains(doctor.stderr, '6. hostname-resolution: fail', 'hostname-drift: doctor hostname-resolution check drifted away from fail.');
-    assertContains(doctor.stderr, `Route ${SECONDARY_ROUTE.routeId} expects localhost to resolve to 127.0.0.2`, 'hostname-drift: doctor stopped explaining the hostname/bind mismatch.');
-    assertContains(doctor.stderr, 'Use `mullgate config hosts` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun `mullgate doctor`.', 'hostname-drift: doctor lost the hosts-based remediation.');
-    assertContains(doctor.stderr, '7. runtime: degraded', 'hostname-drift: doctor runtime no-container classification drifted.');
-    assertContains(doctor.stderr, '8. last-start: degraded', 'hostname-drift: doctor no-last-start classification drifted.');
-    assertSharedFact(status.stdout, doctor.stderr, `config: ${seeded.paths.configFile}`, 'hostname-drift: status/doctor config path drifted.');
-    assertSharedFact(status.stdout, doctor.stderr, `runtime dir: ${seeded.paths.runtimeDir}`, 'hostname-drift: status/doctor runtime dir drifted.');
+    assertContains(
+      doctor.stderr,
+      '6. hostname-resolution: fail',
+      'hostname-drift: doctor hostname-resolution check drifted away from fail.',
+    );
+    assertContains(
+      doctor.stderr,
+      `Route ${SECONDARY_ROUTE.routeId} expects localhost to resolve to 127.0.0.2`,
+      'hostname-drift: doctor stopped explaining the hostname/bind mismatch.',
+    );
+    assertContains(
+      doctor.stderr,
+      'Use `mullgate config hosts` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun `mullgate doctor`.',
+      'hostname-drift: doctor lost the hosts-based remediation.',
+    );
+    assertContains(
+      doctor.stderr,
+      '7. runtime: degraded',
+      'hostname-drift: doctor runtime no-container classification drifted.',
+    );
+    assertContains(
+      doctor.stderr,
+      '8. last-start: degraded',
+      'hostname-drift: doctor no-last-start classification drifted.',
+    );
+    assertSharedFact(
+      status.stdout,
+      doctor.stderr,
+      `config: ${seeded.paths.configFile}`,
+      'hostname-drift: status/doctor config path drifted.',
+    );
+    assertSharedFact(
+      status.stdout,
+      doctor.stderr,
+      `runtime dir: ${seeded.paths.runtimeDir}`,
+      'hostname-drift: status/doctor runtime dir drifted.',
+    );
     assertNoSecretLeaks('hostname-drift status', status.stdout, seeded.config);
     assertNoSecretLeaks('hostname-drift doctor', doctor.stderr, seeded.config);
 
@@ -365,25 +542,37 @@ async function seedConfiguredScenario(
   }
 
   await mkdir(path.dirname(config.runtime.wireproxyConfigPath), { recursive: true, mode: 0o700 });
-  await writeFile(config.runtime.wireproxyConfigPath, '# verifier primary wireproxy config\n', { mode: 0o600 });
+  await writeFile(config.runtime.wireproxyConfigPath, '# verifier primary wireproxy config\n', {
+    mode: 0o600,
+  });
 
   for (const route of config.routing.locations) {
     const routePaths = resolveRouteWireproxyPaths(paths, route.runtime);
-    await writeFile(routePaths.wireproxyConfigPath, `# verifier route ${route.runtime.routeId}\n`, { mode: 0o600 });
+    await writeFile(routePaths.wireproxyConfigPath, `# verifier route ${route.runtime.routeId}\n`, {
+      mode: 0o600,
+    });
 
     if (options.writeValidationReports) {
       const report = createValidationSuccess(routePaths.configTestReportPath);
-      await writeFile(routePaths.configTestReportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+      await writeFile(routePaths.configTestReportPath, `${JSON.stringify(report, null, 2)}\n`, {
+        mode: 0o600,
+      });
     }
   }
 
   const relayCatalog = createRelayCatalog(options.relayFetchedAt);
   await mkdir(path.dirname(paths.provisioningCacheFile), { recursive: true, mode: 0o700 });
-  await writeFile(paths.provisioningCacheFile, `${JSON.stringify(relayCatalog, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(paths.provisioningCacheFile, `${JSON.stringify(relayCatalog, null, 2)}\n`, {
+    mode: 0o600,
+  });
 
   if (options.lastStart) {
     await mkdir(path.dirname(paths.runtimeStartDiagnosticsFile), { recursive: true, mode: 0o700 });
-    await writeFile(paths.runtimeStartDiagnosticsFile, `${JSON.stringify(options.lastStart, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(
+      paths.runtimeStartDiagnosticsFile,
+      `${JSON.stringify(options.lastStart, null, 2)}\n`,
+      { mode: 0o600 },
+    );
   }
 
   return {
@@ -393,7 +582,10 @@ async function seedConfiguredScenario(
   };
 }
 
-async function createTempEnvironment(root: string, dockerScenario: DockerScenario): Promise<NodeJS.ProcessEnv> {
+async function createTempEnvironment(
+  root: string,
+  dockerScenario: DockerScenario,
+): Promise<NodeJS.ProcessEnv> {
   const fakeBin = path.join(root, 'fake-bin');
   await mkdir(fakeBin, { recursive: true, mode: 0o700 });
   await installFakeDocker(fakeBin);
@@ -404,12 +596,17 @@ async function createTempEnvironment(root: string, dockerScenario: DockerScenari
     XDG_CONFIG_HOME: path.join(root, 'config'),
     XDG_STATE_HOME: path.join(root, 'state'),
     XDG_CACHE_HOME: path.join(root, 'cache'),
-    PATH: [fakeBin, process.env.PATH ?? ''].filter((value) => value.length > 0).join(path.delimiter),
+    PATH: [fakeBin, process.env.PATH ?? '']
+      .filter((value) => value.length > 0)
+      .join(path.delimiter),
     MULLGATE_FAKE_DOCKER_SCENARIO: dockerScenario,
   };
 }
 
-function createFixtureConfig(env: NodeJS.ProcessEnv, options: FixtureConfigOptions): MullgateConfig {
+function createFixtureConfig(
+  env: NodeJS.ProcessEnv,
+  options: FixtureConfigOptions,
+): MullgateConfig {
   const paths = resolveMullgatePaths(env);
   const timestamp = options.runtimeCheckedAt;
 
@@ -698,7 +895,9 @@ exit 2
 `;
 }
 
-function createFakeDockerContainers(scenario: Extract<DockerScenario, 'healthy' | 'degraded-auth'>): unknown[] {
+function createFakeDockerContainers(
+  scenario: Extract<DockerScenario, 'healthy' | 'degraded-auth'>,
+): unknown[] {
   const base = [
     {
       Name: 'mullgate-routing-layer-1',
@@ -753,22 +952,32 @@ function createFakeDockerContainers(scenario: Extract<DockerScenario, 'healthy' 
   ];
 }
 
-async function writeScenarioArtifacts(root: string, input: { readonly status: CommandResult; readonly doctor: CommandResult }): Promise<void> {
+async function writeScenarioArtifacts(
+  root: string,
+  input: { readonly status: CommandResult; readonly doctor: CommandResult },
+): Promise<void> {
   await writeFile(path.join(root, 'status.stdout.txt'), input.status.stdout, { mode: 0o600 });
   await writeFile(path.join(root, 'status.stderr.txt'), input.status.stderr, { mode: 0o600 });
   await writeFile(path.join(root, 'doctor.stdout.txt'), input.doctor.stdout, { mode: 0o600 });
   await writeFile(path.join(root, 'doctor.stderr.txt'), input.doctor.stderr, { mode: 0o600 });
   await writeFile(
     path.join(root, 'command-results.json'),
-    `${JSON.stringify({
-      status: { exitCode: input.status.exitCode },
-      doctor: { exitCode: input.doctor.exitCode },
-    }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        status: { exitCode: input.status.exitCode },
+        doctor: { exitCode: input.doctor.exitCode },
+      },
+      null,
+      2,
+    )}\n`,
     { mode: 0o600 },
   );
 }
 
-async function runCliCommand(env: NodeJS.ProcessEnv, args: readonly string[]): Promise<CommandResult> {
+async function runCliCommand(
+  env: NodeJS.ProcessEnv,
+  args: readonly string[],
+): Promise<CommandResult> {
   return runCommand(process.execPath, [tsxCliPath, 'src/cli.ts', ...args], {
     cwd: repoRoot,
     env,
@@ -808,7 +1017,9 @@ async function runCommand(
 
 function assertExitCode(result: CommandResult, expected: number, message: string): void {
   if (result.exitCode !== expected) {
-    throw new Error(`${message}\nexpected: ${expected}\nactual: ${result.exitCode}\nstdout:\n${result.stdout || '<empty>'}\nstderr:\n${result.stderr || '<empty>'}`);
+    throw new Error(
+      `${message}\nexpected: ${expected}\nactual: ${result.exitCode}\nstdout:\n${result.stdout || '<empty>'}\nstderr:\n${result.stderr || '<empty>'}`,
+    );
   }
 }
 
@@ -834,7 +1045,11 @@ function assertNoSecretLeaks(surface: string, text: string, config: MullgateConf
     assertNotContains(text, secret, `${surface} leaked a secret that should have been redacted.`);
   }
 
-  assertNotContains(text, TLS_PRIVATE_KEY_FIXTURE, `${surface} leaked the TLS private key fixture.`);
+  assertNotContains(
+    text,
+    TLS_PRIVATE_KEY_FIXTURE,
+    `${surface} leaked the TLS private key fixture.`,
+  );
   assertNotContains(text, 'BEGIN PRIVATE KEY', `${surface} leaked raw private-key material.`);
 }
 
@@ -843,7 +1058,10 @@ function collectSecrets(config: MullgateConfig): string[] {
     config.setup.auth.password,
     config.mullvad.accountNumber,
     config.mullvad.wireguard.privateKey,
-    ...config.routing.locations.flatMap((route) => [route.mullvad.accountNumber, route.mullvad.wireguard.privateKey]),
+    ...config.routing.locations.flatMap((route) => [
+      route.mullvad.accountNumber,
+      route.mullvad.wireguard.privateKey,
+    ]),
   ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 }
 

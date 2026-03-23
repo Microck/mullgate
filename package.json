@@ -13,7 +13,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Microck/mullgate"
+    "url": "git+https://github.com/Microck/mullgate.git"
   },
   "homepage": "https://github.com/Microck/mullgate#readme",
   "bugs": {
@@ -36,7 +36,12 @@
   "scripts": {
     "build": "tsc --pretty false -p tsconfig.build.json",
     "typecheck": "tsc --pretty false --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "format:check": "biome format --check .",
     "test": "tsx scripts/test.ts",
+    "test:coverage": "tsx scripts/test.ts -- --run --coverage",
+    "check": "pnpm lint && pnpm typecheck && pnpm test -- --run",
     "cli": "tsx src/cli.ts",
     "verify:s06": "tsx scripts/verify-s06-release.ts",
     "verify:m004-feasibility": "tsx scripts/verify-m004-feasibility.ts",
@@ -47,7 +52,8 @@
     "verify:m002-final": "tsx scripts/verify-m002-final.ts",
     "verify:m003-repo-baseline": "tsx scripts/verify-m003-repo-baseline.ts",
     "verify:m003-install-path": "tsx scripts/verify-m003-install-path.ts",
-    "verify:install-smoke": "tsx scripts/verify-install-smoke.ts"
+    "verify:install-smoke": "tsx scripts/verify-install-smoke.ts",
+    "prepare": "simple-git-hooks"
   },
   "engines": {
     "node": ">=22.0.0"
@@ -58,10 +64,16 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.2.6",
     "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "4.1.0",
+    "simple-git-hooks": "2.13.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^4.0.7"
   },
-  "packageManager": "pnpm@10.18.3"
+  "packageManager": "pnpm@10.18.3",
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint && pnpm typecheck"
+  }
 }

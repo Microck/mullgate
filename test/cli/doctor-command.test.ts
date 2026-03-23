@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,19 +7,37 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createDoctorCommandAction } from '../../src/commands/doctor.js';
 import { resolveMullgatePaths, resolveRouteWireproxyPaths } from '../../src/config/paths.js';
+import {
+  CONFIG_VERSION,
+  type MullgateConfig,
+  type RuntimeStartDiagnostic,
+} from '../../src/config/schema.js';
 import { ConfigStore } from '../../src/config/store.js';
-import { CONFIG_VERSION, type MullgateConfig, type RuntimeStartDiagnostic } from '../../src/config/schema.js';
 import type { MullvadRelayCatalog } from '../../src/mullvad/fetch-relays.js';
-import { renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
 import type { DockerComposeStatusResult } from '../../src/runtime/docker-runtime.js';
+import { renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
 import type { ValidateWireproxyResult } from '../../src/runtime/validate-wireproxy.js';
 
 const temporaryDirectories: string[] = [];
+const windowsFixturePrefixes = [
+  'C:\\Users\\alice\\AppData\\Local\\mullgate',
+  'C:\\Users\\alice\\AppData\\Roaming\\mullgate',
+] as const;
 
 type BufferSink = {
   readonly value: { current: string };
   write(chunk: string): boolean;
 };
+
+function cleanupWindowsFixturePaths(): void {
+  readdirSync('.').forEach((entry) => {
+    if (!windowsFixturePrefixes.some((prefix) => entry.startsWith(prefix))) {
+      return;
+    }
+
+    rmSync(entry, { recursive: true, force: true });
+  });
+}
 
 function createTempEnvironment(): NodeJS.ProcessEnv {
   const root = mkdtempSync(path.join(tmpdir(), 'mullgate-doctor-command-'));
@@ -284,10 +302,16 @@ async function seedSavedConfig(
     readonly writeValidationReports?: boolean;
     readonly validationReports?: Record<string, ValidateWireproxyResult>;
   } = {},
-): Promise<{ readonly store: ConfigStore; readonly paths: ReturnType<typeof resolveMullgatePaths>; readonly config: MullgateConfig }> {
+): Promise<{
+  readonly store: ConfigStore;
+  readonly paths: ReturnType<typeof resolveMullgatePaths>;
+  readonly config: MullgateConfig;
+}> {
   const paths = resolveMullgatePaths(env);
   const store = new ConfigStore(paths);
-  const config = options.configure ? options.configure(createFixtureConfig(env)) : createFixtureConfig(env);
+  const config = options.configure
+    ? options.configure(createFixtureConfig(env))
+    : createFixtureConfig(env);
 
   await store.save(config);
 
@@ -304,28 +328,44 @@ async function seedSavedConfig(
   }
 
   await mkdir(path.dirname(config.runtime.wireproxyConfigPath), { recursive: true, mode: 0o700 });
-  await writeFile(config.runtime.wireproxyConfigPath, '# primary wireproxy fixture\n', { mode: 0o600 });
+  await writeFile(config.runtime.wireproxyConfigPath, '# primary wireproxy fixture\n', {
+    mode: 0o600,
+  });
 
   for (const location of config.routing.locations) {
     const routePaths = resolveRouteWireproxyPaths(paths, location.runtime);
-    await writeFile(routePaths.wireproxyConfigPath, `# route fixture ${location.runtime.routeId}\n`, { mode: 0o600 });
+    await writeFile(
+      routePaths.wireproxyConfigPath,
+      `# route fixture ${location.runtime.routeId}\n`,
+      { mode: 0o600 },
+    );
   }
 
   const relayCatalog = options.relayCatalog ?? createRelayCatalog('2026-03-21T07:55:00.000Z');
   await mkdir(path.dirname(paths.provisioningCacheFile), { recursive: true, mode: 0o700 });
-  await writeFile(paths.provisioningCacheFile, `${JSON.stringify(relayCatalog, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(paths.provisioningCacheFile, `${JSON.stringify(relayCatalog, null, 2)}\n`, {
+    mode: 0o600,
+  });
 
   if (options.writeValidationReports ?? true) {
     for (const location of config.routing.locations) {
       const routePaths = resolveRouteWireproxyPaths(paths, location.runtime);
-      const report = options.validationReports?.[location.runtime.routeId] ?? createValidationSuccess(routePaths.configTestReportPath);
-      await writeFile(routePaths.configTestReportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+      const report =
+        options.validationReports?.[location.runtime.routeId] ??
+        createValidationSuccess(routePaths.configTestReportPath);
+      await writeFile(routePaths.configTestReportPath, `${JSON.stringify(report, null, 2)}\n`, {
+        mode: 0o600,
+      });
     }
   }
 
   if (options.lastStart) {
     await mkdir(path.dirname(paths.runtimeStartDiagnosticsFile), { recursive: true, mode: 0o700 });
-    await writeFile(paths.runtimeStartDiagnosticsFile, `${JSON.stringify(options.lastStart, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(
+      paths.runtimeStartDiagnosticsFile,
+      `${JSON.stringify(options.lastStart, null, 2)}\n`,
+      { mode: 0o600 },
+    );
   }
 
   return { store, paths, config };
@@ -340,8 +380,12 @@ function createComposeStatusSuccess(
   containers: NonNullable<Extract<DockerComposeStatusResult, { ok: true }>['containers']>,
 ): Extract<DockerComposeStatusResult, { ok: true }> {
   const running = containers.filter((container) => container.state === 'running').length;
-  const healthy = containers.filter((container) => container.health === 'healthy' || container.health === null).length;
-  const starting = containers.filter((container) => container.health === 'starting' || container.state === 'restarting').length;
+  const healthy = containers.filter(
+    (container) => container.health === 'healthy' || container.health === null,
+  ).length;
+  const starting = containers.filter(
+    (container) => container.health === 'starting' || container.state === 'restarting',
+  ).length;
   const stopped = containers.filter((container) => container.state === 'exited').length;
   const unhealthy = containers.filter((container) => container.health === 'unhealthy').length;
 
@@ -376,7 +420,12 @@ function createComposeStatusSuccess(
 
 afterEach(async () => {
   process.exitCode = 0;
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  cleanupWindowsFixturePaths();
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 describe('mullgate doctor command', () => {
@@ -472,7 +521,7 @@ describe('mullgate doctor command', () => {
     expect(stdout.value.current).not.toContain('proxy-password');
     expect(stdout.value.current).not.toContain('123456789012');
     expect(stdout.value.current).not.toContain('private-key-value-1');
-    expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate doctor
       overall: pass
@@ -595,7 +644,7 @@ describe('mullgate doctor command', () => {
 
     expect(process.exitCode).toBe(1);
     expect(stdout.value.current).toBe('');
-    expect('\n' + normalizeOutput(stderr.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
 "\nMullgate doctor
 overall: fail
 checked at: 2026-03-21T08:00:00.000Z
@@ -638,7 +687,8 @@ checks
       stdout,
       stderr,
       checkedAt: '2026-03-21T08:00:00.000Z',
-      resolveHostname: async (hostname) => (hostname === 'se-got-wg-101' ? ['127.0.0.1'] : ['127.0.0.2']),
+      resolveHostname: async (hostname) =>
+        hostname === 'se-got-wg-101' ? ['127.0.0.1'] : ['127.0.0.2'],
       inspectRuntime: async () => ({
         ok: false,
         phase: 'compose-detect',
@@ -652,7 +702,8 @@ checks
           cwd: path.dirname(paths.runtimeComposeFile),
           rendered: 'docker compose version',
         },
-        message: 'Docker CLI is not installed or is not on PATH, so Mullgate cannot inspect the runtime bundle.',
+        message:
+          'Docker CLI is not installed or is not on PATH, so Mullgate cannot inspect the runtime bundle.',
         cause: 'spawn docker ENOENT',
         artifactPath: paths.runtimeComposeFile,
       }),
@@ -662,7 +713,7 @@ checks
 
     expect(process.exitCode).toBe(1);
     expect(stdout.value.current).toBe('');
-    expect('\n' + normalizeOutput(stderr.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate doctor
       overall: fail
@@ -760,6 +811,7 @@ checks
   });
 
   it('degrades platform support cleanly on Windows-style installs while keeping other diagnostics truthful', async () => {
+    cleanupWindowsFixturePaths();
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       MULLGATE_PLATFORM: 'windows',
@@ -794,7 +846,8 @@ checks
       stdout,
       stderr,
       checkedAt: '2026-03-21T08:00:00.000Z',
-      resolveHostname: async (hostname) => (hostname === 'se-got-wg-101' ? ['127.0.0.1'] : ['127.0.0.2']),
+      resolveHostname: async (hostname) =>
+        hostname === 'se-got-wg-101' ? ['127.0.0.1'] : ['127.0.0.2'],
       inspectRuntime: async () => createComposeStatusSuccess(paths.runtimeComposeFile, []),
     });
 
@@ -809,7 +862,9 @@ checks
     expect(summary).toContain('detail: mode-label=Windows path + diagnostics support');
     expect(summary).toContain('detail: runtime-execution=limited');
     expect(summary).toContain('detail: host-networking=Docker Desktop host networking is limited');
-    expect(summary).toContain('remediation: Treat Linux as the runtime execution target for now, or move the current Docker-first runtime into a Linux VM or host when you need the shipped multi-route topology to behave truthfully.');
+    expect(summary).toContain(
+      'remediation: Treat Linux as the runtime execution target for now, or move the current Docker-first runtime into a Linux VM or host when you need the shipped multi-route topology to behave truthfully.',
+    );
   });
 
   it('calls out hostname drift with route-aware remediation plus stale relay cache and validation drift', async () => {
@@ -822,7 +877,8 @@ checks
           status: {
             phase: 'unvalidated',
             lastCheckedAt: '2026-03-21T07:00:00.000Z',
-            message: 'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+            message:
+              'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
           },
         },
       }),
@@ -853,7 +909,7 @@ checks
 
     expect(process.exitCode).toBe(1);
     expect(stdout.value.current).toBe('');
-    expect('\n' + normalizeOutput(stderr.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate doctor
       overall: fail
@@ -970,7 +1026,8 @@ checks
       phase: 'compose-launch',
       source: 'docker-compose',
       code: 'COMPOSE_UP_FAILED',
-      message: 'Docker Compose failed for proxy-password / 123456789012 / private-key-value-2 while authenticating route at-vie-wg-001.',
+      message:
+        'Docker Compose failed for proxy-password / 123456789012 / private-key-value-2 while authenticating route at-vie-wg-001.',
       cause:
         'service wireproxy-at-vie-wg-001 rejected username alice password proxy-password while reading -----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----',
       artifactPath: null,
@@ -1004,7 +1061,8 @@ checks
       stdout,
       stderr,
       checkedAt: '2026-03-21T08:10:30.000Z',
-      resolveHostname: async (hostname) => (hostname === 'se-got-wg-101' ? ['127.0.0.1'] : ['127.0.0.2']),
+      resolveHostname: async (hostname) =>
+        hostname === 'se-got-wg-101' ? ['127.0.0.1'] : ['127.0.0.2'],
       inspectRuntime: async () =>
         createComposeStatusSuccess(paths.runtimeComposeFile, [
           {
@@ -1048,7 +1106,7 @@ checks
     expect(stderr.value.current).not.toContain('123456789012');
     expect(stderr.value.current).not.toContain('private-key-value-2');
     expect(stderr.value.current).not.toContain('BEGIN PRIVATE KEY');
-    expect('\n' + normalizeOutput(stderr.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate doctor
       overall: fail

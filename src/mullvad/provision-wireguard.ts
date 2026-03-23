@@ -113,7 +113,9 @@ export function generateWireguardKeyPair(): WireguardKeyPair {
   };
 }
 
-export async function provisionWireguard(options: ProvisionWireguardOptions): Promise<ProvisionWireguardResult> {
+export async function provisionWireguard(
+  options: ProvisionWireguardOptions,
+): Promise<ProvisionWireguardResult> {
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const endpoint = new URL(options.baseUrl ?? MULLVAD_WG_URL).toString();
   const checkedAt = options.checkedAt ?? new Date().toISOString();
@@ -182,7 +184,10 @@ export async function provisionWireguard(options: ProvisionWireguardOptions): Pr
   const parsedBody = rawBody.length > 0 ? tryParseJson(rawBody) : null;
 
   if (!response.ok) {
-    const parsedApiError = parsedBody && typeof parsedBody === 'object' ? apiErrorResponseSchema.safeParse(parsedBody) : null;
+    const parsedApiError =
+      parsedBody && typeof parsedBody === 'object'
+        ? apiErrorResponseSchema.safeParse(parsedBody)
+        : null;
     const apiPayload = parsedApiError?.success ? parsedApiError.data : undefined;
     const plainTextBody = typeof parsedBody === 'string' ? parsedBody.trim() : null;
     const cause =
@@ -231,7 +236,8 @@ export async function provisionWireguard(options: ProvisionWireguardOptions): Pr
         endpoint,
         checkedAt,
         code: 'INVALID_RESPONSE',
-        message: 'Mullvad returned a plain-text provisioning response that did not include an address.',
+        message:
+          'Mullvad returned a plain-text provisioning response that did not include an address.',
         cause: parsedBody.trim(),
         retryable: false,
       });
@@ -263,7 +269,8 @@ export async function provisionWireguard(options: ProvisionWireguardOptions): Pr
       endpoint,
       checkedAt,
       code: 'INVALID_RESPONSE',
-      message: 'Mullvad returned a provisioning payload that did not match the documented device contract.',
+      message:
+        'Mullvad returned a provisioning payload that did not match the documented device contract.',
       cause: formatZodIssues(parsedDevice.error),
       retryable: false,
     });
@@ -300,7 +307,9 @@ function createProvisionedWireguardDevice(input: {
   hijackDns: boolean;
   ports: readonly unknown[];
 }): ProvisionedWireguardDevice {
-  const interfaceAddresses = (input.ipv6Address ? [input.ipv4Address, input.ipv6Address] : [input.ipv4Address]) as [string, ...string[]];
+  const interfaceAddresses = (
+    input.ipv6Address ? [input.ipv4Address, input.ipv6Address] : [input.ipv4Address]
+  ) as [string, ...string[]];
   const publicView: ProvisionedWireguardDeviceView = {
     ...(input.deviceId ? { deviceId: input.deviceId } : {}),
     ...(input.deviceName ? { deviceName: input.deviceName } : {}),
@@ -440,7 +449,9 @@ function formatUnknownError(error: unknown): string {
 }
 
 function formatZodIssues(error: z.ZodError): string {
-  return error.issues.map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`).join('; ');
+  return error.issues
+    .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+    .join('; ');
 }
 
 function sanitizeText(value: string): string {

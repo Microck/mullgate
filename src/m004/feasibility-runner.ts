@@ -1,38 +1,47 @@
 import { spawn } from 'node:child_process';
-import { access, chmod, cp, mkdtemp, mkdir, open, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { REDACTED, redactSensitiveText } from '../config/redact.js';
+import { REDACTED } from '../config/redact.js';
+import {
+  fetchRelays,
+  type MullvadRelay,
+  type MullvadRelayCatalog,
+} from '../mullvad/fetch-relays.js';
+import { provisionWireguard } from '../mullvad/provision-wireguard.js';
+import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
 import {
   createEntryIdentityFromRelay,
   createFeasibilityArtifact,
   createSingleEntryTopology,
-  selectFeasibilityExitRelays,
-  serializeFeasibilityArtifact,
   type FeasibilityArtifact,
   type FeasibilityLogicalExit,
   type FeasibilityPrerequisiteFailure,
   type FeasibilityProbeObservation,
   type FeasibilityRelaySelectionSummary,
   type HostRouteSnapshot,
+  selectFeasibilityExitRelays,
+  serializeFeasibilityArtifact,
 } from './feasibility-contract.js';
-import { fetchRelays, type MullvadRelay, type MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
-import { provisionWireguard } from '../mullvad/provision-wireguard.js';
-import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
 
 const DEFAULT_TARGET_URL = 'https://am.i.mullvad.net/json';
 const DEFAULT_ROUTE_CHECK_IP = '1.1.1.1';
 const DEFAULT_OUTPUT_ROOT = '.tmp/m004-feasibility';
 const DEFAULT_WIREPROXY_IMAGE = 'backplane/wireproxy:20260320';
 const DEFAULT_WIREPROXY_CONTAINER_PATH = '/etc/wireproxy/wireproxy.conf';
-const DEFAULT_HTTP_PORT = 8081;
+const _DEFAULT_HTTP_PORT = 8081;
 const DEFAULT_DNS_SERVER = '10.64.0.1';
 const DEFAULT_WIREGUARD_PORT = 51820;
 const DEFAULT_LOGICAL_EXIT_COUNT = 3 as const;
 const DEFAULT_RELAYS_URL = 'https://api.mullvad.net/www/relays/all/';
-const REQUIRED_ENV_KEYS = ['MULLGATE_ACCOUNT_NUMBER', 'MULLGATE_PROXY_USERNAME', 'MULLGATE_PROXY_PASSWORD', 'MULLGATE_DEVICE_NAME'] as const;
+const REQUIRED_ENV_KEYS = [
+  'MULLGATE_ACCOUNT_NUMBER',
+  'MULLGATE_PROXY_USERNAME',
+  'MULLGATE_PROXY_PASSWORD',
+  'MULLGATE_DEVICE_NAME',
+] as const;
 
 type RequiredEnvKey = (typeof REQUIRED_ENV_KEYS)[number];
 
@@ -113,10 +122,15 @@ type ProbeInput = {
   readonly targetUrl: string;
 };
 
-export function parseFeasibilityArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): FeasibilityParseResult {
+export function parseFeasibilityArgs(
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): FeasibilityParseResult {
   let targetUrl = env.MULLGATE_VERIFY_TARGET_URL?.trim() || DEFAULT_TARGET_URL;
   let routeCheckIp = env.MULLGATE_VERIFY_ROUTE_CHECK_IP?.trim() || DEFAULT_ROUTE_CHECK_IP;
-  let logicalExitCount: 2 | 3 = readLogicalExitCount(env.MULLGATE_M004_LOGICAL_EXIT_COUNT?.trim()) ?? DEFAULT_LOGICAL_EXIT_COUNT;
+  let logicalExitCount: 2 | 3 =
+    readLogicalExitCount(env.MULLGATE_M004_LOGICAL_EXIT_COUNT?.trim()) ??
+    DEFAULT_LOGICAL_EXIT_COUNT;
   let outputRoot = env.MULLGATE_M004_OUTPUT_ROOT?.trim() || DEFAULT_OUTPUT_ROOT;
   let keepTempHome = false;
   let fixturePath: string | undefined;
@@ -196,13 +210,25 @@ export function parseFeasibilityArgs(argv: readonly string[], env: NodeJS.Proces
       outputRoot,
       keepTempHome,
       ...(fixturePath ? { fixturePath } : {}),
-      ...(env.MULLGATE_ACCOUNT_NUMBER?.trim() ? { accountNumber: env.MULLGATE_ACCOUNT_NUMBER.trim() } : {}),
-      ...(env.MULLGATE_PROXY_USERNAME?.trim() ? { proxyUsername: env.MULLGATE_PROXY_USERNAME.trim() } : {}),
-      ...(env.MULLGATE_PROXY_PASSWORD?.trim() ? { proxyPassword: env.MULLGATE_PROXY_PASSWORD.trim() } : {}),
+      ...(env.MULLGATE_ACCOUNT_NUMBER?.trim()
+        ? { accountNumber: env.MULLGATE_ACCOUNT_NUMBER.trim() }
+        : {}),
+      ...(env.MULLGATE_PROXY_USERNAME?.trim()
+        ? { proxyUsername: env.MULLGATE_PROXY_USERNAME.trim() }
+        : {}),
+      ...(env.MULLGATE_PROXY_PASSWORD?.trim()
+        ? { proxyPassword: env.MULLGATE_PROXY_PASSWORD.trim() }
+        : {}),
       ...(env.MULLGATE_DEVICE_NAME?.trim() ? { deviceName: env.MULLGATE_DEVICE_NAME.trim() } : {}),
-      ...(env.MULLGATE_MULLVAD_WG_URL?.trim() ? { mullvadWgUrl: env.MULLGATE_MULLVAD_WG_URL.trim() } : {}),
-      ...(env.MULLGATE_MULLVAD_RELAYS_URL?.trim() ? { mullvadRelaysUrl: env.MULLGATE_MULLVAD_RELAYS_URL.trim() } : {}),
-      ...(env.MULLGATE_M004_WIREPROXY_IMAGE?.trim() ? { wireproxyImage: env.MULLGATE_M004_WIREPROXY_IMAGE.trim() } : {}),
+      ...(env.MULLGATE_MULLVAD_WG_URL?.trim()
+        ? { mullvadWgUrl: env.MULLGATE_MULLVAD_WG_URL.trim() }
+        : {}),
+      ...(env.MULLGATE_MULLVAD_RELAYS_URL?.trim()
+        ? { mullvadRelaysUrl: env.MULLGATE_MULLVAD_RELAYS_URL.trim() }
+        : {}),
+      ...(env.MULLGATE_M004_WIREPROXY_IMAGE?.trim()
+        ? { wireproxyImage: env.MULLGATE_M004_WIREPROXY_IMAGE.trim() }
+        : {}),
     },
   };
 }
@@ -252,11 +278,15 @@ export function renderFeasibilityHelp(): string {
   ].join('\n');
 }
 
-export async function runFeasibilityVerifier(options: FeasibilityRunnerOptions): Promise<FeasibilityRunnerResult> {
+export async function runFeasibilityVerifier(
+  options: FeasibilityRunnerOptions,
+): Promise<FeasibilityRunnerResult> {
   const outputDir = await prepareLatestOutputDir({ outputRoot: options.outputRoot });
 
   if (options.fixturePath) {
-    const fixtureArtifact = JSON.parse(await readFile(options.fixturePath, 'utf8')) as FeasibilityArtifact;
+    const fixtureArtifact = JSON.parse(
+      await readFile(options.fixturePath, 'utf8'),
+    ) as FeasibilityArtifact;
     await writeSummaryArtifacts({
       outputDir,
       artifact: fixtureArtifact,
@@ -284,7 +314,11 @@ export async function runFeasibilityVerifier(options: FeasibilityRunnerOptions):
     workspaceRoot,
     artifactsDir,
     outputDir,
-    secrets: new Set<string>([liveInputs.accountNumber, liveInputs.proxyUsername, liveInputs.proxyPassword]),
+    secrets: new Set<string>([
+      liveInputs.accountNumber,
+      liveInputs.proxyUsername,
+      liveInputs.proxyPassword,
+    ]),
     cleanupFailures,
     routeBefore: null,
     routeAfter: null,
@@ -312,11 +346,16 @@ export async function runFeasibilityVerifier(options: FeasibilityRunnerOptions):
     await verifyLivePrerequisites({ context, liveInputs });
 
     context.phase = 'relay-selection';
-    logPhase({ phase: context.phase, message: 'Fetching Mullvad relay metadata with SOCKS annotations.' });
+    logPhase({
+      phase: context.phase,
+      message: 'Fetching Mullvad relay metadata with SOCKS annotations.',
+    });
     const relaysResult = await fetchRelays({ url: liveInputs.mullvadRelaysUrl });
 
     if (!relaysResult.ok) {
-      throw new Error(`${relaysResult.message}${relaysResult.cause ? ` Cause: ${relaysResult.cause}` : ''}`);
+      throw new Error(
+        `${relaysResult.message}${relaysResult.cause ? ` Cause: ${relaysResult.cause}` : ''}`,
+      );
     }
 
     context.selectedCatalog = relaysResult.value;
@@ -330,7 +369,9 @@ export async function runFeasibilityVerifier(options: FeasibilityRunnerOptions):
     });
 
     if (!context.entryRelay) {
-      throw new Error('No active Mullvad WireGuard relay was available to act as the shared entry tunnel.');
+      throw new Error(
+        'No active Mullvad WireGuard relay was available to act as the shared entry tunnel.',
+      );
     }
 
     const relaySelectionResult = selectFeasibilityExitRelays({
@@ -404,7 +445,10 @@ export async function runFeasibilityVerifier(options: FeasibilityRunnerOptions):
     }
 
     context.phase = 'provision-device';
-    logPhase({ phase: context.phase, message: 'Provisioning exactly one Mullvad WireGuard device for the entry tunnel.' });
+    logPhase({
+      phase: context.phase,
+      message: 'Provisioning exactly one Mullvad WireGuard device for the entry tunnel.',
+    });
     const provisionResult = await provisionWireguard({
       accountNumber: liveInputs.accountNumber,
       deviceName: liveInputs.deviceName,
@@ -419,13 +463,18 @@ export async function runFeasibilityVerifier(options: FeasibilityRunnerOptions):
     });
 
     if (!provisionResult.ok) {
-      throw new Error(`${provisionResult.message}${provisionResult.cause ? ` Cause: ${provisionResult.cause}` : ''}`);
+      throw new Error(
+        `${provisionResult.message}${provisionResult.cause ? ` Cause: ${provisionResult.cause}` : ''}`,
+      );
     }
 
     context.secrets.add(provisionResult.value.privateKey);
 
     context.phase = 'runtime-render';
-    logPhase({ phase: context.phase, message: 'Rendering and validating the isolated entry wireproxy config.' });
+    logPhase({
+      phase: context.phase,
+      message: 'Rendering and validating the isolated entry wireproxy config.',
+    });
     context.socksPort = await allocateFreePort();
     const httpPort = await allocateFreePort();
     context.wireproxyConfigPath = path.join(workspaceRoot, 'wireproxy-entry.conf');
@@ -453,7 +502,9 @@ export async function runFeasibilityVerifier(options: FeasibilityRunnerOptions):
     });
 
     if (!validationResult.ok) {
-      throw new Error(`The isolated entry wireproxy config failed validation: ${validationResult.cause}`);
+      throw new Error(
+        `The isolated entry wireproxy config failed validation: ${validationResult.cause}`,
+      );
     }
 
     context.phase = 'runtime-start';
@@ -491,7 +542,9 @@ export async function runFeasibilityVerifier(options: FeasibilityRunnerOptions):
     });
 
     if (startResult.exitCode !== 0) {
-      throw new Error(`Failed to start the isolated entry wireproxy container. Inspect ${startResult.stderrPath}.`);
+      throw new Error(
+        `Failed to start the isolated entry wireproxy container. Inspect ${startResult.stderrPath}.`,
+      );
     }
 
     await waitForPort({ host: '127.0.0.1', port: context.socksPort, timeoutMs: 30_000 });
@@ -502,7 +555,10 @@ export async function runFeasibilityVerifier(options: FeasibilityRunnerOptions):
     });
 
     context.phase = 'probe-execution';
-    logPhase({ phase: context.phase, message: `Running ${context.logicalExits.length} concurrent chained SOCKS probes through the shared entry tunnel.` });
+    logPhase({
+      phase: context.phase,
+      message: `Running ${context.logicalExits.length} concurrent chained SOCKS probes through the shared entry tunnel.`,
+    });
     const probeResults = await Promise.all(
       context.logicalExits.map(async (logicalExit) => {
         return runChainedProbe({
@@ -616,14 +672,25 @@ function resolveLiveInputs(options: FeasibilityRunnerOptions): Required<
   });
 
   if (missingKeys.length > 0) {
-    throw new Error(`Missing required environment variables for the live verifier: ${missingKeys.join(', ')}.`);
+    throw new Error(
+      `Missing required environment variables for the live verifier: ${missingKeys.join(', ')}.`,
+    );
+  }
+
+  const accountNumber = options.accountNumber?.trim();
+  const proxyUsername = options.proxyUsername?.trim();
+  const proxyPassword = options.proxyPassword?.trim();
+  const deviceName = options.deviceName?.trim();
+
+  if (!accountNumber || !proxyUsername || !proxyPassword || !deviceName) {
+    throw new Error('Live verifier inputs are incomplete after validation.');
   }
 
   return {
-    accountNumber: options.accountNumber!.trim(),
-    proxyUsername: options.proxyUsername!.trim(),
-    proxyPassword: options.proxyPassword!.trim(),
-    deviceName: options.deviceName!.trim(),
+    accountNumber,
+    proxyUsername,
+    proxyPassword,
+    deviceName,
     targetUrl: options.targetUrl,
     routeCheckIp: options.routeCheckIp,
     logicalExitCount: options.logicalExitCount,
@@ -638,12 +705,17 @@ async function verifyLivePrerequisites(input: {
   readonly liveInputs: ReturnType<typeof resolveLiveInputs>;
 }): Promise<void> {
   input.context.phase = 'prerequisite-check';
-  logPhase({ phase: input.context.phase, message: 'Checking Node, pnpm, Docker, curl, and Linux route prerequisites.' });
+  logPhase({
+    phase: input.context.phase,
+    message: 'Checking Node, pnpm, Docker, curl, and Linux route prerequisites.',
+  });
 
   const nodeMajor = Number(process.versions.node.split('.')[0] ?? '0');
 
   if (!Number.isFinite(nodeMajor) || nodeMajor < 22) {
-    throw new Error(`Node.js 22+ is required, but this process is running ${process.versions.node}.`);
+    throw new Error(
+      `Node.js 22+ is required, but this process is running ${process.versions.node}.`,
+    );
   }
 
   const prerequisiteCommands = [
@@ -651,7 +723,11 @@ async function verifyLivePrerequisites(input: {
     { label: 'prereq-docker', command: 'docker', args: ['--version'] },
     { label: 'prereq-docker-compose', command: 'docker', args: ['compose', 'version'] },
     { label: 'prereq-curl', command: 'curl', args: ['--version'] },
-    { label: 'prereq-ip-route', command: 'ip', args: ['route', 'get', input.liveInputs.routeCheckIp] },
+    {
+      label: 'prereq-ip-route',
+      command: 'ip',
+      args: ['route', 'get', input.liveInputs.routeCheckIp],
+    },
   ] as const;
 
   for (const entry of prerequisiteCommands) {
@@ -663,23 +739,29 @@ async function verifyLivePrerequisites(input: {
     });
 
     if (result.exitCode !== 0) {
-      throw new Error(`Prerequisite command failed: ${result.renderedCommand}. Inspect ${result.stderrPath}.`);
+      throw new Error(
+        `Prerequisite command failed: ${result.renderedCommand}. Inspect ${result.stderrPath}.`,
+      );
     }
   }
 }
 
 function chooseEntryRelay(input: { readonly catalog: MullvadRelayCatalog }): MullvadRelay | null {
   const sorted = [...input.catalog.relays].sort((left, right) => {
-    return Number(right.active) - Number(left.active) ||
+    return (
+      Number(right.active) - Number(left.active) ||
       left.location.countryCode.localeCompare(right.location.countryCode) ||
       left.location.cityCode.localeCompare(right.location.cityCode) ||
-      left.hostname.localeCompare(right.hostname);
+      left.hostname.localeCompare(right.hostname)
+    );
   });
 
   return sorted.find((relay) => relay.active) ?? null;
 }
 
-function createRelaySelectionSummary(input: FeasibilityRelaySelectionSummary): FeasibilityRelaySelectionSummary {
+function createRelaySelectionSummary(
+  input: FeasibilityRelaySelectionSummary,
+): FeasibilityRelaySelectionSummary {
   return {
     requestedCount: input.requestedCount,
     availableCount: input.availableCount,
@@ -691,7 +773,10 @@ function createRelaySelectionSummary(input: FeasibilityRelaySelectionSummary): F
 
 function buildEntryWireproxyConfig(input: {
   readonly entryRelay: MullvadRelay;
-  readonly provisioned: { readonly privateKey: string; readonly interfaceAddresses: readonly [string, ...string[]] };
+  readonly provisioned: {
+    readonly privateKey: string;
+    readonly interfaceAddresses: readonly [string, ...string[]];
+  };
   readonly proxyUsername: string;
   readonly proxyPassword: string;
   readonly socksPort: number;
@@ -738,7 +823,9 @@ async function captureRouteSnapshot(input: {
   });
 
   if (result.exitCode !== 0) {
-    throw new Error(`Failed to capture host route baseline with ${result.renderedCommand}. Inspect ${result.stderrPath}.`);
+    throw new Error(
+      `Failed to capture host route baseline with ${result.renderedCommand}. Inspect ${result.stderrPath}.`,
+    );
   }
 
   return {
@@ -946,7 +1033,11 @@ async function finalizeCompletedRun(input: {
   readonly artifact: FeasibilityArtifact;
   readonly liveInputs: ReturnType<typeof resolveLiveInputs>;
 }): Promise<void> {
-  const additionalSecrets = [input.liveInputs.proxyUsername, input.liveInputs.proxyPassword, input.liveInputs.accountNumber];
+  const additionalSecrets = [
+    input.liveInputs.proxyUsername,
+    input.liveInputs.proxyPassword,
+    input.liveInputs.accountNumber,
+  ];
   await writeSummaryArtifacts({
     outputDir: input.context.outputDir,
     artifact: input.artifact,
@@ -956,7 +1047,9 @@ async function finalizeCompletedRun(input: {
   await writeJsonArtifact({
     outputDir: input.context.artifactsDir,
     fileName: 'artifact.json',
-    value: JSON.parse(serializeFeasibilityArtifact({ artifact: input.artifact, additionalSecrets })),
+    value: JSON.parse(
+      serializeFeasibilityArtifact({ artifact: input.artifact, additionalSecrets }),
+    ),
     secrets: input.context.secrets,
   });
 }
@@ -977,7 +1070,9 @@ async function writeSummaryArtifacts(input: {
   });
 
   await writeFile(path.join(input.outputDir, 'summary.json'), `${serialized}\n`, { mode: 0o600 });
-  await writeFile(path.join(input.outputDir, 'summary.txt'), `${summaryLines.join('\n')}\n`, { mode: 0o600 });
+  await writeFile(path.join(input.outputDir, 'summary.txt'), `${summaryLines.join('\n')}\n`, {
+    mode: 0o600,
+  });
   process.stdout.write(`${summaryLines.join('\n')}\n`);
 }
 
@@ -1004,15 +1099,21 @@ function renderSummaryLines(input: {
   }
 
   for (const logicalExit of input.artifact.topology.logicalExits) {
-    const probe = input.artifact.probes.find((candidate) => candidate.logicalExitId === logicalExit.logicalExitId);
+    const probe = input.artifact.probes.find(
+      (candidate) => candidate.logicalExitId === logicalExit.logicalExitId,
+    );
 
     if (!probe) {
-      lines.push(`${logicalExit.logicalExitId}: relay=${logicalExit.relayHostname}, observed=not-run`);
+      lines.push(
+        `${logicalExit.logicalExitId}: relay=${logicalExit.relayHostname}, observed=not-run`,
+      );
       continue;
     }
 
     if (!probe.ok) {
-      lines.push(`${logicalExit.logicalExitId}: relay=${logicalExit.relayHostname}, observed=error (${probe.code ?? 'unknown'})`);
+      lines.push(
+        `${logicalExit.logicalExitId}: relay=${logicalExit.relayHostname}, observed=error (${probe.code ?? 'unknown'})`,
+      );
       continue;
     }
 
@@ -1063,7 +1164,11 @@ async function allocateFreePort(): Promise<number> {
   });
 }
 
-async function waitForPort(input: { readonly host: string; readonly port: number; readonly timeoutMs: number }): Promise<void> {
+async function waitForPort(input: {
+  readonly host: string;
+  readonly port: number;
+  readonly timeoutMs: number;
+}): Promise<void> {
   const deadline = Date.now() + input.timeoutMs;
 
   while (Date.now() < deadline) {
@@ -1106,11 +1211,15 @@ async function cleanupLiveWorkspace(input: { readonly context: RunnerContext }):
   });
 
   if (result && result.exitCode !== 0) {
-    input.context.cleanupFailures.push(`docker rm --force ${input.context.containerName} failed. Inspect ${result.stderrPath}.`);
+    input.context.cleanupFailures.push(
+      `docker rm --force ${input.context.containerName} failed. Inspect ${result.stderrPath}.`,
+    );
   }
 }
 
-async function sanitizePreservedWorkspace(input: { readonly context: RunnerContext }): Promise<void> {
+async function sanitizePreservedWorkspace(input: {
+  readonly context: RunnerContext;
+}): Promise<void> {
   if (!input.context.wireproxyConfigPath || !input.context.wireproxyConfigText) {
     return;
   }
@@ -1119,7 +1228,11 @@ async function sanitizePreservedWorkspace(input: { readonly context: RunnerConte
     value: input.context.wireproxyConfigText,
     secrets: [...input.context.secrets],
   });
-  await writeFile(input.context.wireproxyConfigPath, `${redactedConfig.endsWith('\n') ? redactedConfig : `${redactedConfig}\n`}`, { mode: 0o600 });
+  await writeFile(
+    input.context.wireproxyConfigPath,
+    `${redactedConfig.endsWith('\n') ? redactedConfig : `${redactedConfig}\n`}`,
+    { mode: 0o600 },
+  );
   await chmod(input.context.wireproxyConfigPath, 0o600);
 }
 
@@ -1135,16 +1248,26 @@ async function runRecordedCommand(input: {
   const stdoutPath = path.join(input.context.artifactsDir, `${slug}.stdout.txt`);
   const stderrPath = path.join(input.context.artifactsDir, `${slug}.stderr.txt`);
   const metadataPath = path.join(input.context.artifactsDir, `${slug}.json`);
-  const renderedCommand = input.displayCommand ?? renderCommand({ command: input.command, args: input.args });
+  const renderedCommand =
+    input.displayCommand ?? renderCommand({ command: input.command, args: input.args });
   const startedAt = Date.now();
   const result = await runCommand({
     command: input.command,
     args: input.args,
   });
   const durationMs = Date.now() - startedAt;
-  const sanitizedStdout = redactKnownStrings({ value: result.stdout, secrets: [...input.context.secrets] });
-  const sanitizedStderr = redactKnownStrings({ value: result.stderr, secrets: [...input.context.secrets] });
-  const sanitizedCommand = redactKnownStrings({ value: renderedCommand, secrets: [...input.context.secrets] });
+  const sanitizedStdout = redactKnownStrings({
+    value: result.stdout,
+    secrets: [...input.context.secrets],
+  });
+  const sanitizedStderr = redactKnownStrings({
+    value: result.stderr,
+    secrets: [...input.context.secrets],
+  });
+  const sanitizedCommand = redactKnownStrings({
+    value: renderedCommand,
+    secrets: [...input.context.secrets],
+  });
 
   await Promise.all([
     writeFile(stdoutPath, sanitizedStdout, { mode: 0o600 }),
@@ -1178,7 +1301,10 @@ async function runRecordedCommand(input: {
   };
 }
 
-async function runCommand(input: { readonly command: string; readonly args: readonly string[] }): Promise<{
+async function runCommand(input: {
+  readonly command: string;
+  readonly args: readonly string[];
+}): Promise<{
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
@@ -1208,7 +1334,10 @@ async function runCommand(input: { readonly command: string; readonly args: read
   });
 }
 
-function renderCommand(input: { readonly command: string; readonly args: readonly string[] }): string {
+function renderCommand(input: {
+  readonly command: string;
+  readonly args: readonly string[];
+}): string {
   return [input.command, ...input.args.map((value) => shellEscape({ value }))].join(' ');
 }
 
@@ -1220,7 +1349,11 @@ function shellEscape(input: { readonly value: string }): string {
   return `'${input.value.replace(/'/g, `'\\''`)}'`;
 }
 
-function readFlagValue(input: { readonly argv: readonly string[]; readonly index: number; readonly flag: string }): string {
+function readFlagValue(input: {
+  readonly argv: readonly string[];
+  readonly index: number;
+  readonly flag: string;
+}): string {
   const value = input.argv[input.index + 1];
 
   if (!value || value.startsWith('-')) {
@@ -1250,7 +1383,10 @@ function normalizeWhitespace(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-function redactKnownStrings(input: { readonly value: string; readonly secrets: readonly string[] }): string {
+function redactKnownStrings(input: {
+  readonly value: string;
+  readonly secrets: readonly string[];
+}): string {
   let redacted = input.value;
 
   for (const secret of input.secrets) {
@@ -1261,7 +1397,10 @@ function redactKnownStrings(input: { readonly value: string; readonly secrets: r
     redacted = redacted.split(secret).join(REDACTED);
   }
 
-  return redacted.replace(/-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/g, REDACTED);
+  return redacted.replace(
+    /-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/g,
+    REDACTED,
+  );
 }
 
 async function writeJsonArtifact(input: {

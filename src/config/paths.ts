@@ -82,9 +82,24 @@ export function resolveMullgatePaths(env: NodeJS.ProcessEnv = process.env): Mull
   const platformResolution = resolveTargetPlatform(env);
   const pathModule = selectPathModule(platformResolution.platform);
   const home = resolveHomeDirectory({ env, platform: platformResolution.platform, pathModule });
-  const configHome = resolveConfigHome({ env, platform: platformResolution.platform, home, pathModule });
-  const stateHome = resolveStateHome({ env, platform: platformResolution.platform, home, pathModule });
-  const cacheHome = resolveCacheHome({ env, platform: platformResolution.platform, home, pathModule });
+  const configHome = resolveConfigHome({
+    env,
+    platform: platformResolution.platform,
+    home,
+    pathModule,
+  });
+  const stateHome = resolveStateHome({
+    env,
+    platform: platformResolution.platform,
+    home,
+    pathModule,
+  });
+  const cacheHome = resolveCacheHome({
+    env,
+    platform: platformResolution.platform,
+    home,
+    pathModule,
+  });
 
   const appConfigDir = pathModule.join(configHome.value, APP_NAME);
   const appStateDir = pathModule.join(stateHome.value, APP_NAME);
@@ -317,7 +332,10 @@ function resolveWindowsBaseDir(input: {
   fallbackSegments: string[];
   pathModule: PathModule;
 }): string {
-  return normalizeAbsolutePath(input.candidate, input.pathModule) ?? input.pathModule.join(input.home, ...input.fallbackSegments);
+  return (
+    normalizeAbsolutePath(input.candidate, input.pathModule) ??
+    input.pathModule.join(input.home, ...input.fallbackSegments)
+  );
 }
 
 function normalizeAbsolutePath(value: string | undefined, pathModule: PathModule): string | null {

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="600" viewBox="0 0 2400 600" fill="none">
+  <defs>
+    <linearGradient id="mullgate-dark-icon" x1="72" x2="528" y1="72" y2="528" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#DCE6F1"/>
+    </linearGradient>
+  </defs>
+  <rect x="72" y="72" width="456" height="456" rx="132" fill="url(#mullgate-dark-icon)"/>
+  <rect x="150" y="150" width="300" height="300" rx="84" fill="#192E45" stroke="#FFCC86" stroke-width="18"/>
+  <path d="M220 390V238C220 211.49 241.49 190 268 190H332C358.51 190 380 211.49 380 238V390" stroke="#FDD321" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M300 190V420" stroke="#FFCC86" stroke-width="30" stroke-linecap="round"/>
+  <circle cx="220" cy="390" r="18" fill="#D0933A"/>
+  <circle cx="300" cy="420" r="18" fill="#FDD321"/>
+  <circle cx="380" cy="390" r="18" fill="#D0933A"/>
+  <text x="620" y="286" fill="#FFFFFF" font-family="'Avenir Next', 'Montserrat', 'Segoe UI', sans-serif" font-size="208" font-weight="800" letter-spacing="-6">mullgate</text>
+  <text x="628" y="370" fill="#D2D8E1" font-family="'IBM Plex Sans', 'Avenir Next', 'Segoe UI', sans-serif" font-size="52" font-weight="600" letter-spacing="8">AUTHENTICATED MULLVAD PROXY CLI</text>
+  <path d="M628 412H1180" stroke="#FDD321" stroke-width="10" stroke-linecap="round"/>
+</svg>

@@ -64,10 +64,7 @@
       "availableCount": 2,
       "candidateCount": 3,
       "missingMetadataCount": 0,
-      "selectedRelayHostnames": [
-        "at-vie-wg-001",
-        "se-got-wg-101"
-      ]
+      "selectedRelayHostnames": ["at-vie-wg-001", "se-got-wg-101"]
     },
     "prerequisiteFailures": [],
     "routeCheck": {

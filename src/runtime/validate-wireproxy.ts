@@ -1,6 +1,6 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export type WireproxyValidationIssue = {
@@ -55,7 +55,9 @@ const DEFAULT_WIREPROXY_BINARY = 'wireproxy';
 const DEFAULT_DOCKER_BINARY = 'docker';
 const DEFAULT_DOCKER_IMAGE = 'ghcr.io/windtf/wireproxy:latest';
 
-export async function validateWireproxyConfig(options: ValidateWireproxyOptions): Promise<ValidateWireproxyResult> {
+export async function validateWireproxyConfig(
+  options: ValidateWireproxyOptions,
+): Promise<ValidateWireproxyResult> {
   const checkedAt = options.checkedAt ?? new Date().toISOString();
   const wireproxyBinary = options.wireproxyBinary ?? DEFAULT_WIREPROXY_BINARY;
   const dockerBinary = options.dockerBinary ?? DEFAULT_DOCKER_BINARY;
@@ -101,30 +103,31 @@ export async function validateWireproxyConfig(options: ValidateWireproxyOptions)
   const parsed = parseWireproxyConfig(configText, options.configPath);
   const issues = validateParsedConfig(parsed, options.configPath);
 
-  const internalResult: ValidateWireproxyResult = issues.length === 0
-    ? {
-        ok: true,
-        phase: 'validation',
-        source: 'internal-syntax',
-        status: 'success',
-        checkedAt,
-        target: options.configPath,
-        ...(options.reportPath ? { reportPath: options.reportPath } : {}),
-        validator: 'internal-syntax',
-        issues: [],
-      }
-    : {
-        ok: false,
-        phase: 'validation',
-        source: 'internal-syntax',
-        status: 'failure',
-        checkedAt,
-        target: options.configPath,
-        ...(options.reportPath ? { reportPath: options.reportPath } : {}),
-        validator: 'internal-syntax',
-        issues,
-        cause: issues[0]!.message,
-      };
+  const internalResult: ValidateWireproxyResult =
+    issues.length === 0
+      ? {
+          ok: true,
+          phase: 'validation',
+          source: 'internal-syntax',
+          status: 'success',
+          checkedAt,
+          target: options.configPath,
+          ...(options.reportPath ? { reportPath: options.reportPath } : {}),
+          validator: 'internal-syntax',
+          issues: [],
+        }
+      : {
+          ok: false,
+          phase: 'validation',
+          source: 'internal-syntax',
+          status: 'failure',
+          checkedAt,
+          target: options.configPath,
+          ...(options.reportPath ? { reportPath: options.reportPath } : {}),
+          validator: 'internal-syntax',
+          issues,
+          cause: issues[0]?.message,
+        };
 
   return persistValidationReport(internalResult, options.reportPath);
 }
@@ -162,10 +165,11 @@ function runConfigTest(input: {
     };
   }
 
-  const message = [result.stderr, result.stdout]
-    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-    .join('\n')
-    .trim() || `${input.command} reported a validation error.`;
+  const message =
+    [result.stderr, result.stdout]
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .join('\n')
+      .trim() || `${input.command} reported a validation error.`;
 
   return {
     kind: 'result',
@@ -188,7 +192,10 @@ function runConfigTest(input: {
   };
 }
 
-async function persistValidationReport(result: ValidateWireproxyResult, reportPath?: string): Promise<ValidateWireproxyResult> {
+async function persistValidationReport(
+  result: ValidateWireproxyResult,
+  reportPath?: string,
+): Promise<ValidateWireproxyResult> {
   if (!reportPath) {
     return result;
   }
@@ -248,7 +255,11 @@ function validateParsedConfig(parsed: ParsedConfig, target: string): WireproxyVa
 
   validateRequiredSection(parsed, issues, target, 'Interface', ['Address', 'PrivateKey']);
   validateRequiredSection(parsed, issues, target, 'Peer', ['PublicKey', 'Endpoint', 'AllowedIPs']);
-  validateRequiredSection(parsed, issues, target, 'Socks5', ['BindAddress', 'Username', 'Password']);
+  validateRequiredSection(parsed, issues, target, 'Socks5', [
+    'BindAddress',
+    'Username',
+    'Password',
+  ]);
   validateRequiredSection(parsed, issues, target, 'http', ['BindAddress', 'Username', 'Password']);
 
   validateAddressList(parsed, issues, target);
@@ -283,7 +294,7 @@ function validateRequiredSection(
   for (const key of requiredKeys) {
     const values = section.get(key) ?? [];
 
-    if (values.length === 0 || values[0]!.length === 0) {
+    if (values.length === 0 || values[0]?.length === 0) {
       issues.push({
         target,
         message: `Missing required ${key} entry in [${sectionName}].`,
@@ -292,8 +303,16 @@ function validateRequiredSection(
   }
 }
 
-function validateAddressList(parsed: ParsedConfig, issues: WireproxyValidationIssue[], target: string): void {
-  const addresses = parsed.get('Interface')?.get('Address')?.flatMap((value) => value.split(',').map((segment) => segment.trim())) ?? [];
+function validateAddressList(
+  parsed: ParsedConfig,
+  issues: WireproxyValidationIssue[],
+  target: string,
+): void {
+  const addresses =
+    parsed
+      .get('Interface')
+      ?.get('Address')
+      ?.flatMap((value) => value.split(',').map((segment) => segment.trim())) ?? [];
 
   for (const address of addresses) {
     if (!CIDR_PATTERN.test(address)) {
@@ -305,7 +324,11 @@ function validateAddressList(parsed: ParsedConfig, issues: WireproxyValidationIs
   }
 }
 
-function validateEndpoint(parsed: ParsedConfig, issues: WireproxyValidationIssue[], target: string): void {
+function validateEndpoint(
+  parsed: ParsedConfig,
+  issues: WireproxyValidationIssue[],
+  target: string,
+): void {
   const endpoint = parsed.get('Peer')?.get('Endpoint')?.[0];
 
   if (endpoint && !BIND_ADDRESS_PATTERN.test(endpoint)) {
@@ -316,7 +339,12 @@ function validateEndpoint(parsed: ParsedConfig, issues: WireproxyValidationIssue
   }
 }
 
-function validateBindAddress(parsed: ParsedConfig, issues: WireproxyValidationIssue[], target: string, sectionName: string): void {
+function validateBindAddress(
+  parsed: ParsedConfig,
+  issues: WireproxyValidationIssue[],
+  target: string,
+  sectionName: string,
+): void {
   const bindAddress = parsed.get(sectionName)?.get('BindAddress')?.[0];
 
   if (bindAddress && !BIND_ADDRESS_PATTERN.test(bindAddress)) {

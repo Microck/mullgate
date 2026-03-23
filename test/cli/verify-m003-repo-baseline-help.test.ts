@@ -1,5 +1,5 @@
-import path from 'node:path';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -14,11 +14,15 @@ const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
 
 async function runScript(args: readonly string[]): Promise<ScriptResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [tsxCliPath, 'scripts/verify-m003-repo-baseline.ts', ...args], {
-      cwd: repoRoot,
-      env: process.env,
-      stdio: 'pipe',
-    });
+    const child = spawn(
+      process.execPath,
+      [tsxCliPath, 'scripts/verify-m003-repo-baseline.ts', ...args],
+      {
+        cwd: repoRoot,
+        env: process.env,
+        stdio: 'pipe',
+      },
+    );
 
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
@@ -52,7 +56,7 @@ describe('verify-m003-repo-baseline help contract', () => {
       stderr: '',
     });
 
-    expect('\n' + result.stdout.trimEnd()).toMatchInlineSnapshot(`
+    expect(`\n${result.stdout.trimEnd()}`).toMatchInlineSnapshot(`
       "
       Usage: pnpm exec tsx scripts/verify-m003-repo-baseline.ts [options]
 

@@ -60,10 +60,7 @@
     "availableCount": 2,
     "candidateCount": 3,
     "missingMetadataCount": 0,
-    "selectedRelayHostnames": [
-      "at-vie-wg-001",
-      "se-got-wg-101"
-    ]
+    "selectedRelayHostnames": ["at-vie-wg-001", "se-got-wg-101"]
   },
   "prerequisiteFailures": [],
   "routeCheck": {
@@ -125,10 +122,7 @@
     "failedProbeCount": 0,
     "distinctObservedExitCount": 1,
     "routeUnchanged": true,
-    "collapsedLogicalExitIds": [
-      "exit-1",
-      "exit-2"
-    ]
+    "collapsedLogicalExitIds": ["exit-1", "exit-2"]
   },
   "verdict": {
     "status": "fail",

@@ -7,13 +7,18 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { buildExposureContract } from '../src/config/exposure-contract.js';
-import { buildPlatformSupportContract } from '../src/platform/support-contract.js';
-import { resolveMullgatePaths, resolveRouteWireproxyPaths, type MullgatePaths, type MullgatePlatform } from '../src/config/paths.js';
-import { ConfigStore } from '../src/config/store.js';
+import {
+  type MullgatePaths,
+  type MullgatePlatform,
+  resolveMullgatePaths,
+  resolveRouteWireproxyPaths,
+} from '../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig, type RoutedLocation } from '../src/config/schema.js';
+import { ConfigStore } from '../src/config/store.js';
+import type { MullvadRelayCatalog } from '../src/mullvad/fetch-relays.js';
+import { buildPlatformSupportContract } from '../src/platform/support-contract.js';
 import type { RuntimeBundleManifest } from '../src/runtime/render-runtime-bundle.js';
 import { renderRuntimeBundle } from '../src/runtime/render-runtime-bundle.js';
-import type { MullvadRelayCatalog } from '../src/mullvad/fetch-relays.js';
 import type { ValidateWireproxyResult } from '../src/runtime/validate-wireproxy.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -82,7 +87,7 @@ const scenarios: readonly ScenarioDefinition[] = [
     title: 'Windows AppData partial-support surface',
     platform: 'windows',
     mode: 'planned',
-    buildEnv(root) {
+    buildEnv(_root) {
       return {
         ...process.env,
         MULLGATE_PLATFORM: 'windows',
@@ -112,7 +117,9 @@ async function main(): Promise<void> {
     results.push(await verifyScenario({ scenario, options }));
   }
 
-  process.stdout.write(`${['M002 platform-surface verification passed.', ...results].join('\n')}\n`);
+  process.stdout.write(
+    `${['M002 platform-surface verification passed.', ...results].join('\n')}\n`,
+  );
 }
 
 function parseArgs(argv: readonly string[]): VerifierOptions | null {
@@ -152,7 +159,10 @@ function renderHelp(): string {
   ].join('\n');
 }
 
-async function verifyScenario(input: { readonly scenario: ScenarioDefinition; readonly options: VerifierOptions }): Promise<string> {
+async function verifyScenario(input: {
+  readonly scenario: ScenarioDefinition;
+  readonly options: VerifierOptions;
+}): Promise<string> {
   const root = mkdtempSync(path.join(tmpdir(), `mullgate-m002-platform-${input.scenario.id}-`));
   let preserveRoot = input.options.keepTempHomes;
 
@@ -175,7 +185,10 @@ async function verifyScenario(input: { readonly scenario: ScenarioDefinition; re
         throw new Error(`${input.scenario.id}: planned runtime bundle was not available.`);
       }
 
-      const configPathOutput = renderExpectedConfigPathSurface({ paths: seeded.paths, contract: platformContract });
+      const configPathOutput = renderExpectedConfigPathSurface({
+        paths: seeded.paths,
+        contract: platformContract,
+      });
       const manifest = planned.manifest;
 
       await writeScenarioArtifacts({
@@ -188,17 +201,41 @@ async function verifyScenario(input: { readonly scenario: ScenarioDefinition; re
         },
       });
 
-      assertContains({ text: configPathOutput, expected: `platform: ${platformContract.platform}`, message: `${input.scenario.id}: planned config path platform missing.` });
-      assertManifestSurface({ manifest, contract: platformContract, exposure: exposureContract, scenarioId: input.scenario.id });
+      assertContains({
+        text: configPathOutput,
+        expected: `platform: ${platformContract.platform}`,
+        message: `${input.scenario.id}: planned config path platform missing.`,
+      });
+      assertManifestSurface({
+        manifest,
+        contract: platformContract,
+        exposure: exposureContract,
+        scenarioId: input.scenario.id,
+      });
 
       return `- ${input.scenario.id}: ok (${input.scenario.title}; planned manifest/config-path contract verified, runtime execution intentionally limited on this host)`;
     }
 
-    const configPathResult = await runCliCommand({ env: seeded.env, cwd: seeded.root, args: ['config', 'path'] });
-    const statusResult = await runCliCommand({ env: seeded.env, cwd: seeded.root, args: ['status'] });
-    const doctorResult = await runCliCommand({ env: seeded.env, cwd: seeded.root, args: ['doctor'] });
+    const configPathResult = await runCliCommand({
+      env: seeded.env,
+      cwd: seeded.root,
+      args: ['config', 'path'],
+    });
+    const statusResult = await runCliCommand({
+      env: seeded.env,
+      cwd: seeded.root,
+      args: ['status'],
+    });
+    const doctorResult = await runCliCommand({
+      env: seeded.env,
+      cwd: seeded.root,
+      args: ['doctor'],
+    });
     const manifest = await readJsonFile<RuntimeBundleManifest>({
-      filePath: resolveArtifactPath({ cwd: seeded.root, targetPath: seeded.paths.runtimeBundleManifestFile }),
+      filePath: resolveArtifactPath({
+        cwd: seeded.root,
+        targetPath: seeded.paths.runtimeBundleManifestFile,
+      }),
       label: `${input.scenario.id} runtime manifest`,
     });
 
@@ -212,16 +249,49 @@ async function verifyScenario(input: { readonly scenario: ScenarioDefinition; re
       },
     });
 
-    assertExitCode({ result: configPathResult, expected: 0, message: `${input.scenario.id}: config path failed.` });
-    assertExitCode({ result: statusResult, expected: 0, message: `${input.scenario.id}: status failed.` });
-    assertExitCode({ result: doctorResult, expected: 0, message: `${input.scenario.id}: doctor failed.` });
+    assertExitCode({
+      result: configPathResult,
+      expected: 0,
+      message: `${input.scenario.id}: config path failed.`,
+    });
+    assertExitCode({
+      result: statusResult,
+      expected: 0,
+      message: `${input.scenario.id}: status failed.`,
+    });
+    assertExitCode({
+      result: doctorResult,
+      expected: 0,
+      message: `${input.scenario.id}: doctor failed.`,
+    });
 
-    assertNoSecretLeaks({ label: `${input.scenario.id} config path`, text: configPathResult.stdout, config: seeded.config });
-    assertNoSecretLeaks({ label: `${input.scenario.id} status`, text: statusResult.stdout, config: seeded.config });
-    assertNoSecretLeaks({ label: `${input.scenario.id} doctor`, text: `${doctorResult.stdout}\n${doctorResult.stderr}`, config: seeded.config });
-    assertNoSecretLeaks({ label: `${input.scenario.id} manifest`, text: JSON.stringify(manifest, null, 2), config: seeded.config });
+    assertNoSecretLeaks({
+      label: `${input.scenario.id} config path`,
+      text: configPathResult.stdout,
+      config: seeded.config,
+    });
+    assertNoSecretLeaks({
+      label: `${input.scenario.id} status`,
+      text: statusResult.stdout,
+      config: seeded.config,
+    });
+    assertNoSecretLeaks({
+      label: `${input.scenario.id} doctor`,
+      text: `${doctorResult.stdout}\n${doctorResult.stderr}`,
+      config: seeded.config,
+    });
+    assertNoSecretLeaks({
+      label: `${input.scenario.id} manifest`,
+      text: JSON.stringify(manifest, null, 2),
+      config: seeded.config,
+    });
 
-    assertConfigPathSurface({ output: configPathResult.stdout, paths: seeded.paths, contract: platformContract, scenarioId: input.scenario.id });
+    assertConfigPathSurface({
+      output: configPathResult.stdout,
+      paths: seeded.paths,
+      contract: platformContract,
+      scenarioId: input.scenario.id,
+    });
     assertStatusSurface({
       output: statusResult.stdout,
       contract: platformContract,
@@ -229,8 +299,17 @@ async function verifyScenario(input: { readonly scenario: ScenarioDefinition; re
       manifest,
       manifestPath: seeded.config.runtime.runtimeBundle.manifestPath,
     });
-    assertDoctorSurface({ output: `${doctorResult.stdout}\n${doctorResult.stderr}`, contract: platformContract, exposure: exposureContract });
-    assertManifestSurface({ manifest, contract: platformContract, exposure: exposureContract, scenarioId: input.scenario.id });
+    assertDoctorSurface({
+      output: `${doctorResult.stdout}\n${doctorResult.stderr}`,
+      contract: platformContract,
+      exposure: exposureContract,
+    });
+    assertManifestSurface({
+      manifest,
+      contract: platformContract,
+      exposure: exposureContract,
+      scenarioId: input.scenario.id,
+    });
 
     return `- ${input.scenario.id}: ok (${input.scenario.title})`;
   } catch (error) {
@@ -243,7 +322,11 @@ async function verifyScenario(input: { readonly scenario: ScenarioDefinition; re
   }
 }
 
-async function seedScenario(input: { readonly root: string; readonly env: NodeJS.ProcessEnv; readonly mode: ScenarioMode }): Promise<SeededScenario> {
+async function seedScenario(input: {
+  readonly root: string;
+  readonly env: NodeJS.ProcessEnv;
+  readonly mode: ScenarioMode;
+}): Promise<SeededScenario> {
   const paths = resolveMullgatePaths(input.env);
   const store = new ConfigStore(paths);
   const config = createFixtureConfig({ env: input.env });
@@ -279,7 +362,9 @@ async function seedScenario(input: { readonly root: string; readonly env: NodeJS
     });
 
     if (!runtimeBundle.ok) {
-      throw new Error(`Failed to render runtime bundle for ${paths.platform}: ${runtimeBundle.message}`);
+      throw new Error(
+        `Failed to render runtime bundle for ${paths.platform}: ${runtimeBundle.message}`,
+      );
     }
   });
 
@@ -487,17 +572,37 @@ async function seedPrerequisiteArtifacts(input: {
   readonly paths: MullgatePaths;
   readonly config: MullgateConfig;
 }): Promise<void> {
-  await ensureParentDirectory(resolveArtifactPath({ cwd: input.root, targetPath: input.paths.provisioningCacheFile }));
-  await writeFile(resolveArtifactPath({ cwd: input.root, targetPath: input.paths.provisioningCacheFile }), `${JSON.stringify(createRelayCatalog(), null, 2)}\n`, { mode: 0o600 });
+  await ensureParentDirectory(
+    resolveArtifactPath({ cwd: input.root, targetPath: input.paths.provisioningCacheFile }),
+  );
+  await writeFile(
+    resolveArtifactPath({ cwd: input.root, targetPath: input.paths.provisioningCacheFile }),
+    `${JSON.stringify(createRelayCatalog(), null, 2)}\n`,
+    { mode: 0o600 },
+  );
 
-  await ensureParentDirectory(resolveArtifactPath({ cwd: input.root, targetPath: input.paths.wireproxyConfigFile }));
-  await writeFile(resolveArtifactPath({ cwd: input.root, targetPath: input.paths.wireproxyConfigFile }), '# primary wireproxy fixture\n', { mode: 0o600 });
+  await ensureParentDirectory(
+    resolveArtifactPath({ cwd: input.root, targetPath: input.paths.wireproxyConfigFile }),
+  );
+  await writeFile(
+    resolveArtifactPath({ cwd: input.root, targetPath: input.paths.wireproxyConfigFile }),
+    '# primary wireproxy fixture\n',
+    { mode: 0o600 },
+  );
 
   for (const route of input.config.routing.locations) {
     const routePaths = resolveRouteWireproxyPaths(input.paths, route.runtime);
-    await ensureParentDirectory(resolveArtifactPath({ cwd: input.root, targetPath: routePaths.wireproxyConfigPath }));
-    await writeFile(resolveArtifactPath({ cwd: input.root, targetPath: routePaths.wireproxyConfigPath }), `# verifier route ${route.runtime.routeId}\n`, { mode: 0o600 });
-    await ensureParentDirectory(resolveArtifactPath({ cwd: input.root, targetPath: routePaths.configTestReportPath }));
+    await ensureParentDirectory(
+      resolveArtifactPath({ cwd: input.root, targetPath: routePaths.wireproxyConfigPath }),
+    );
+    await writeFile(
+      resolveArtifactPath({ cwd: input.root, targetPath: routePaths.wireproxyConfigPath }),
+      `# verifier route ${route.runtime.routeId}\n`,
+      { mode: 0o600 },
+    );
+    await ensureParentDirectory(
+      resolveArtifactPath({ cwd: input.root, targetPath: routePaths.configTestReportPath }),
+    );
     await writeFile(
       resolveArtifactPath({ cwd: input.root, targetPath: routePaths.configTestReportPath }),
       `${JSON.stringify(createValidationSuccess(routePaths.configTestReportPath), null, 2)}\n`,
@@ -575,7 +680,11 @@ function createValidationSuccess(targetPath: string): ValidateWireproxyResult {
   };
 }
 
-async function runCliCommand(input: { readonly env: NodeJS.ProcessEnv; readonly cwd: string; readonly args: readonly string[] }): Promise<CommandResult> {
+async function runCliCommand(input: {
+  readonly env: NodeJS.ProcessEnv;
+  readonly cwd: string;
+  readonly args: readonly string[];
+}): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [tsxCliPath, cliEntrypointPath, ...input.args], {
       cwd: input.cwd,
@@ -661,7 +770,9 @@ function renderExpectedConfigPathSurface(input: {
     ...input.contract.guidance.map((line) => `- ${line}`),
     '',
     'platform warnings',
-    ...(input.contract.warnings.length > 0 ? input.contract.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`) : ['- none']),
+    ...(input.contract.warnings.length > 0
+      ? input.contract.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`)
+      : ['- none']),
   ].join('\n');
 }
 
@@ -671,15 +782,51 @@ function assertConfigPathSurface(input: {
   readonly contract: ReturnType<typeof buildPlatformSupportContract>;
   readonly scenarioId: string;
 }): void {
-  assertContains({ text: input.output, expected: 'Mullgate path report', message: `${input.scenarioId}: config path header missing.` });
-  assertContains({ text: input.output, expected: `platform: ${input.contract.platform}`, message: `${input.scenarioId}: config path platform missing.` });
-  assertContains({ text: input.output, expected: `platform source: ${input.contract.platformSource}`, message: `${input.scenarioId}: config path platform source missing.` });
-  assertContains({ text: input.output, expected: `platform support: ${input.contract.posture.supportLevel}`, message: `${input.scenarioId}: config path support level missing.` });
-  assertContains({ text: input.output, expected: `platform mode: ${input.contract.posture.modeLabel}`, message: `${input.scenarioId}: config path mode label missing.` });
-  assertContains({ text: input.output, expected: `host networking: ${input.contract.hostNetworking.modeLabel}`, message: `${input.scenarioId}: config path host networking label missing.` });
-  assertContains({ text: input.output, expected: `config home: ${input.paths.configHome} (${input.paths.pathSources.configHome})`, message: `${input.scenarioId}: config home line drifted.` });
-  assertContains({ text: input.output, expected: `state home: ${input.paths.stateHome} (${input.paths.pathSources.stateHome})`, message: `${input.scenarioId}: state home line drifted.` });
-  assertContains({ text: input.output, expected: `cache home: ${input.paths.cacheHome} (${input.paths.pathSources.cacheHome})`, message: `${input.scenarioId}: cache home line drifted.` });
+  assertContains({
+    text: input.output,
+    expected: 'Mullgate path report',
+    message: `${input.scenarioId}: config path header missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `platform: ${input.contract.platform}`,
+    message: `${input.scenarioId}: config path platform missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `platform source: ${input.contract.platformSource}`,
+    message: `${input.scenarioId}: config path platform source missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `platform support: ${input.contract.posture.supportLevel}`,
+    message: `${input.scenarioId}: config path support level missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `platform mode: ${input.contract.posture.modeLabel}`,
+    message: `${input.scenarioId}: config path mode label missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `host networking: ${input.contract.hostNetworking.modeLabel}`,
+    message: `${input.scenarioId}: config path host networking label missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `config home: ${input.paths.configHome} (${input.paths.pathSources.configHome})`,
+    message: `${input.scenarioId}: config home line drifted.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `state home: ${input.paths.stateHome} (${input.paths.pathSources.stateHome})`,
+    message: `${input.scenarioId}: state home line drifted.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `cache home: ${input.paths.cacheHome} (${input.paths.pathSources.cacheHome})`,
+    message: `${input.scenarioId}: cache home line drifted.`,
+  });
 }
 
 function assertStatusSurface(input: {
@@ -689,15 +836,51 @@ function assertStatusSurface(input: {
   readonly manifest: RuntimeBundleManifest;
   readonly manifestPath: string;
 }): void {
-  assertContains({ text: input.output, expected: 'Mullgate runtime status', message: 'status header missing.' });
-  assertContains({ text: input.output, expected: `platform: ${input.contract.platform}`, message: 'status platform missing.' });
-  assertContains({ text: input.output, expected: `platform support: ${input.contract.posture.supportLevel}`, message: 'status platform support missing.' });
-  assertContains({ text: input.output, expected: `platform mode: ${input.contract.posture.modeLabel}`, message: 'status platform mode missing.' });
-  assertContains({ text: input.output, expected: `host networking: ${input.contract.hostNetworking.modeLabel}`, message: 'status host networking missing.' });
-  assertContains({ text: input.output, expected: 'platform guidance', message: 'status platform guidance section missing.' });
-  assertContains({ text: input.output, expected: `mode label: ${input.exposure.posture.modeLabel}`, message: 'status exposure mode label missing.' });
-  assertContains({ text: input.output, expected: `recommendation: ${input.exposure.posture.recommendation}`, message: 'status exposure recommendation missing.' });
-  assertContains({ text: input.output, expected: `runtime manifest: ${input.manifestPath} (present)`, message: 'status runtime-manifest presence line drifted.' });
+  assertContains({
+    text: input.output,
+    expected: 'Mullgate runtime status',
+    message: 'status header missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `platform: ${input.contract.platform}`,
+    message: 'status platform missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `platform support: ${input.contract.posture.supportLevel}`,
+    message: 'status platform support missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `platform mode: ${input.contract.posture.modeLabel}`,
+    message: 'status platform mode missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `host networking: ${input.contract.hostNetworking.modeLabel}`,
+    message: 'status host networking missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: 'platform guidance',
+    message: 'status platform guidance section missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `mode label: ${input.exposure.posture.modeLabel}`,
+    message: 'status exposure mode label missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `recommendation: ${input.exposure.posture.recommendation}`,
+    message: 'status exposure recommendation missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `runtime manifest: ${input.manifestPath} (present)`,
+    message: 'status runtime-manifest presence line drifted.',
+  });
 }
 
 function assertDoctorSurface(input: {
@@ -705,12 +888,36 @@ function assertDoctorSurface(input: {
   readonly contract: ReturnType<typeof buildPlatformSupportContract>;
   readonly exposure: ReturnType<typeof buildExposureContract>;
 }): void {
-  assertContains({ text: input.output, expected: 'Mullgate doctor', message: 'doctor header missing.' });
-  assertContains({ text: input.output, expected: `platform=${input.contract.platform}`, message: 'doctor platform detail missing.' });
-  assertContains({ text: input.output, expected: `support-level=${input.contract.posture.supportLevel}`, message: 'doctor support-level detail missing.' });
-  assertContains({ text: input.output, expected: `mode-label=${input.contract.posture.modeLabel}`, message: 'doctor mode-label detail missing.' });
-  assertContains({ text: input.output, expected: `host-networking=${input.contract.hostNetworking.modeLabel}`, message: 'doctor host-networking detail missing.' });
-  assertContains({ text: input.output, expected: `recommendation=${input.exposure.posture.recommendation}`, message: 'doctor exposure recommendation detail missing.' });
+  assertContains({
+    text: input.output,
+    expected: 'Mullgate doctor',
+    message: 'doctor header missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `platform=${input.contract.platform}`,
+    message: 'doctor platform detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `support-level=${input.contract.posture.supportLevel}`,
+    message: 'doctor support-level detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `mode-label=${input.contract.posture.modeLabel}`,
+    message: 'doctor mode-label detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `host-networking=${input.contract.hostNetworking.modeLabel}`,
+    message: 'doctor host-networking detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `recommendation=${input.exposure.posture.recommendation}`,
+    message: 'doctor exposure recommendation detail missing.',
+  });
 }
 
 function assertManifestSurface(input: {
@@ -725,7 +932,9 @@ function assertManifestSurface(input: {
   if (input.manifest.platform.posture.modeLabel !== input.contract.posture.modeLabel) {
     throw new Error(`${input.scenarioId}: runtime manifest platform mode drifted.`);
   }
-  if (input.manifest.platform.hostNetworking.modeLabel !== input.contract.hostNetworking.modeLabel) {
+  if (
+    input.manifest.platform.hostNetworking.modeLabel !== input.contract.hostNetworking.modeLabel
+  ) {
     throw new Error(`${input.scenarioId}: runtime manifest host-networking drifted.`);
   }
   if (input.manifest.exposure.mode !== input.exposure.mode) {
@@ -745,11 +954,16 @@ async function ensureParentDirectory(filePath: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
 }
 
-async function readJsonFile<T>(input: { readonly filePath: string; readonly label: string }): Promise<T> {
+async function readJsonFile<T>(input: {
+  readonly filePath: string;
+  readonly label: string;
+}): Promise<T> {
   try {
     return JSON.parse(await readFile(input.filePath, 'utf8')) as T;
   } catch (error) {
-    throw new Error(`Failed to read ${input.label} at ${input.filePath}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to read ${input.label} at ${input.filePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -763,7 +977,11 @@ async function writeScenarioArtifacts(input: {
     await writeFile(path.join(input.root, `${label}.stderr.txt`), result.stderr, { mode: 0o600 });
   }
 
-  await writeFile(path.join(input.root, 'runtime-manifest.copy.json'), `${JSON.stringify(input.manifest, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(
+    path.join(input.root, 'runtime-manifest.copy.json'),
+    `${JSON.stringify(input.manifest, null, 2)}\n`,
+    { mode: 0o600 },
+  );
 }
 
 async function withCwd<T>(cwd: string, run: () => Promise<T>): Promise<T> {
@@ -777,25 +995,43 @@ async function withCwd<T>(cwd: string, run: () => Promise<T>): Promise<T> {
   }
 }
 
-function assertExitCode(input: { readonly result: CommandResult; readonly expected: number; readonly message: string }): void {
+function assertExitCode(input: {
+  readonly result: CommandResult;
+  readonly expected: number;
+  readonly message: string;
+}): void {
   if (input.result.exitCode !== input.expected) {
-    throw new Error(`${input.message}\nexpected: ${input.expected}\nactual: ${input.result.exitCode}\nstdout:\n${input.result.stdout || '<empty>'}\nstderr:\n${input.result.stderr || '<empty>'}`);
+    throw new Error(
+      `${input.message}\nexpected: ${input.expected}\nactual: ${input.result.exitCode}\nstdout:\n${input.result.stdout || '<empty>'}\nstderr:\n${input.result.stderr || '<empty>'}`,
+    );
   }
 }
 
-function assertContains(input: { readonly text: string; readonly expected: string; readonly message: string }): void {
+function assertContains(input: {
+  readonly text: string;
+  readonly expected: string;
+  readonly message: string;
+}): void {
   if (!input.text.includes(input.expected)) {
     throw new Error(`${input.message}\nmissing: ${input.expected}`);
   }
 }
 
-function assertNotContains(input: { readonly text: string; readonly unexpected: string; readonly message: string }): void {
+function assertNotContains(input: {
+  readonly text: string;
+  readonly unexpected: string;
+  readonly message: string;
+}): void {
   if (input.text.includes(input.unexpected)) {
     throw new Error(`${input.message}\nunexpected: ${input.unexpected}`);
   }
 }
 
-function assertNoSecretLeaks(input: { readonly label: string; readonly text: string; readonly config: MullgateConfig }): void {
+function assertNoSecretLeaks(input: {
+  readonly label: string;
+  readonly text: string;
+  readonly config: MullgateConfig;
+}): void {
   for (const secret of collectSecrets({ config: input.config })) {
     assertNotContains({
       text: input.text,
@@ -810,7 +1046,10 @@ function collectSecrets(input: { readonly config: MullgateConfig }): string[] {
     input.config.setup.auth.password,
     input.config.mullvad.accountNumber,
     input.config.mullvad.wireguard.privateKey,
-    ...input.config.routing.locations.flatMap((route) => [route.mullvad.accountNumber, route.mullvad.wireguard.privateKey]),
+    ...input.config.routing.locations.flatMap((route) => [
+      route.mullvad.accountNumber,
+      route.mullvad.wireguard.privateKey,
+    ]),
   ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 }
 

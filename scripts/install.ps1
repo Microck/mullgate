@@ -33,7 +33,7 @@ try {
   try {
     npm install --global --prefix $userPrefix $packageSpec
   } catch {
-    throw 'mullgate installer: npm installation failed. If the package has not been published yet, install from the GitHub release .tgz asset or from a source checkout.'
+    throw 'mullgate installer: npm installation failed. If the package is unavailable from npm, install from a GitHub Releases standalone binary or from a source checkout.'
   }
 
   Write-Host ''

@@ -27,4 +27,5 @@ coverage/
 .cache/
 tmp/
 .tmp/
+pnpm-publish-summary.json
 AGENTS.md

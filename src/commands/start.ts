@@ -11,12 +11,25 @@ import {
 } from '../app/setup-runner.js';
 import type { MullgatePaths } from '../config/paths.js';
 import { redactSensitiveText } from '../config/redact.js';
-import { ConfigStore } from '../config/store.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
-import { startDockerRuntime, type DockerRuntimeResult, type StartDockerRuntimeOptions } from '../runtime/docker-runtime.js';
-import { renderRuntimeBundle, type RuntimeBundleManifest } from '../runtime/render-runtime-bundle.js';
-import { renderWireproxyArtifacts, type RenderedWireproxyRoute } from '../runtime/render-wireproxy.js';
-import { validateWireproxyConfig, type ValidateWireproxyOptions } from '../runtime/validate-wireproxy.js';
+import { ConfigStore } from '../config/store.js';
+import {
+  type DockerRuntimeResult,
+  type StartDockerRuntimeOptions,
+  startDockerRuntime,
+} from '../runtime/docker-runtime.js';
+import {
+  type RuntimeBundleManifest,
+  renderRuntimeBundle,
+} from '../runtime/render-runtime-bundle.js';
+import {
+  type RenderedWireproxyRoute,
+  renderWireproxyArtifacts,
+} from '../runtime/render-wireproxy.js';
+import {
+  type ValidateWireproxyOptions,
+  validateWireproxyConfig,
+} from '../runtime/validate-wireproxy.js';
 
 type ValidationSourceSummary = string;
 
@@ -105,19 +118,29 @@ export type StartCommandDependencies = {
   readonly store?: ConfigStore;
   readonly checkedAt?: string;
   readonly startRuntime?: (options: StartDockerRuntimeOptions) => Promise<DockerRuntimeResult>;
-  readonly validateOptions?: Pick<ValidateWireproxyOptions, 'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'spawn'>;
+  readonly validateOptions?: Pick<
+    ValidateWireproxyOptions,
+    'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'spawn'
+  >;
   readonly stdout?: WritableTextSink;
   readonly stderr?: WritableTextSink;
 };
 
-export function registerStartCommand(program: Command, dependencies: StartCommandDependencies = {}): void {
+export function registerStartCommand(
+  program: Command,
+  dependencies: StartCommandDependencies = {},
+): void {
   program
     .command('start')
-    .description('Re-render derived runtime artifacts from saved config, validate them, and launch the Docker runtime bundle.')
+    .description(
+      'Re-render derived runtime artifacts from saved config, validate them, and launch the Docker runtime bundle.',
+    )
     .action(createStartCommandAction(dependencies));
 }
 
-export function createStartCommandAction(dependencies: StartCommandDependencies = {}): () => Promise<void> {
+export function createStartCommandAction(
+  dependencies: StartCommandDependencies = {},
+): () => Promise<void> {
   return async () => {
     const result = await runStartFlow(dependencies);
     writeStartResult(result, dependencies);
@@ -125,7 +148,9 @@ export function createStartCommandAction(dependencies: StartCommandDependencies 
   };
 }
 
-export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 'stdout' | 'stderr'> = {}): Promise<StartFlowResult> {
+export async function runStartFlow(
+  dependencies: Omit<StartCommandDependencies, 'stdout' | 'stderr'> = {},
+): Promise<StartFlowResult> {
   const store = dependencies.store ?? new ConfigStore();
   const loadResult = await store.load();
 
@@ -240,7 +265,11 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
     });
   }
 
-  const validationResult = await validateRenderedRoutes(wireproxyRender.routes, attemptedAt, dependencies.validateOptions);
+  const validationResult = await validateRenderedRoutes(
+    wireproxyRender.routes,
+    attemptedAt,
+    dependencies.validateOptions,
+  );
 
   if (!validationResult.ok) {
     return persistFailureOutcome({
@@ -276,7 +305,9 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
   const runtimeResult = await startRuntime({
     composeFilePath: runtimeBundle.artifactPaths.dockerComposePath,
     checkedAt: attemptedAt,
-    ...(dependencies.validateOptions?.dockerBinary ? { dockerBinary: dependencies.validateOptions.dockerBinary } : {}),
+    ...(dependencies.validateOptions?.dockerBinary
+      ? { dockerBinary: dependencies.validateOptions.dockerBinary }
+      : {}),
   });
 
   if (!runtimeResult.ok) {
@@ -344,7 +375,8 @@ export async function runStartFlow(dependencies: Omit<StartCommandDependencies, 
       paths: store.paths,
       attemptedAt: runtimeResult.checkedAt,
       artifactPath: refreshedRuntimeBundle.artifactPath,
-      message: 'Runtime started, but Mullgate failed to refresh the runtime manifest with the latest exposure status.',
+      message:
+        'Runtime started, but Mullgate failed to refresh the runtime manifest with the latest exposure status.',
       ...(refreshedRuntimeBundle.cause ? { cause: refreshedRuntimeBundle.cause } : {}),
       ...(refreshedRuntimeBundle.code ? { code: refreshedRuntimeBundle.code } : {}),
       config: successConfig,
@@ -407,7 +439,10 @@ function renderExposureInventory(manifest: RuntimeBundleManifest): string[] {
   ];
 }
 
-function writeStartResult(result: StartFlowResult, dependencies: Pick<StartCommandDependencies, 'stdout' | 'stderr'>): void {
+function writeStartResult(
+  result: StartFlowResult,
+  dependencies: Pick<StartCommandDependencies, 'stdout' | 'stderr'>,
+): void {
   const stdout = dependencies.stdout ?? process.stdout;
   const stderr = dependencies.stderr ?? process.stderr;
 
@@ -488,7 +523,7 @@ async function validateRenderedRoutes(
   validateOptions?: StartCommandDependencies['validateOptions'],
 ): Promise<RouteValidationSuccess | RouteValidationFailure> {
   const validationSources: string[] = [];
-  let primaryReportPath = routes[0]!.artifactPaths.configTestReportPath;
+  let primaryReportPath = routes[0]?.artifactPaths.configTestReportPath;
 
   for (const route of routes) {
     const result = await validateWireproxyConfig({
@@ -541,7 +576,9 @@ function inferRouteDiagnosticContext(
 ): RouteDiagnosticContext {
   // Compose launch errors often surface only the failing service name or mounted route config path, so match those
   // strings back to the rendered manifest before persisting last-start.json/stderr.
-  const haystack = values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0).join('\n');
+  const haystack = values
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join('\n');
 
   const matches = manifest.routes.filter((route) => {
     if (!haystack) {
@@ -560,7 +597,12 @@ function inferRouteDiagnosticContext(
     ].some((candidate) => typeof candidate === 'string' && haystack.includes(candidate));
   });
 
-  const selected = matches.length === 1 ? matches[0] : matches.length === 0 && config.routing.locations.length === 1 ? manifest.routes[0] : null;
+  const selected =
+    matches.length === 1
+      ? matches[0]
+      : matches.length === 0 && config.routing.locations.length === 1
+        ? manifest.routes[0]
+        : null;
 
   if (!selected) {
     return {};
@@ -610,7 +652,13 @@ async function persistFailureOutcome(input: {
     routeBindIp: input.routeBindIp ?? null,
     serviceName: input.serviceName ?? null,
   });
-  const failedConfig = withStartOutcome(input.config, report, 'error', input.attemptedAt, report.message);
+  const failedConfig = withStartOutcome(
+    input.config,
+    report,
+    'error',
+    input.attemptedAt,
+    report.message,
+  );
   const persistResult = await persistStartOutcome(input.store, failedConfig, report);
 
   if (!persistResult.ok) {
@@ -646,7 +694,10 @@ async function persistStartOutcome(
   report: RuntimeStartDiagnostic,
 ): Promise<{ ok: true } | StartFailure> {
   try {
-    await Promise.all([store.save(config), persistStartReport(store.paths.runtimeStartDiagnosticsFile, report)]);
+    await Promise.all([
+      store.save(config),
+      persistStartReport(store.paths.runtimeStartDiagnosticsFile, report),
+    ]);
     return { ok: true };
   } catch (error) {
     return {
@@ -671,7 +722,10 @@ async function persistStartOutcome(
   }
 }
 
-async function persistConfigOnly(store: ConfigStore, config: MullgateConfig): Promise<{ ok: true } | StartFailure> {
+async function persistConfigOnly(
+  store: ConfigStore,
+  config: MullgateConfig,
+): Promise<{ ok: true } | StartFailure> {
   try {
     await store.save(config);
     return { ok: true };
@@ -686,12 +740,17 @@ async function persistConfigOnly(store: ConfigStore, config: MullgateConfig): Pr
       artifactPath: store.paths.configFile,
       cause: error instanceof Error ? redactSensitiveText(error.message, config) : String(error),
       config,
-      ...(config.diagnostics.lastRuntimeStart ? { report: config.diagnostics.lastRuntimeStart } : {}),
+      ...(config.diagnostics.lastRuntimeStart
+        ? { report: config.diagnostics.lastRuntimeStart }
+        : {}),
     };
   }
 }
 
-async function persistStartReport(reportPath: string, report: RuntimeStartDiagnostic): Promise<void> {
+async function persistStartReport(
+  reportPath: string,
+  report: RuntimeStartDiagnostic,
+): Promise<void> {
   await mkdir(path.dirname(reportPath), { recursive: true, mode: 0o700 });
   await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
 }

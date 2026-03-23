@@ -15,7 +15,10 @@ export const MILESTONE_DECISION_QUESTION =
 
 export type MilestoneDecisionPosture = 'pass' | 'fail' | 'contract-change-required';
 export type MilestoneRequirementAdvancement = 'advanced' | 'blocked' | 'requires-contract-change';
-export type MilestoneNextAction = 'pursue-redesign' | 'stop-redesign' | 'pursue-only-with-contract-change';
+export type MilestoneNextAction =
+  | 'pursue-redesign'
+  | 'stop-redesign'
+  | 'pursue-only-with-contract-change';
 
 export type MilestoneSupportingRequirement = {
   readonly requirementId: CompatibilitySummaryBundle['summary']['requirementDeltas'][number]['requirementId'];
@@ -76,17 +79,21 @@ export type SerializeMilestoneDecisionBundleOptions = {
   readonly additionalSecrets?: readonly string[];
 };
 
-export function createMilestoneDecisionBundle(options: CreateMilestoneDecisionBundleOptions): MilestoneDecisionBundle {
+export function createMilestoneDecisionBundle(
+  options: CreateMilestoneDecisionBundleOptions,
+): MilestoneDecisionBundle {
   const posture = toMilestonePosture(options.compatibilityBundle.artifact.recommendation.posture);
-  const supportingRequirements = options.compatibilityBundle.summary.requirementDeltas.map((requirement) => {
-    return {
-      requirementId: requirement.requirementId,
-      title: requirement.title,
-      status: requirement.status,
-      summary: requirement.summary,
-      evidence: [...requirement.evidence],
-    } satisfies MilestoneSupportingRequirement;
-  });
+  const supportingRequirements = options.compatibilityBundle.summary.requirementDeltas.map(
+    (requirement) => {
+      return {
+        requirementId: requirement.requirementId,
+        title: requirement.title,
+        status: requirement.status,
+        summary: requirement.summary,
+        evidence: [...requirement.evidence],
+      } satisfies MilestoneSupportingRequirement;
+    },
+  );
   const survivingRequirementIds = supportingRequirements
     .filter((requirement) => requirement.status === 'preserved')
     .map((requirement) => requirement.requirementId);
@@ -160,7 +167,9 @@ export function createMilestoneDecisionBundle(options: CreateMilestoneDecisionBu
   };
 }
 
-export function serializeMilestoneDecisionBundle(options: SerializeMilestoneDecisionBundleOptions): string {
+export function serializeMilestoneDecisionBundle(
+  options: SerializeMilestoneDecisionBundleOptions,
+): string {
   const serialized = JSON.stringify(options.bundle, null, 2);
   const secrets = dedupeSecrets(options.additionalSecrets ?? []);
   return redactSecretStrings(serialized, secrets);
@@ -189,7 +198,9 @@ export function renderMilestoneDecisionText(bundle: MilestoneDecisionBundle): st
 
   lines.push('protocol matrix:');
   bundle.compatibility.protocolMatrix.forEach((protocol) => {
-    lines.push(`- ${protocol.protocol}: ${protocol.outcome} (${protocol.reason}) — ${protocol.summary}`);
+    lines.push(
+      `- ${protocol.protocol}: ${protocol.outcome} (${protocol.reason}) — ${protocol.summary}`,
+    );
   });
 
   lines.push('artifact links:');
@@ -233,7 +244,9 @@ function toMilestonePosture(posture: CompatibilityRecommendationPosture): Milest
   return 'fail';
 }
 
-function toMilestoneRequirementAdvancement(posture: MilestoneDecisionPosture): MilestoneRequirementAdvancement {
+function toMilestoneRequirementAdvancement(
+  posture: MilestoneDecisionPosture,
+): MilestoneRequirementAdvancement {
   if (posture === 'pass') {
     return 'advanced';
   }
@@ -283,7 +296,9 @@ function createRecommendationRationale(input: {
   }
 
   if (input.posture === 'pass') {
-    rationale.push('Every tracked compatibility requirement remained preserved in the shared-entry topology.');
+    rationale.push(
+      'Every tracked compatibility requirement remained preserved in the shared-entry topology.',
+    );
     return rationale;
   }
 
@@ -345,5 +360,8 @@ function redactSecretStrings(value: string, secrets: readonly string[]): string 
     return current.split(secret).join(REDACTED);
   }, value);
 
-  return redacted.replace(/-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/g, REDACTED);
+  return redacted.replace(
+    /-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/g,
+    REDACTED,
+  );
 }

@@ -8,30 +8,32 @@ import { loadStoredRelayCatalog } from '../app/setup-runner.js';
 import {
   buildExposureContract,
   deriveLoopbackBindIp,
-  validateExposureSettings,
   type ExposureContract,
-  type ExposureRouteContract,
+  validateExposureSettings,
 } from '../config/exposure-contract.js';
 import { resolveRouteWireproxyPaths } from '../config/paths.js';
 import { redactSensitiveText } from '../config/redact.js';
-import { ConfigStore, type LoadConfigResult } from '../config/store.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
+import { ConfigStore, type LoadConfigResult } from '../config/store.js';
 import {
-  queryDockerComposeStatus,
+  buildPlatformSupportContract,
+  type PlatformSupportContract,
+} from '../platform/support-contract.js';
+import {
   type DockerComposeStatusResult,
   type QueryDockerComposeStatusOptions,
+  queryDockerComposeStatus,
 } from '../runtime/docker-runtime.js';
-import { buildPlatformSupportContract, type PlatformSupportContract } from '../platform/support-contract.js';
 import type { RuntimeBundleManifest } from '../runtime/render-runtime-bundle.js';
 import type { ValidateWireproxyResult } from '../runtime/validate-wireproxy.js';
 import {
+  type ArtifactReadResult,
   classifyContainerState,
   findContainerForService,
   formatArtifactPresence,
   readJsonArtifact,
   renderComposeRemediation,
   resolveLastStartDiagnostic,
-  type ArtifactReadResult,
 } from './runtime-diagnostics.js';
 
 const ROUTING_LAYER_SERVICE = 'routing-layer';
@@ -61,7 +63,9 @@ type DoctorFlowResult = {
 type DoctorCommandDependencies = {
   readonly store?: ConfigStore;
   readonly checkedAt?: string;
-  readonly inspectRuntime?: (options: QueryDockerComposeStatusOptions) => Promise<DockerComposeStatusResult>;
+  readonly inspectRuntime?: (
+    options: QueryDockerComposeStatusOptions,
+  ) => Promise<DockerComposeStatusResult>;
   readonly resolveHostname?: (hostname: string) => Promise<readonly string[]>;
   readonly stdout?: WritableTextSink;
   readonly stderr?: WritableTextSink;
@@ -101,14 +105,21 @@ type InvalidValidationReport = RouteValidationReport & {
   };
 };
 
-export function registerDoctorCommand(program: Command, dependencies: DoctorCommandDependencies = {}): void {
+export function registerDoctorCommand(
+  program: Command,
+  dependencies: DoctorCommandDependencies = {},
+): void {
   program
     .command('doctor')
-    .description('Run deterministic, route-aware diagnostics for config, runtime, bind, DNS, and last-start failures.')
+    .description(
+      'Run deterministic, route-aware diagnostics for config, runtime, bind, DNS, and last-start failures.',
+    )
     .action(createDoctorCommandAction(dependencies));
 }
 
-export function createDoctorCommandAction(dependencies: DoctorCommandDependencies = {}): () => Promise<void> {
+export function createDoctorCommandAction(
+  dependencies: DoctorCommandDependencies = {},
+): () => Promise<void> {
   return async () => {
     const result = await runDoctorFlow(dependencies);
     writeDoctorResult(result, dependencies);
@@ -137,7 +148,13 @@ export async function runDoctorFlow(
   const manifestPath = config.runtime.runtimeBundle.manifestPath;
   const lastStartReportPath = config.diagnostics.lastRuntimeStartReportPath;
 
-  const [manifestResultRaw, lastStartResultRaw, composeStatus, relayCacheResult, primaryWireproxyExists] = await Promise.all([
+  const [
+    manifestResultRaw,
+    lastStartResultRaw,
+    composeStatus,
+    relayCacheResult,
+    primaryWireproxyExists,
+  ] = await Promise.all([
     readJsonArtifact<RuntimeBundleManifest>(manifestPath),
     readJsonArtifact<RuntimeStartDiagnostic>(lastStartReportPath),
     inspectRuntime({
@@ -158,7 +175,9 @@ export async function runDoctorFlow(
   const routeValidationReports = await Promise.all(
     routeTargets.map(async (target) => ({
       ...target,
-      result: normalizeValidationReportResult(await readJsonArtifact<ValidateWireproxyResult>(target.reportPath)),
+      result: normalizeValidationReportResult(
+        await readJsonArtifact<ValidateWireproxyResult>(target.reportPath),
+      ),
     })),
   );
 
@@ -166,7 +185,9 @@ export async function runDoctorFlow(
     Promise.resolve(buildConfigCheck(config, store.paths.configFile)),
     Promise.resolve(buildPlatformCheck(platform)),
     Promise.resolve(buildValidationCheck(config, primaryWireproxyExists, routeValidationReports)),
-    Promise.resolve(buildRelayCacheCheck(config.runtime.relayCachePath, relayCacheResult, checkedAt)),
+    Promise.resolve(
+      buildRelayCacheCheck(config.runtime.relayCachePath, relayCacheResult, checkedAt),
+    ),
     Promise.resolve(buildExposureCheck(config, exposure)),
     Promise.resolve(buildBindCheck(config)),
     buildHostnameCheck(config, exposure, resolveHostname),
@@ -205,8 +226,14 @@ function renderLoadFailure(
     name: 'config',
     outcome: 'fail',
     summary: 'Saved Mullgate config could not be read or parsed.',
-    details: [`phase=${result.phase}`, `source=${result.source}`, `artifact=${result.artifactPath}`, `reason=${result.message}`],
-    remediation: 'Fix the saved config JSON/schema issue or rerun `mullgate setup` to recreate the canonical config.',
+    details: [
+      `phase=${result.phase}`,
+      `source=${result.source}`,
+      `artifact=${result.artifactPath}`,
+      `reason=${result.message}`,
+    ],
+    remediation:
+      'Fix the saved config JSON/schema issue or rerun `mullgate setup` to recreate the canonical config.',
   };
 
   return {
@@ -228,13 +255,18 @@ function renderLoadFailure(
   };
 }
 
-function renderUnconfiguredFailure(store: ConfigStore, message: string, checkedAt: string): DoctorFlowResult {
+function renderUnconfiguredFailure(
+  store: ConfigStore,
+  message: string,
+  checkedAt: string,
+): DoctorFlowResult {
   const check: DoctorCheck = {
     name: 'config',
     outcome: 'fail',
     summary: 'Mullgate is not configured yet, so doctor cannot inspect runtime or exposure state.',
     details: [message],
-    remediation: 'Run `mullgate setup` first, then rerun `mullgate doctor` once a canonical config exists.',
+    remediation:
+      'Run `mullgate setup` first, then rerun `mullgate doctor` once a canonical config exists.',
   };
 
   return {
@@ -293,7 +325,8 @@ function buildPlatformCheck(platform: PlatformSupportContract): DoctorCheck {
     return {
       name: 'platform-support',
       outcome: 'degraded',
-      summary: 'Current platform keeps truthful config and diagnostic surfaces, but runtime execution remains limited compared with Linux.',
+      summary:
+        'Current platform keeps truthful config and diagnostic surfaces, but runtime execution remains limited compared with Linux.',
       details,
       remediation: platform.hostNetworking.remediation,
     };
@@ -313,19 +346,25 @@ function buildValidationCheck(
   routeReports: readonly RouteValidationReport[],
 ): DoctorCheck {
   const failingReports = routeReports.filter(
-    (report): report is FailedValidationReport => report.result.kind === 'present' && report.result.value.ok === false,
+    (report): report is FailedValidationReport =>
+      report.result.kind === 'present' && report.result.value.ok === false,
   );
-  const invalidReports = routeReports.filter((report): report is InvalidValidationReport => report.result.kind === 'invalid');
+  const invalidReports = routeReports.filter(
+    (report): report is InvalidValidationReport => report.result.kind === 'invalid',
+  );
   const missingReports = routeReports.filter((report) => report.result.kind === 'missing');
   const successfulReports = routeReports.filter(
-    (report): report is SuccessfulValidationReport => report.result.kind === 'present' && report.result.value.ok,
+    (report): report is SuccessfulValidationReport =>
+      report.result.kind === 'present' && report.result.value.ok,
   );
 
   const details = [
     `saved-runtime-phase=${config.runtime.status.phase}`,
     `saved-runtime-message=${config.runtime.status.message ?? 'n/a'}`,
     `wireproxy-config=${config.runtime.wireproxyConfigPath} (${primaryWireproxyExists ? 'present' : 'missing'})`,
-    ...successfulReports.map((report) => `report[${report.routeId}]=ok via ${report.result.value.source}`),
+    ...successfulReports.map(
+      (report) => `report[${report.routeId}]=ok via ${report.result.value.source}`,
+    ),
     ...failingReports.map(
       (report) =>
         `report[${report.routeId}]=failure via ${report.result.value.source}: ${report.result.value.cause}`,
@@ -340,7 +379,8 @@ function buildValidationCheck(
       outcome: 'fail',
       summary: 'The primary wireproxy config artifact is missing from the runtime directory.',
       details,
-      remediation: 'Run `mullgate config validate` or `mullgate start` to regenerate the derived runtime artifacts before trusting the saved runtime state.',
+      remediation:
+        'Run `mullgate config validate` or `mullgate start` to regenerate the derived runtime artifacts before trusting the saved runtime state.',
     };
   }
 
@@ -353,7 +393,8 @@ function buildValidationCheck(
           ? 'At least one persisted wireproxy validation report recorded a failure.'
           : 'Saved runtime status is `error`, so the current runtime artifacts should not be trusted.',
       details,
-      remediation: 'Fix the reported wireproxy/config issue, then rerun `mullgate config validate` or `mullgate start` to refresh the runtime artifacts.',
+      remediation:
+        'Fix the reported wireproxy/config issue, then rerun `mullgate config validate` or `mullgate start` to refresh the runtime artifacts.',
     };
   }
 
@@ -361,9 +402,11 @@ function buildValidationCheck(
     return {
       name: 'validation-artifacts',
       outcome: 'fail',
-      summary: 'At least one persisted validation report could not be parsed back into the expected shape.',
+      summary:
+        'At least one persisted validation report could not be parsed back into the expected shape.',
       details,
-      remediation: 'Delete the broken validation report and rerun `mullgate config validate` so doctor can trust the persisted validation surface again.',
+      remediation:
+        'Delete the broken validation report and rerun `mullgate config validate` so doctor can trust the persisted validation surface again.',
     };
   }
 
@@ -371,9 +414,11 @@ function buildValidationCheck(
     return {
       name: 'validation-artifacts',
       outcome: 'degraded',
-      summary: 'Saved config is marked `unvalidated`, so runtime artifacts may lag behind recent config or exposure edits.',
+      summary:
+        'Saved config is marked `unvalidated`, so runtime artifacts may lag behind recent config or exposure edits.',
       details,
-      remediation: 'Run `mullgate config validate` or `mullgate start` to regenerate wireproxy artifacts and capture a fresh validation report.',
+      remediation:
+        'Run `mullgate config validate` or `mullgate start` to regenerate wireproxy artifacts and capture a fresh validation report.',
     };
   }
 
@@ -381,9 +426,11 @@ function buildValidationCheck(
     return {
       name: 'validation-artifacts',
       outcome: 'degraded',
-      summary: 'One or more per-route validation reports are missing, so doctor cannot fully prove the rendered wireproxy configs are still in sync.',
+      summary:
+        'One or more per-route validation reports are missing, so doctor cannot fully prove the rendered wireproxy configs are still in sync.',
       details,
-      remediation: 'Rerun `mullgate config validate` to recreate the missing configtest reports before relying on the saved validation metadata.',
+      remediation:
+        'Rerun `mullgate config validate` to recreate the missing configtest reports before relying on the saved validation metadata.',
     };
   }
 
@@ -430,7 +477,8 @@ function buildRelayCacheCheck(
     return {
       name: 'relay-cache',
       outcome: 'degraded',
-      summary: 'Saved relay metadata has an unreadable timestamp, so doctor cannot judge freshness confidently.',
+      summary:
+        'Saved relay metadata has an unreadable timestamp, so doctor cannot judge freshness confidently.',
       details,
       remediation:
         'Refresh the relay cache with a fresh `mullgate setup` run before trusting location or relay selection diagnostics.',
@@ -441,7 +489,8 @@ function buildRelayCacheCheck(
     return {
       name: 'relay-cache',
       outcome: 'degraded',
-      summary: 'Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.',
+      summary:
+        'Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.',
       details,
       remediation:
         'Refresh the saved relay catalog with `mullgate setup`, then rerun `mullgate config validate` or `mullgate start` so runtime artifacts use the fresh relay data.',
@@ -482,7 +531,8 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
       outcome: 'degraded',
       summary: 'Saved exposure flags disagree with the configured exposure mode.',
       details,
-      remediation: 'Re-save the exposure contract with `mullgate config exposure ...` so allow-lan and the saved network-mode posture stay aligned.',
+      remediation:
+        'Re-save the exposure contract with `mullgate config exposure ...` so allow-lan and the saved network-mode posture stay aligned.',
     };
   }
 
@@ -490,7 +540,8 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
     return {
       name: 'exposure-contract',
       outcome: 'degraded',
-      summary: 'Saved exposure contract includes warning-level posture guidance that operators should resolve or consciously accept.',
+      summary:
+        'Saved exposure contract includes warning-level posture guidance that operators should resolve or consciously accept.',
       details,
       remediation: exposure.remediation.bindPosture,
     };
@@ -508,13 +559,16 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
   const routeBindIps = config.routing.locations.map((location) => location.bindIp);
   const details = [
     `setup.bind.host=${config.setup.bind.host}`,
-    ...config.routing.locations.map((location, index) => `route[${index + 1}] ${location.runtime.routeId} bind-ip=${location.bindIp}`),
+    ...config.routing.locations.map(
+      (location, index) =>
+        `route[${index + 1}] ${location.runtime.routeId} bind-ip=${location.bindIp}`,
+    ),
   ];
   const issues: string[] = [];
 
-  if (config.setup.bind.host !== config.routing.locations[0]!.bindIp) {
+  if (config.setup.bind.host !== config.routing.locations[0]?.bindIp) {
     issues.push(
-      `Primary bind host ${config.setup.bind.host} does not match route ${config.routing.locations[0]!.runtime.routeId} bind IP ${config.routing.locations[0]!.bindIp}.`,
+      `Primary bind host ${config.setup.bind.host} does not match route ${config.routing.locations[0]?.runtime.routeId} bind IP ${config.routing.locations[0]?.bindIp}.`,
     );
   }
 
@@ -522,7 +576,9 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
     for (const [index, location] of config.routing.locations.entries()) {
       const expected = deriveLoopbackBindIp(index);
       if (location.bindIp !== expected) {
-        issues.push(`Route ${location.runtime.routeId} should use loopback bind IP ${expected}, but saved config has ${location.bindIp}.`);
+        issues.push(
+          `Route ${location.runtime.routeId} should use loopback bind IP ${expected}, but saved config has ${location.bindIp}.`,
+        );
       }
     }
   } else {
@@ -574,13 +630,17 @@ async function buildHostnameCheck(
 
   for (const route of exposure.routes) {
     if (route.hostname === route.bindIp || isIP(route.hostname) === 4) {
-      details.push(`route ${route.routeId}: direct bind-IP entrypoint (${route.hostname}) does not require hostname lookup.`);
+      details.push(
+        `route ${route.routeId}: direct bind-IP entrypoint (${route.hostname}) does not require hostname lookup.`,
+      );
       continue;
     }
 
     try {
       const addresses = unique(await resolveHostname(route.hostname));
-      details.push(`route ${route.routeId}: ${route.hostname} -> ${addresses.length > 0 ? addresses.join(', ') : 'no addresses'}`);
+      details.push(
+        `route ${route.routeId}: ${route.hostname} -> ${addresses.length > 0 ? addresses.join(', ') : 'no addresses'}`,
+      );
 
       if (!addresses.includes(route.bindIp)) {
         failures.push(
@@ -607,7 +667,8 @@ async function buildHostnameCheck(
   return {
     name: 'hostname-resolution',
     outcome: 'pass',
-    summary: 'Configured hostnames resolve to the bind IPs promised by the saved exposure contract.',
+    summary:
+      'Configured hostnames resolve to the bind IPs promised by the saved exposure contract.',
     details,
   };
 }
@@ -632,10 +693,14 @@ function buildRuntimeCheck(
     };
   }
 
-  const routingLayerState = classifyContainerState(findContainerForService(composeStatus.containers, ROUTING_LAYER_SERVICE));
+  const routingLayerState = classifyContainerState(
+    findContainerForService(composeStatus.containers, ROUTING_LAYER_SERVICE),
+  );
   const routeStates = routeTargets.map((target) => ({
     ...target,
-    state: classifyContainerState(findContainerForService(composeStatus.containers, target.serviceName)),
+    state: classifyContainerState(
+      findContainerForService(composeStatus.containers, target.serviceName),
+    ),
   }));
   const unhealthyRoutes = routeStates.filter((route) => route.state.liveState !== 'running');
   const details = [
@@ -646,11 +711,16 @@ function buildRuntimeCheck(
     `stopped=${composeStatus.summary.stopped}`,
     `unhealthy=${composeStatus.summary.unhealthy}`,
     `routing-layer=${routingLayerState.detail}`,
-    ...routeStates.map((route) => `route ${route.routeId} (${route.serviceName})=${route.state.detail}`),
+    ...routeStates.map(
+      (route) => `route ${route.routeId} (${route.serviceName})=${route.state.detail}`,
+    ),
   ];
 
   if (composeStatus.containers.length === 0) {
-    const shouldBeRunning = config.runtime.status.phase === 'running' || config.runtime.status.phase === 'error' || lastStart?.status === 'failure';
+    const shouldBeRunning =
+      config.runtime.status.phase === 'running' ||
+      config.runtime.status.phase === 'error' ||
+      lastStart?.status === 'failure';
     return {
       name: 'runtime',
       outcome: shouldBeRunning ? 'fail' : 'degraded',
@@ -658,7 +728,8 @@ function buildRuntimeCheck(
         ? 'No live compose containers are running even though saved state implies a recent start or failure investigation.'
         : 'No live compose containers are running right now.',
       details,
-      remediation: 'Run `mullgate start` after fixing any validation, bind, or last-start issues reported above.',
+      remediation:
+        'Run `mullgate start` after fixing any validation, bind, or last-start issues reported above.',
     };
   }
 
@@ -666,7 +737,8 @@ function buildRuntimeCheck(
     return {
       name: 'runtime',
       outcome: 'fail',
-      summary: 'Live Docker Compose state shows one or more expected Mullgate services are stopped or degraded.',
+      summary:
+        'Live Docker Compose state shows one or more expected Mullgate services are stopped or degraded.',
       details,
       remediation:
         'Inspect `docker compose ps` / `docker compose logs` for the named services, fix the failing route or routing layer, then rerun `mullgate start`.',
@@ -676,7 +748,8 @@ function buildRuntimeCheck(
   return {
     name: 'runtime',
     outcome: 'pass',
-    summary: 'Live Docker Compose status matches the expected Mullgate routing-layer and per-route services.',
+    summary:
+      'Live Docker Compose status matches the expected Mullgate routing-layer and per-route services.',
     details,
   };
 }
@@ -689,9 +762,11 @@ function buildLastStartCheck(
     return {
       name: 'last-start',
       outcome: 'fail',
-      summary: 'The persisted last-start diagnostic report could not be parsed back into the expected shape.',
+      summary:
+        'The persisted last-start diagnostic report could not be parsed back into the expected shape.',
       details: [`reason=${lastStartResult.reason}`],
-      remediation: 'Delete the broken last-start report and rerun `mullgate start` so doctor can capture a fresh runtime failure context.',
+      remediation:
+        'Delete the broken last-start report and rerun `mullgate start` so doctor can capture a fresh runtime failure context.',
     };
   }
 
@@ -700,8 +775,11 @@ function buildLastStartCheck(
       name: 'last-start',
       outcome: 'degraded',
       summary: 'No persisted last-start diagnostic exists yet.',
-      details: ['Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.'],
-      remediation: 'Run `mullgate start` once to capture a persisted launch report that future doctor runs can inspect.',
+      details: [
+        'Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.',
+      ],
+      remediation:
+        'Run `mullgate start` once to capture a persisted launch report that future doctor runs can inspect.',
     };
   }
 
@@ -737,16 +815,24 @@ function buildLastStartCheck(
       ? 'The last recorded `mullgate start` attempt failed with an auth-related route/runtime error.'
       : 'The last recorded `mullgate start` attempt failed and should be treated as actionable runtime evidence.',
     details,
-    remediation: authRelated ? buildAuthFailureRemediation(lastStart) : buildStartFailureRemediation(lastStart),
+    remediation: authRelated
+      ? buildAuthFailureRemediation(lastStart)
+      : buildStartFailureRemediation(lastStart),
   };
 }
 
-function buildRouteArtifactTargets(config: MullgateConfig, manifest: RuntimeBundleManifest | null): RouteArtifactTarget[] {
+function buildRouteArtifactTargets(
+  config: MullgateConfig,
+  manifest: RuntimeBundleManifest | null,
+): RouteArtifactTarget[] {
   const manifestRoutes = new Map((manifest?.routes ?? []).map((route) => [route.routeId, route]));
 
   return config.routing.locations.map((location) => {
     const manifestRoute = manifestRoutes.get(location.runtime.routeId);
-    const artifactPaths = resolveRouteWireproxyPaths({ runtimeDir: config.runtime.runtimeBundle.bundleDir }, location.runtime);
+    const artifactPaths = resolveRouteWireproxyPaths(
+      { runtimeDir: config.runtime.runtimeBundle.bundleDir },
+      location.runtime,
+    );
 
     return {
       routeId: location.runtime.routeId,
@@ -856,7 +942,10 @@ function renderDoctorFailureSummary(input: {
   return lines.join('\n');
 }
 
-function writeDoctorResult(result: DoctorFlowResult, dependencies: Pick<DoctorCommandDependencies, 'stdout' | 'stderr'>): void {
+function writeDoctorResult(
+  result: DoctorFlowResult,
+  dependencies: Pick<DoctorCommandDependencies, 'stdout' | 'stderr'>,
+): void {
   const stdout = dependencies.stdout ?? process.stdout;
   const stderr = dependencies.stderr ?? process.stderr;
 
@@ -877,20 +966,34 @@ async function defaultResolveHostname(hostname: string): Promise<readonly string
   return unique(resolved.map((entry) => entry.address));
 }
 
-function normalizeManifestResult(result: ArtifactReadResult<RuntimeBundleManifest>): ArtifactReadResult<RuntimeBundleManifest> {
-  return normalizeArtifact(result, isRuntimeBundleManifest, 'Runtime manifest did not match the expected Mullgate bundle shape.');
+function normalizeManifestResult(
+  result: ArtifactReadResult<RuntimeBundleManifest>,
+): ArtifactReadResult<RuntimeBundleManifest> {
+  return normalizeArtifact(
+    result,
+    isRuntimeBundleManifest,
+    'Runtime manifest did not match the expected Mullgate bundle shape.',
+  );
 }
 
 function normalizeLastStartResult(
   result: ArtifactReadResult<RuntimeStartDiagnostic>,
 ): ArtifactReadResult<RuntimeStartDiagnostic> {
-  return normalizeArtifact(result, isRuntimeStartDiagnostic, 'Last-start report did not match the expected Mullgate diagnostic shape.');
+  return normalizeArtifact(
+    result,
+    isRuntimeStartDiagnostic,
+    'Last-start report did not match the expected Mullgate diagnostic shape.',
+  );
 }
 
 function normalizeValidationReportResult(
   result: ArtifactReadResult<ValidateWireproxyResult>,
 ): ArtifactReadResult<ValidateWireproxyResult> {
-  return normalizeArtifact(result, isValidateWireproxyResult, 'Validation report did not match the expected wireproxy configtest shape.');
+  return normalizeArtifact(
+    result,
+    isValidateWireproxyResult,
+    'Validation report did not match the expected wireproxy configtest shape.',
+  );
 }
 
 function normalizeArtifact<T>(
@@ -951,14 +1054,20 @@ function isObject(value: unknown): value is Record<string, any> {
 }
 
 function isAuthRelatedFailure(lastStart: RuntimeStartDiagnostic): boolean {
-  const haystack = [lastStart.code, lastStart.message, lastStart.cause].filter((value): value is string => Boolean(value)).join('\n');
-  return /(auth|authentication|unauthorized|forbidden|invalid credentials|bad credentials|username|password|407|401)/i.test(haystack);
+  const haystack = [lastStart.code, lastStart.message, lastStart.cause]
+    .filter((value): value is string => Boolean(value))
+    .join('\n');
+  return /(auth|authentication|unauthorized|forbidden|invalid credentials|bad credentials|username|password|407|401)/i.test(
+    haystack,
+  );
 }
 
 function buildAuthFailureRemediation(lastStart: RuntimeStartDiagnostic): string {
   const routeContext = describeRouteContext(lastStart);
   return [
-    routeContext.length > 0 ? `Check ${routeContext} for rejected proxy auth or stale rendered credentials.` : 'Check the failing route/service for rejected proxy auth or stale rendered credentials.',
+    routeContext.length > 0
+      ? `Check ${routeContext} for rejected proxy auth or stale rendered credentials.`
+      : 'Check the failing route/service for rejected proxy auth or stale rendered credentials.',
     'If credentials changed, update `setup.auth.username` / `setup.auth.password` with `mullgate config set`, then rerun `mullgate config validate` and `mullgate start`.',
   ].join(' ');
 }
@@ -966,7 +1075,9 @@ function buildAuthFailureRemediation(lastStart: RuntimeStartDiagnostic): string 
 function buildStartFailureRemediation(lastStart: RuntimeStartDiagnostic): string {
   const routeContext = describeRouteContext(lastStart);
   return [
-    routeContext.length > 0 ? `Inspect ${routeContext} first.` : 'Inspect the failing runtime service first.',
+    routeContext.length > 0
+      ? `Inspect ${routeContext} first.`
+      : 'Inspect the failing runtime service first.',
     'Then follow the saved artifact paths and rerun `mullgate start` only after the reported runtime error is fixed.',
   ].join(' ');
 }

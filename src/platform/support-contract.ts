@@ -8,7 +8,9 @@ import type {
 export type PlatformSupportLevel = 'full' | 'partial';
 export type PlatformSurfaceSupport = 'supported' | 'limited';
 export type PlatformHostNetworkingSupport = 'native' | 'limited';
-export type PlatformSupportWarningCode = 'LINUX_RUNTIME_RECOMMENDED' | 'DOCKER_DESKTOP_HOST_NETWORKING_LIMITED';
+export type PlatformSupportWarningCode =
+  | 'LINUX_RUNTIME_RECOMMENDED'
+  | 'DOCKER_DESKTOP_HOST_NETWORKING_LIMITED';
 
 export type PlatformSupportWarning = {
   readonly code: PlatformSupportWarningCode;
@@ -58,7 +60,9 @@ export type PlatformSupportContract = {
   readonly warnings: readonly PlatformSupportWarning[];
 };
 
-export function buildPlatformSupportContract(input: { readonly paths: MullgatePaths }): PlatformSupportContract {
+export function buildPlatformSupportContract(input: {
+  readonly paths: MullgatePaths;
+}): PlatformSupportContract {
   const { paths } = input;
 
   const baseContract = {
@@ -112,7 +116,10 @@ export function buildPlatformSupportContract(input: { readonly paths: MullgatePa
     };
   }
 
-  const modeLabel = paths.platform === 'macos' ? 'macOS path + diagnostics support' : 'Windows path + diagnostics support';
+  const modeLabel =
+    paths.platform === 'macos'
+      ? 'macOS path + diagnostics support'
+      : 'Windows path + diagnostics support';
   const platformLabel = paths.platform === 'macos' ? 'macOS' : 'Windows';
 
   return {
@@ -147,7 +154,8 @@ export function buildPlatformSupportContract(input: { readonly paths: MullgatePa
       {
         code: 'LINUX_RUNTIME_RECOMMENDED',
         severity: 'warning',
-        message: 'Linux remains the recommended runtime host for the current Docker-first Mullgate topology.',
+        message:
+          'Linux remains the recommended runtime host for the current Docker-first Mullgate topology.',
       },
       {
         code: 'DOCKER_DESKTOP_HOST_NETWORKING_LIMITED',

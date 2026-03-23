@@ -1,17 +1,19 @@
-import { createServer } from 'node:http';
+import type { spawnSync } from 'node:child_process';
 import { mkdtempSync, statSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-
-import { createLocationAliasCatalog, resolveLocationAlias } from '../src/domain/location-aliases.js';
-import { ConfigStore } from '../src/config/store.js';
-import { resolveMullgatePaths } from '../src/config/paths.js';
 import { runSetupFlow } from '../src/app/setup-runner.js';
+import { resolveMullgatePaths } from '../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../src/config/schema.js';
+import { ConfigStore } from '../src/config/store.js';
+import {
+  createLocationAliasCatalog,
+  resolveLocationAlias,
+} from '../src/domain/location-aliases.js';
 import { fetchRelays, normalizeRelayPayload } from '../src/mullvad/fetch-relays.js';
 import { provisionWireguard } from '../src/mullvad/provision-wireguard.js';
 import { renderWireproxyArtifacts } from '../src/runtime/render-wireproxy.js';
@@ -56,7 +58,10 @@ async function readTextFixture(name: string): Promise<string> {
   return readFile(join(fixturesDir, name), 'utf8');
 }
 
-async function withJsonServer(routes: Record<string, JsonRouteHandler>, run: (baseUrl: URL) => Promise<void>): Promise<void> {
+async function withJsonServer(
+  routes: Record<string, JsonRouteHandler>,
+  run: (baseUrl: URL) => Promise<void>,
+): Promise<void> {
   const server = createServer(async (request, response) => {
     const rawBody = await new Promise<string>((resolve, reject) => {
       const chunks: Buffer[] = [];
@@ -106,11 +111,16 @@ async function withJsonServer(routes: Record<string, JsonRouteHandler>, run: (ba
   try {
     await run(new URL(`http://127.0.0.1:${address.port}`));
   } finally {
-    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
   }
 }
 
-function createConfig(paths: ReturnType<typeof resolveMullgatePaths>, wireguard: MullgateConfig['mullvad']['wireguard']): MullgateConfig {
+function createConfig(
+  paths: ReturnType<typeof resolveMullgatePaths>,
+  wireguard: MullgateConfig['mullvad']['wireguard'],
+): MullgateConfig {
   const timestamp = '2026-03-20T18:48:01.000Z';
 
   return {
@@ -209,7 +219,9 @@ function normalizePathInput(value: string, home: string): string {
   return value.split(home).join('/tmp/mullgate-home');
 }
 
-function createSpawnStub(handlers: Record<string, (args: readonly string[]) => Partial<ReturnType<typeof spawnSync>>>): typeof spawnSync {
+function createSpawnStub(
+  handlers: Record<string, (args: readonly string[]) => Partial<ReturnType<typeof spawnSync>>>,
+): typeof spawnSync {
   return ((command: string, args?: readonly string[]) => {
     const handler = handlers[command];
 
@@ -251,7 +263,11 @@ function parseFormBody(raw: string): Record<string, string> {
 }
 
 afterEach(async () => {
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 describe('Mullvad relay normalization and alias discovery', () => {
@@ -289,7 +305,11 @@ describe('Mullvad relay normalization and alias discovery', () => {
       'se-got-wg-102',
       'se-sto-wg-001',
     ]);
-    expect(legacyResult.value.relays.map((relay) => relay.hostname)).toEqual(['at-vie-wg-001', 'se-got-wg-101', 'se-sto-wg-001']);
+    expect(legacyResult.value.relays.map((relay) => relay.hostname)).toEqual([
+      'at-vie-wg-001',
+      'se-got-wg-101',
+      'se-sto-wg-001',
+    ]);
     expect(resolveLocationAlias(aliasCatalog.value, 'sweden-gothenburg')).toEqual({
       ok: true,
       phase: 'location-lookup',
@@ -318,69 +338,75 @@ describe('Mullvad relay normalization and alias discovery', () => {
         cityName: 'Gothenburg',
       },
     });
-    expect('\n' + JSON.stringify({
-      countries: aliasCatalog.value.countries,
-      cities: aliasCatalog.value.cities,
-      ambiguousAliases: aliasCatalog.value.ambiguousAliases,
-    }, null, 2)).toMatchInlineSnapshot(`
+    expect(
+      `\n${JSON.stringify(
+        {
+          countries: aliasCatalog.value.countries,
+          cities: aliasCatalog.value.cities,
+          ambiguousAliases: aliasCatalog.value.ambiguousAliases,
+        },
+        null,
+        2,
+      )}`,
+    ).toMatchInlineSnapshot(`
 "\n{
-  \"countries\": [
+  "countries": [
     {
-      \"code\": \"at\",
-      \"name\": \"Austria\",
-      \"aliases\": [
-        \"at\",
-        \"austria\"
+      "code": "at",
+      "name": "Austria",
+      "aliases": [
+        "at",
+        "austria"
       ]
     },
     {
-      \"code\": \"se\",
-      \"name\": \"Sweden\",
-      \"aliases\": [
-        \"se\",
-        \"sweden\"
+      "code": "se",
+      "name": "Sweden",
+      "aliases": [
+        "se",
+        "sweden"
       ]
     }
   ],
-  \"cities\": [
+  "cities": [
     {
-      \"countryCode\": \"at\",
-      \"countryName\": \"Austria\",
-      \"code\": \"vie\",
-      \"name\": \"Vienna\",
-      \"aliases\": [
-        \"at-vie\",
-        \"at-vienna\",
-        \"austria-vienna\",
-        \"vienna\"
+      "countryCode": "at",
+      "countryName": "Austria",
+      "code": "vie",
+      "name": "Vienna",
+      "aliases": [
+        "at-vie",
+        "at-vienna",
+        "austria-vienna",
+        "vienna"
       ]
     },
     {
-      \"countryCode\": \"se\",
-      \"countryName\": \"Sweden\",
-      \"code\": \"got\",
-      \"name\": \"Gothenburg\",
-      \"aliases\": [
-        \"se-got\",
-        \"se-gothenburg\",
-        \"sweden-gothenburg\",
-        \"gothenburg\"
+      "countryCode": "se",
+      "countryName": "Sweden",
+      "code": "got",
+      "name": "Gothenburg",
+      "aliases": [
+        "se-got",
+        "se-gothenburg",
+        "sweden-gothenburg",
+        "gothenburg"
       ]
     },
     {
-      \"countryCode\": \"se\",
-      \"countryName\": \"Sweden\",
-      \"code\": \"sto\",
-      \"name\": \"Stockholm\",
-      \"aliases\": [
-        \"se-sto\",
-        \"se-stockholm\",
-        \"sweden-stockholm\",
-        \"stockholm\"
+      "countryCode": "se",
+      "countryName": "Sweden",
+      "code": "sto",
+      "name": "Stockholm",
+      "aliases": [
+        "se-sto",
+        "se-stockholm",
+        "sweden-stockholm",
+        "stockholm"
       ]
     }
   ],
-  \"ambiguousAliases\": []
+  "ambiguousAliases": []
 }"
 `);
   });
@@ -429,7 +455,9 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
           name: 'mullgate-lab',
         });
         expect(JSON.stringify(provisionResult.value)).toContain('[redacted]');
-        expect(JSON.stringify(provisionResult.value)).not.toContain(provisionResult.value.privateKey);
+        expect(JSON.stringify(provisionResult.value)).not.toContain(
+          provisionResult.value.privateKey,
+        );
 
         const relayResult = normalizeRelayPayload(appPayload, {
           fetchedAt: '2026-03-20T18:33:00.000Z',
@@ -455,8 +483,13 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
           return;
         }
 
-        const wireproxyConfig = await readFile(renderResult.artifactPaths.wireproxyConfigPath, 'utf8');
-        const relayCache = JSON.parse(await readFile(renderResult.artifactPaths.relayCachePath, 'utf8')) as { relayCount: number };
+        const wireproxyConfig = await readFile(
+          renderResult.artifactPaths.wireproxyConfigPath,
+          'utf8',
+        );
+        const relayCache = JSON.parse(
+          await readFile(renderResult.artifactPaths.relayCachePath, 'utf8'),
+        ) as { relayCount: number };
         const configStats = statSync(renderResult.artifactPaths.wireproxyConfigPath);
 
         expect(configStats.mode & 0o777).toBe(0o600);
@@ -490,12 +523,17 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
           issues: [],
         });
 
-        const report = normalizePathInput(await readFile(renderResult.artifactPaths.configTestReportPath, 'utf8'), env.HOME!).trimEnd();
+        const report = normalizePathInput(
+          await readFile(renderResult.artifactPaths.configTestReportPath, 'utf8'),
+          env.HOME!,
+        ).trimEnd();
         const normalizedConfig = normalizePathInput(wireproxyConfig, env.HOME!)
-          .split(provisionResult.value.privateKey).join('WG_PRIVATE_KEY')
-          .split('super-secret-password').join('PROXY_PASSWORD');
+          .split(provisionResult.value.privateKey)
+          .join('WG_PRIVATE_KEY')
+          .split('super-secret-password')
+          .join('PROXY_PASSWORD');
 
-        expect('\n' + normalizedConfig).toMatchInlineSnapshot(`
+        expect(`\n${normalizedConfig}`).toMatchInlineSnapshot(`
 "\n# Generated by Mullgate. Derived artifact; edit canonical config instead.
 # Generated at 2026-03-20T18:34:00.000Z
 # Route sweden-gothenburg (sweden-gothenburg -> 127.0.0.1)
@@ -522,16 +560,16 @@ Username = alice
 Password = PROXY_PASSWORD
 "
 `);
-        expect('\n' + report).toMatchInlineSnapshot(`
+        expect(`\n${report}`).toMatchInlineSnapshot(`
 "\n{
-  \"ok\": true,
-  \"phase\": \"validation\",
-  \"source\": \"docker\",
-  \"status\": \"success\",
-  \"checkedAt\": \"2026-03-20T18:35:00.000Z\",
-  \"target\": \"/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf\",
-  \"validator\": \"docker-wireproxy-configtest\",
-  \"issues\": []
+  "ok": true,
+  "phase": "validation",
+  "source": "docker",
+  "status": "success",
+  "checkedAt": "2026-03-20T18:35:00.000Z",
+  "target": "/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf",
+  "validator": "docker-wireproxy-configtest",
+  "issues": []
 }"
 `);
       },
@@ -581,7 +619,9 @@ Password = PROXY_PASSWORD
     const env = createTempEnvironment();
     const paths = resolveMullgatePaths(env);
     const store = new ConfigStore(paths);
-    const provisionFixture = JSON.parse(await readTextFixture('wg-provision-response.txt')) as Record<string, unknown>;
+    const provisionFixture = JSON.parse(
+      await readTextFixture('wg-provision-response.txt'),
+    ) as Record<string, unknown>;
     const relayFixture = await readJsonFixture<unknown>('app-relays.json');
     const provisionedNames: string[] = [];
     let provisionCount = 0;
@@ -637,7 +677,10 @@ Password = PROXY_PASSWORD
           return;
         }
 
-        expect(provisionedNames).toEqual(['mullgate-lab-sweden-gothenburg', 'mullgate-lab-austria-vienna']);
+        expect(provisionedNames).toEqual([
+          'mullgate-lab-sweden-gothenburg',
+          'mullgate-lab-austria-vienna',
+        ]);
         expect(result.routes).toEqual([
           {
             index: 0,
@@ -646,7 +689,7 @@ Password = PROXY_PASSWORD
             hostname: 'sweden-gothenburg',
             bindIp: '127.0.0.1',
             deviceName: 'mullgate-lab-sweden-gothenburg',
-            publicKey: result.routes[0]!.publicKey,
+            publicKey: result.routes[0]?.publicKey,
             ipv4Address: '10.64.12.34/32',
             ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
           },
@@ -657,7 +700,7 @@ Password = PROXY_PASSWORD
             hostname: 'austria-vienna',
             bindIp: '127.0.0.2',
             deviceName: 'mullgate-lab-austria-vienna',
-            publicKey: result.routes[1]!.publicKey,
+            publicKey: result.routes[1]?.publicKey,
             ipv4Address: '10.64.12.35/32',
             ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
           },
@@ -671,15 +714,23 @@ Password = PROXY_PASSWORD
         });
         expect(savedConfig.setup.bind.host).toBe('127.0.0.1');
         expect(savedConfig.routing.locations).toHaveLength(2);
-        expect(savedConfig.routing.locations[0]!.mullvad.deviceName).toBe('mullgate-lab-sweden-gothenburg');
-        expect(savedConfig.routing.locations[1]!.mullvad.deviceName).toBe('mullgate-lab-austria-vienna');
-        expect(savedConfig.routing.locations[0]!.bindIp).toBe('127.0.0.1');
-        expect(savedConfig.routing.locations[1]!.bindIp).toBe('127.0.0.2');
-        expect(savedConfig.routing.locations[0]!.mullvad.wireguard.publicKey).not.toBe(
-          savedConfig.routing.locations[1]!.mullvad.wireguard.publicKey,
+        expect(savedConfig.routing.locations[0]?.mullvad.deviceName).toBe(
+          'mullgate-lab-sweden-gothenburg',
         );
-        expect(savedConfig.routing.locations[0]!.mullvad.wireguard.ipv4Address).toBe('10.64.12.34/32');
-        expect(savedConfig.routing.locations[1]!.mullvad.wireguard.ipv4Address).toBe('10.64.12.35/32');
+        expect(savedConfig.routing.locations[1]?.mullvad.deviceName).toBe(
+          'mullgate-lab-austria-vienna',
+        );
+        expect(savedConfig.routing.locations[0]?.bindIp).toBe('127.0.0.1');
+        expect(savedConfig.routing.locations[1]?.bindIp).toBe('127.0.0.2');
+        expect(savedConfig.routing.locations[0]?.mullvad.wireguard.publicKey).not.toBe(
+          savedConfig.routing.locations[1]?.mullvad.wireguard.publicKey,
+        );
+        expect(savedConfig.routing.locations[0]?.mullvad.wireguard.ipv4Address).toBe(
+          '10.64.12.34/32',
+        );
+        expect(savedConfig.routing.locations[1]?.mullvad.wireguard.ipv4Address).toBe(
+          '10.64.12.35/32',
+        );
         expect(savedConfig.setup.location.requested).toBe('sweden-gothenburg');
         expect(savedConfig.setup.location.resolvedAlias).toBe('sweden-gothenburg');
         expect(savedConfig.mullvad.deviceName).toBe('mullgate-lab-sweden-gothenburg');
@@ -691,7 +742,9 @@ Password = PROXY_PASSWORD
     const env = createTempEnvironment();
     const paths = resolveMullgatePaths(env);
     const store = new ConfigStore(paths);
-    const provisionFixture = JSON.parse(await readTextFixture('wg-provision-response.txt')) as Record<string, unknown>;
+    const provisionFixture = JSON.parse(
+      await readTextFixture('wg-provision-response.txt'),
+    ) as Record<string, unknown>;
     const relayFixture = await readJsonFixture<unknown>('app-relays.json');
     const attemptsByDevice = new Map<string, number>();
 
@@ -711,7 +764,8 @@ Password = PROXY_PASSWORD
             };
           }
 
-          const ipv4Address = deviceName === 'mullgate-lab-sweden-gothenburg' ? '10.64.12.34/32' : '10.64.12.35/32';
+          const ipv4Address =
+            deviceName === 'mullgate-lab-sweden-gothenburg' ? '10.64.12.34/32' : '10.64.12.35/32';
 
           return {
             body: JSON.stringify({
@@ -769,8 +823,12 @@ Password = PROXY_PASSWORD
 
         const savedConfig = JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
         expect(savedConfig.routing.locations).toHaveLength(2);
-        expect(savedConfig.routing.locations[1]!.mullvad.deviceName).toBe('mullgate-lab-austria-vienna');
-        expect(savedConfig.routing.locations[1]!.mullvad.wireguard.ipv4Address).toBe('10.64.12.35/32');
+        expect(savedConfig.routing.locations[1]?.mullvad.deviceName).toBe(
+          'mullgate-lab-austria-vienna',
+        );
+        expect(savedConfig.routing.locations[1]?.mullvad.wireguard.ipv4Address).toBe(
+          '10.64.12.35/32',
+        );
       },
     );
   });
@@ -779,7 +837,9 @@ Password = PROXY_PASSWORD
     const env = createTempEnvironment();
     const paths = resolveMullgatePaths(env);
     const store = new ConfigStore(paths);
-    const provisionFixture = JSON.parse(await readTextFixture('wg-provision-response.txt')) as Record<string, unknown>;
+    const provisionFixture = JSON.parse(
+      await readTextFixture('wg-provision-response.txt'),
+    ) as Record<string, unknown>;
     const relayFixture = await readJsonFixture<unknown>('app-relays.json');
 
     await withJsonServer(
@@ -841,7 +901,7 @@ Password = PROXY_PASSWORD
             hostname: '44.55.66.77',
             bindIp: '44.55.66.77',
             deviceName: 'mullgate-public',
-            publicKey: result.routes[0]!.publicKey,
+            publicKey: result.routes[0]?.publicKey,
             ipv4Address: '10.64.30.44/32',
             ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
           },
@@ -890,8 +950,10 @@ Password = PROXY_PASSWORD
       exitCode: 1,
       paths: store.paths,
       code: 'BIND_IP_COUNT_MISMATCH',
-      message: 'Non-loopback exposure requires one explicit bind IP per routed location (2 locations, 1 bind IPs).',
-      cause: 'Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a comma-separated ordered list.',
+      message:
+        'Non-loopback exposure requires one explicit bind IP per routed location (2 locations, 1 bind IPs).',
+      cause:
+        'Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a comma-separated ordered list.',
       artifactPath: store.paths.configFile,
     });
   });
@@ -899,7 +961,9 @@ Password = PROXY_PASSWORD
   it('returns route-specific provisioning failure metadata for the second route', async () => {
     const env = createTempEnvironment();
     const store = new ConfigStore(resolveMullgatePaths(env));
-    const provisionFixture = JSON.parse(await readTextFixture('wg-provision-response.txt')) as Record<string, unknown>;
+    const provisionFixture = JSON.parse(
+      await readTextFixture('wg-provision-response.txt'),
+    ) as Record<string, unknown>;
     const relayFixture = await readJsonFixture<unknown>('app-relays.json');
     let provisionCount = 0;
 
@@ -912,7 +976,9 @@ Password = PROXY_PASSWORD
           if (provisionCount === 2) {
             return {
               status: 500,
-              body: JSON.stringify({ detail: `account 123456789012 for ${payload.name ?? 'missing-device'} failed upstream` }),
+              body: JSON.stringify({
+                detail: `account 123456789012 for ${payload.name ?? 'missing-device'} failed upstream`,
+              }),
             };
           }
 
@@ -962,7 +1028,8 @@ Password = PROXY_PASSWORD
             bindIp: '127.0.0.2',
             deviceName: 'mullgate-lab-austria-vienna',
           },
-          message: 'Provisioning failed for routed location austria-vienna (austria-vienna -> 127.0.0.2).',
+          message:
+            'Provisioning failed for routed location austria-vienna (austria-vienna -> 127.0.0.2).',
           cause: 'account [redacted-account] for mullgate-lab-austria-vienna failed upstream',
         });
       },
@@ -1101,7 +1168,8 @@ describe('failure metadata and redaction', () => {
       source: 'canonical-config',
       checkedAt: '2026-03-20T18:43:00.000Z',
       code: 'MISSING_WIREGUARD',
-      message: 'Cannot render wireproxy artifacts for route sweden-gothenburg before Mullvad WireGuard credentials are fully provisioned.',
+      message:
+        'Cannot render wireproxy artifacts for route sweden-gothenburg before Mullvad WireGuard credentials are fully provisioned.',
       artifactPath: paths.configFile,
       routeId: 'sweden-gothenburg',
       routeAlias: 'sweden-gothenburg',
@@ -1113,7 +1181,11 @@ describe('failure metadata and redaction', () => {
 
     await mkdir(paths.runtimeDir, { recursive: true });
     const invalidWireproxyConfigPath = path.join(paths.runtimeDir, 'invalid-wireproxy.conf');
-    await writeFile(invalidWireproxyConfigPath, '[Interface]\nPrivateKey = only-one-field\n', 'utf8');
+    await writeFile(
+      invalidWireproxyConfigPath,
+      '[Interface]\nPrivateKey = only-one-field\n',
+      'utf8',
+    );
 
     const validationFailure = await validateWireproxyConfig({
       configPath: invalidWireproxyConfigPath,

@@ -8,10 +8,13 @@ import path from 'node:path';
 
 import { buildExposureContract, type ExposureContract } from '../src/config/exposure-contract.js';
 import { resolveMullgatePaths, resolveRouteWireproxyPaths } from '../src/config/paths.js';
-import { ConfigStore } from '../src/config/store.js';
 import { CONFIG_VERSION, type MullgateConfig, type RoutedLocation } from '../src/config/schema.js';
+import { ConfigStore } from '../src/config/store.js';
 import type { MullvadRelayCatalog } from '../src/mullvad/fetch-relays.js';
-import { renderRuntimeBundle, type RuntimeBundleManifest } from '../src/runtime/render-runtime-bundle.js';
+import {
+  type RuntimeBundleManifest,
+  renderRuntimeBundle,
+} from '../src/runtime/render-runtime-bundle.js';
 
 type CommandResult = {
   readonly exitCode: number;
@@ -95,7 +98,9 @@ async function main(): Promise<void> {
     results.push(await verifyScenario({ scenario, options }));
   }
 
-  process.stdout.write(`${['M002 S01 network-mode verification passed.', ...results].join('\n')}\n`);
+  process.stdout.write(
+    `${['M002 S01 network-mode verification passed.', ...results].join('\n')}\n`,
+  );
 }
 
 function parseArgs(argv: readonly string[]): VerificationOptions | null {
@@ -161,7 +166,11 @@ async function verifyScenario(input: {
         scenario: input.scenario,
         config: updatedConfig,
       });
-      assertNoSecretLeaks({ label: `${input.scenario.id} update`, text: updateResult.stdout, config: updatedConfig });
+      assertNoSecretLeaks({
+        label: `${input.scenario.id} update`,
+        text: updateResult.stdout,
+        config: updatedConfig,
+      });
 
       preValidateExposure = await runCliCommand({ env: seeded.env, args: ['config', 'exposure'] });
       assertExitCode({
@@ -174,11 +183,19 @@ async function verifyScenario(input: {
         output: preValidateExposure.stdout,
         config: updatedConfig,
       });
-      assertNoSecretLeaks({ label: `${input.scenario.id} pre-validation exposure`, text: preValidateExposure.stdout, config: updatedConfig });
+      assertNoSecretLeaks({
+        label: `${input.scenario.id} pre-validation exposure`,
+        text: preValidateExposure.stdout,
+        config: updatedConfig,
+      });
     }
 
     const validate = await runCliCommand({ env: seeded.env, args: ['config', 'validate'] });
-    assertExitCode({ result: validate, expected: 0, message: `${input.scenario.id}: config validate failed.` });
+    assertExitCode({
+      result: validate,
+      expected: 0,
+      message: `${input.scenario.id}: config validate failed.`,
+    });
 
     const config = await loadConfig({ store: seeded.store });
     assertScenarioMode({ scenario: input.scenario, config });
@@ -190,17 +207,23 @@ async function verifyScenario(input: {
     });
 
     if (!runtimeBundleResult.ok) {
-      throw new Error(`${input.scenario.id}: failed to render runtime bundle after validation: ${runtimeBundleResult.message}`);
+      throw new Error(
+        `${input.scenario.id}: failed to render runtime bundle after validation: ${runtimeBundleResult.message}`,
+      );
     }
 
     const configExposure = await runCliCommand({ env: seeded.env, args: ['config', 'exposure'] });
     const configHosts = await runCliCommand({ env: seeded.env, args: ['config', 'hosts'] });
     const status = await runCliCommand({ env: seeded.env, args: ['status'] });
     const doctor = await runCliCommand({ env: seeded.env, args: ['doctor'] });
-    const manifestFile = await loadJsonFile<RuntimeBundleManifest>(config.runtime.runtimeBundle.manifestPath, 'runtime manifest');
-    const manifest = input.options.simulateDrift && input.scenario.id === 'private-network-direct'
-      ? tamperManifest({ manifest: manifestFile })
-      : manifestFile;
+    const manifestFile = await loadJsonFile<RuntimeBundleManifest>(
+      config.runtime.runtimeBundle.manifestPath,
+      'runtime manifest',
+    );
+    const manifest =
+      input.options.simulateDrift && input.scenario.id === 'private-network-direct'
+        ? tamperManifest({ manifest: manifestFile })
+        : manifestFile;
 
     await writeScenarioArtifacts({
       root,
@@ -216,17 +239,49 @@ async function verifyScenario(input: {
       manifest,
     });
 
-    assertExitCode({ result: configExposure, expected: 0, message: `${input.scenario.id}: config exposure failed.` });
-    assertExitCode({ result: configHosts, expected: 0, message: `${input.scenario.id}: config hosts failed.` });
-    assertExitCode({ result: status, expected: 0, message: `${input.scenario.id}: status failed.` });
-    assertExitCode({ result: doctor, expected: 0, message: `${input.scenario.id}: doctor should remain degraded-but-successful in the idle-runtime verifier.` });
+    assertExitCode({
+      result: configExposure,
+      expected: 0,
+      message: `${input.scenario.id}: config exposure failed.`,
+    });
+    assertExitCode({
+      result: configHosts,
+      expected: 0,
+      message: `${input.scenario.id}: config hosts failed.`,
+    });
+    assertExitCode({
+      result: status,
+      expected: 0,
+      message: `${input.scenario.id}: status failed.`,
+    });
+    assertExitCode({
+      result: doctor,
+      expected: 0,
+      message: `${input.scenario.id}: doctor should remain degraded-but-successful in the idle-runtime verifier.`,
+    });
 
-    assertNoSecretLeaks({ label: `${input.scenario.id} validate`, text: `${validate.stdout}\n${validate.stderr}`, config });
-    assertNoSecretLeaks({ label: `${input.scenario.id} exposure`, text: configExposure.stdout, config });
+    assertNoSecretLeaks({
+      label: `${input.scenario.id} validate`,
+      text: `${validate.stdout}\n${validate.stderr}`,
+      config,
+    });
+    assertNoSecretLeaks({
+      label: `${input.scenario.id} exposure`,
+      text: configExposure.stdout,
+      config,
+    });
     assertNoSecretLeaks({ label: `${input.scenario.id} hosts`, text: configHosts.stdout, config });
     assertNoSecretLeaks({ label: `${input.scenario.id} status`, text: status.stdout, config });
-    assertNoSecretLeaks({ label: `${input.scenario.id} doctor`, text: `${doctor.stdout}\n${doctor.stderr}`, config });
-    assertNoSecretLeaks({ label: `${input.scenario.id} manifest`, text: JSON.stringify(manifest, null, 2), config });
+    assertNoSecretLeaks({
+      label: `${input.scenario.id} doctor`,
+      text: `${doctor.stdout}\n${doctor.stderr}`,
+      config,
+    });
+    assertNoSecretLeaks({
+      label: `${input.scenario.id} manifest`,
+      text: JSON.stringify(manifest, null, 2),
+      config,
+    });
 
     assertValidationSurface({
       scenario: input.scenario,
@@ -288,7 +343,10 @@ async function seedScenario(input: { readonly root: string }): Promise<SeededSce
   return { env, paths, store };
 }
 
-async function createTempEnvironment(input: { readonly root: string; readonly dockerScenario: DockerScenario }): Promise<NodeJS.ProcessEnv> {
+async function createTempEnvironment(input: {
+  readonly root: string;
+  readonly dockerScenario: DockerScenario;
+}): Promise<NodeJS.ProcessEnv> {
   const fakeBin = path.join(input.root, 'fake-bin');
   await mkdir(fakeBin, { recursive: true, mode: 0o700 });
   await installFakeDocker({ directory: fakeBin, dockerScenario: input.dockerScenario });
@@ -299,7 +357,9 @@ async function createTempEnvironment(input: { readonly root: string; readonly do
     XDG_CONFIG_HOME: path.join(input.root, 'config'),
     XDG_STATE_HOME: path.join(input.root, 'state'),
     XDG_CACHE_HOME: path.join(input.root, 'cache'),
-    PATH: [fakeBin, process.env.PATH ?? ''].filter((value) => value.length > 0).join(path.delimiter),
+    PATH: [fakeBin, process.env.PATH ?? '']
+      .filter((value) => value.length > 0)
+      .join(path.delimiter),
     MULLGATE_FAKE_DOCKER_SCENARIO: input.dockerScenario,
   };
 }
@@ -499,14 +559,22 @@ async function seedPrerequisiteArtifacts(input: {
   readonly config: MullgateConfig;
 }): Promise<void> {
   await mkdir(path.dirname(input.paths.provisioningCacheFile), { recursive: true, mode: 0o700 });
-  await writeFile(input.paths.provisioningCacheFile, `${JSON.stringify(createRelayCatalog(), null, 2)}\n`, { mode: 0o600 });
+  await writeFile(
+    input.paths.provisioningCacheFile,
+    `${JSON.stringify(createRelayCatalog(), null, 2)}\n`,
+    { mode: 0o600 },
+  );
   await mkdir(path.dirname(input.paths.wireproxyConfigFile), { recursive: true, mode: 0o700 });
-  await writeFile(input.paths.wireproxyConfigFile, '# primary wireproxy fixture\n', { mode: 0o600 });
+  await writeFile(input.paths.wireproxyConfigFile, '# primary wireproxy fixture\n', {
+    mode: 0o600,
+  });
 
   for (const route of input.config.routing.locations) {
     const routePaths = resolveRouteWireproxyPaths(input.paths, route.runtime);
     await mkdir(path.dirname(routePaths.wireproxyConfigPath), { recursive: true, mode: 0o700 });
-    await writeFile(routePaths.wireproxyConfigPath, `# verifier route ${route.runtime.routeId}\n`, { mode: 0o600 });
+    await writeFile(routePaths.wireproxyConfigPath, `# verifier route ${route.runtime.routeId}\n`, {
+      mode: 0o600,
+    });
   }
 }
 
@@ -565,9 +633,14 @@ function createRelayCatalog(): MullvadRelayCatalog {
   };
 }
 
-async function installFakeDocker(input: { readonly directory: string; readonly dockerScenario: DockerScenario }): Promise<void> {
+async function installFakeDocker(input: {
+  readonly directory: string;
+  readonly dockerScenario: DockerScenario;
+}): Promise<void> {
   const dockerPath = path.join(input.directory, 'docker');
-  await writeFile(dockerPath, renderFakeDockerScript({ dockerScenario: input.dockerScenario }), { mode: 0o755 });
+  await writeFile(dockerPath, renderFakeDockerScript({ dockerScenario: input.dockerScenario }), {
+    mode: 0o755,
+  });
   await chmod(dockerPath, 0o755);
 }
 
@@ -616,10 +689,17 @@ async function writeScenarioArtifacts(input: {
     await writeFile(path.join(input.root, `${key}.stderr.txt`), value.stderr, { mode: 0o600 });
   }
 
-  await writeFile(path.join(input.root, 'runtime-manifest.json'), `${JSON.stringify(input.manifest, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(
+    path.join(input.root, 'runtime-manifest.json'),
+    `${JSON.stringify(input.manifest, null, 2)}\n`,
+    { mode: 0o600 },
+  );
 }
 
-async function runCliCommand(input: { readonly env: NodeJS.ProcessEnv; readonly args: readonly string[] }): Promise<CommandResult> {
+async function runCliCommand(input: {
+  readonly env: NodeJS.ProcessEnv;
+  readonly args: readonly string[];
+}): Promise<CommandResult> {
   return runCommand({
     command: process.execPath,
     args: [tsxCliPath, 'src/cli.ts', ...input.args],
@@ -679,13 +759,20 @@ async function loadJsonFile<T>(filePath: string, label: string): Promise<T> {
   try {
     return JSON.parse(await readFile(filePath, 'utf8')) as T;
   } catch (error) {
-    throw new Error(`Failed to read ${label} at ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to read ${label} at ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
-function assertScenarioMode(input: { readonly scenario: ScenarioDefinition; readonly config: MullgateConfig }): void {
+function assertScenarioMode(input: {
+  readonly scenario: ScenarioDefinition;
+  readonly config: MullgateConfig;
+}): void {
   if (input.config.setup.exposure.mode !== input.scenario.expectedMode) {
-    throw new Error(`${input.scenario.id}: saved config mode drifted to ${input.config.setup.exposure.mode}.`);
+    throw new Error(
+      `${input.scenario.id}: saved config mode drifted to ${input.config.setup.exposure.mode}.`,
+    );
   }
 }
 
@@ -726,16 +813,36 @@ function assertValidationSurface(input: {
   readonly output: string;
   readonly config: MullgateConfig;
 }): void {
-  assertContains({ text: input.output, expected: 'Mullgate config validated.', message: `${input.scenario.id}: validation success header missing.` });
-  assertContains({ text: input.output, expected: 'runtime status: validated', message: `${input.scenario.id}: validation did not refresh runtime status.` });
-  assertContains({ text: input.output, expected: `report: ${input.config.runtime.wireproxyConfigTestReportPath}`, message: `${input.scenario.id}: validation report path missing.` });
+  assertContains({
+    text: input.output,
+    expected: 'Mullgate config validated.',
+    message: `${input.scenario.id}: validation success header missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: 'runtime status: validated',
+    message: `${input.scenario.id}: validation did not refresh runtime status.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `report: ${input.config.runtime.wireproxyConfigTestReportPath}`,
+    message: `${input.scenario.id}: validation report path missing.`,
+  });
 
   if (input.scenario.expectedMode === 'loopback') {
-    assertContains({ text: input.output, expected: 'artifacts refreshed: no', message: `${input.scenario.id}: untouched loopback validation should be able to reuse existing artifacts.` });
+    assertContains({
+      text: input.output,
+      expected: 'artifacts refreshed: no',
+      message: `${input.scenario.id}: untouched loopback validation should be able to reuse existing artifacts.`,
+    });
     return;
   }
 
-  assertContains({ text: input.output, expected: 'artifacts refreshed: yes', message: `${input.scenario.id}: validation should refresh artifacts after exposure changes.` });
+  assertContains({
+    text: input.output,
+    expected: 'artifacts refreshed: yes',
+    message: `${input.scenario.id}: validation should refresh artifacts after exposure changes.`,
+  });
 }
 
 function assertExposureSurface(input: {
@@ -743,38 +850,122 @@ function assertExposureSurface(input: {
   readonly output: string;
   readonly exposureContract: ExposureContract;
 }): void {
-  assertContains({ text: input.output, expected: 'Mullgate exposure report', message: `${input.scenario.id}: exposure report header missing.` });
-  assertContains({ text: input.output, expected: `mode: ${input.exposureContract.mode}`, message: `${input.scenario.id}: exposure mode line missing.` });
-  assertContains({ text: input.output, expected: `mode label: ${input.exposureContract.posture.modeLabel}`, message: `${input.scenario.id}: exposure mode label missing.` });
-  assertContains({ text: input.output, expected: `recommendation: ${input.exposureContract.posture.recommendation}`, message: `${input.scenario.id}: exposure recommendation missing.` });
-  assertContains({ text: input.output, expected: `posture summary: ${input.exposureContract.posture.summary}`, message: `${input.scenario.id}: exposure posture summary missing.` });
-  assertContains({ text: input.output, expected: `remote story: ${input.exposureContract.posture.remoteStory}`, message: `${input.scenario.id}: exposure remote story missing.` });
-  assertContains({ text: input.output, expected: `base domain: ${input.exposureContract.baseDomain ?? 'n/a'}`, message: `${input.scenario.id}: exposure base domain missing.` });
-  assertContains({ text: input.output, expected: `allow lan: ${input.exposureContract.allowLan ? 'yes' : 'no'}`, message: `${input.scenario.id}: exposure allow-lan line missing.` });
-  assertContains({ text: input.output, expected: `runtime status: ${input.exposureContract.runtimeStatus.phase}`, message: `${input.scenario.id}: exposure runtime status missing.` });
-  assertContains({ text: input.output, expected: `restart needed: ${input.exposureContract.runtimeStatus.restartRequired ? 'yes' : 'no'}`, message: `${input.scenario.id}: exposure restart-needed line missing.` });
+  assertContains({
+    text: input.output,
+    expected: 'Mullgate exposure report',
+    message: `${input.scenario.id}: exposure report header missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `mode: ${input.exposureContract.mode}`,
+    message: `${input.scenario.id}: exposure mode line missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `mode label: ${input.exposureContract.posture.modeLabel}`,
+    message: `${input.scenario.id}: exposure mode label missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `recommendation: ${input.exposureContract.posture.recommendation}`,
+    message: `${input.scenario.id}: exposure recommendation missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `posture summary: ${input.exposureContract.posture.summary}`,
+    message: `${input.scenario.id}: exposure posture summary missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `remote story: ${input.exposureContract.posture.remoteStory}`,
+    message: `${input.scenario.id}: exposure remote story missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `base domain: ${input.exposureContract.baseDomain ?? 'n/a'}`,
+    message: `${input.scenario.id}: exposure base domain missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `allow lan: ${input.exposureContract.allowLan ? 'yes' : 'no'}`,
+    message: `${input.scenario.id}: exposure allow-lan line missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `runtime status: ${input.exposureContract.runtimeStatus.phase}`,
+    message: `${input.scenario.id}: exposure runtime status missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `restart needed: ${input.exposureContract.runtimeStatus.restartRequired ? 'yes' : 'no'}`,
+    message: `${input.scenario.id}: exposure restart-needed line missing.`,
+  });
 
   for (const guidanceLine of input.exposureContract.guidance) {
-    assertContains({ text: input.output, expected: `- ${guidanceLine}`, message: `${input.scenario.id}: exposure guidance line missing.` });
+    assertContains({
+      text: input.output,
+      expected: `- ${guidanceLine}`,
+      message: `${input.scenario.id}: exposure guidance line missing.`,
+    });
   }
 
-  assertContains({ text: input.output, expected: `- bind posture: ${input.exposureContract.remediation.bindPosture}`, message: `${input.scenario.id}: exposure bind remediation missing.` });
-  assertContains({ text: input.output, expected: `- hostname resolution: ${input.exposureContract.remediation.hostnameResolution}`, message: `${input.scenario.id}: exposure hostname remediation missing.` });
-  assertContains({ text: input.output, expected: `- restart: ${input.exposureContract.remediation.restart}`, message: `${input.scenario.id}: exposure restart remediation missing.` });
+  assertContains({
+    text: input.output,
+    expected: `- bind posture: ${input.exposureContract.remediation.bindPosture}`,
+    message: `${input.scenario.id}: exposure bind remediation missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `- hostname resolution: ${input.exposureContract.remediation.hostnameResolution}`,
+    message: `${input.scenario.id}: exposure hostname remediation missing.`,
+  });
+  assertContains({
+    text: input.output,
+    expected: `- restart: ${input.exposureContract.remediation.restart}`,
+    message: `${input.scenario.id}: exposure restart remediation missing.`,
+  });
 
   for (const warning of input.exposureContract.warnings) {
-    assertContains({ text: input.output, expected: `- ${warning.severity}: ${warning.message}`, message: `${input.scenario.id}: exposure warning missing.` });
+    assertContains({
+      text: input.output,
+      expected: `- ${warning.severity}: ${warning.message}`,
+      message: `${input.scenario.id}: exposure warning missing.`,
+    });
   }
 
   for (const route of input.exposureContract.routes) {
-    assertContains({ text: input.output, expected: `${route.index + 1}. ${route.hostname} -> ${route.bindIp}`, message: `${input.scenario.id}: exposure route header missing.` });
-    assertContains({ text: input.output, expected: `   alias: ${route.alias}`, message: `${input.scenario.id}: exposure route alias missing.` });
-    assertContains({ text: input.output, expected: `   route id: ${route.routeId}`, message: `${input.scenario.id}: exposure route id missing.` });
-    assertContains({ text: input.output, expected: `   dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`, message: `${input.scenario.id}: exposure route dns line missing.` });
+    assertContains({
+      text: input.output,
+      expected: `${route.index + 1}. ${route.hostname} -> ${route.bindIp}`,
+      message: `${input.scenario.id}: exposure route header missing.`,
+    });
+    assertContains({
+      text: input.output,
+      expected: `   alias: ${route.alias}`,
+      message: `${input.scenario.id}: exposure route alias missing.`,
+    });
+    assertContains({
+      text: input.output,
+      expected: `   route id: ${route.routeId}`,
+      message: `${input.scenario.id}: exposure route id missing.`,
+    });
+    assertContains({
+      text: input.output,
+      expected: `   dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
+      message: `${input.scenario.id}: exposure route dns line missing.`,
+    });
 
     for (const endpoint of route.endpoints) {
-      assertContains({ text: input.output, expected: `   ${endpoint.protocol} hostname: ${endpoint.redactedHostnameUrl}`, message: `${input.scenario.id}: exposure hostname endpoint missing.` });
-      assertContains({ text: input.output, expected: `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`, message: `${input.scenario.id}: exposure direct-IP endpoint missing.` });
+      assertContains({
+        text: input.output,
+        expected: `   ${endpoint.protocol} hostname: ${endpoint.redactedHostnameUrl}`,
+        message: `${input.scenario.id}: exposure hostname endpoint missing.`,
+      });
+      assertContains({
+        text: input.output,
+        expected: `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`,
+        message: `${input.scenario.id}: exposure direct-IP endpoint missing.`,
+      });
     }
   }
 }
@@ -783,12 +974,28 @@ function assertHostsSurface(input: {
   readonly output: string;
   readonly exposureContract: ExposureContract;
 }): void {
-  assertContains({ text: input.output, expected: 'Mullgate routed hosts', message: 'hosts report header missing.' });
-  assertContains({ text: input.output, expected: 'copy/paste hosts block', message: 'hosts block header missing.' });
+  assertContains({
+    text: input.output,
+    expected: 'Mullgate routed hosts',
+    message: 'hosts report header missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: 'copy/paste hosts block',
+    message: 'hosts block header missing.',
+  });
 
   for (const route of input.exposureContract.routes) {
-    assertContains({ text: input.output, expected: `${route.index + 1}. ${route.hostname} -> ${route.bindIp} (alias: ${route.alias}, route id: ${route.routeId})`, message: `hosts mapping missing for ${route.routeId}.` });
-    assertContains({ text: input.output, expected: `${route.bindIp} ${route.hostname}`, message: `hosts block line missing for ${route.routeId}.` });
+    assertContains({
+      text: input.output,
+      expected: `${route.index + 1}. ${route.hostname} -> ${route.bindIp} (alias: ${route.alias}, route id: ${route.routeId})`,
+      message: `hosts mapping missing for ${route.routeId}.`,
+    });
+    assertContains({
+      text: input.output,
+      expected: `${route.bindIp} ${route.hostname}`,
+      message: `hosts block line missing for ${route.routeId}.`,
+    });
   }
 }
 
@@ -797,24 +1004,76 @@ function assertStatusSurface(input: {
   readonly exposureContract: ExposureContract;
   readonly manifestPath: string;
 }): void {
-  assertContains({ text: input.output, expected: 'Mullgate runtime status', message: 'status header missing.' });
-  assertContains({ text: input.output, expected: 'phase: stopped', message: 'status should classify the idle verifier runtime as stopped.' });
-  assertContains({ text: input.output, expected: 'exposure source: runtime-manifest', message: 'status should read exposure truth from runtime manifest after validation.' });
-  assertContains({ text: input.output, expected: `runtime manifest: ${input.manifestPath} (present)`, message: 'status runtime-manifest presence drifted.' });
-  assertContains({ text: input.output, expected: `mode label: ${input.exposureContract.posture.modeLabel}`, message: 'status mode label missing.' });
-  assertContains({ text: input.output, expected: `recommendation: ${input.exposureContract.posture.recommendation}`, message: 'status recommendation missing.' });
-  assertContains({ text: input.output, expected: `posture summary: ${input.exposureContract.posture.summary}`, message: 'status posture summary missing.' });
-  assertContains({ text: input.output, expected: `remote story: ${input.exposureContract.posture.remoteStory}`, message: 'status remote story missing.' });
-  assertContains({ text: input.output, expected: 'network-mode guidance', message: 'status network-mode guidance section missing.' });
+  assertContains({
+    text: input.output,
+    expected: 'Mullgate runtime status',
+    message: 'status header missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: 'phase: stopped',
+    message: 'status should classify the idle verifier runtime as stopped.',
+  });
+  assertContains({
+    text: input.output,
+    expected: 'exposure source: runtime-manifest',
+    message: 'status should read exposure truth from runtime manifest after validation.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `runtime manifest: ${input.manifestPath} (present)`,
+    message: 'status runtime-manifest presence drifted.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `mode label: ${input.exposureContract.posture.modeLabel}`,
+    message: 'status mode label missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `recommendation: ${input.exposureContract.posture.recommendation}`,
+    message: 'status recommendation missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `posture summary: ${input.exposureContract.posture.summary}`,
+    message: 'status posture summary missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `remote story: ${input.exposureContract.posture.remoteStory}`,
+    message: 'status remote story missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: 'network-mode guidance',
+    message: 'status network-mode guidance section missing.',
+  });
 
   for (const guidanceLine of input.exposureContract.guidance) {
-    assertContains({ text: input.output, expected: `- ${guidanceLine}`, message: 'status guidance line missing.' });
+    assertContains({
+      text: input.output,
+      expected: `- ${guidanceLine}`,
+      message: 'status guidance line missing.',
+    });
   }
 
   for (const route of input.exposureContract.routes) {
-    assertContains({ text: input.output, expected: `${route.index + 1}. ${route.hostname} -> ${route.bindIp}`, message: `status route header missing for ${route.routeId}.` });
-    assertContains({ text: input.output, expected: `   route id: ${route.routeId}`, message: `status route id missing for ${route.routeId}.` });
-    assertContains({ text: input.output, expected: `   dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`, message: `status dns line missing for ${route.routeId}.` });
+    assertContains({
+      text: input.output,
+      expected: `${route.index + 1}. ${route.hostname} -> ${route.bindIp}`,
+      message: `status route header missing for ${route.routeId}.`,
+    });
+    assertContains({
+      text: input.output,
+      expected: `   route id: ${route.routeId}`,
+      message: `status route id missing for ${route.routeId}.`,
+    });
+    assertContains({
+      text: input.output,
+      expected: `   dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
+      message: `status dns line missing for ${route.routeId}.`,
+    });
   }
 }
 
@@ -822,22 +1081,74 @@ function assertDoctorSurface(input: {
   readonly output: string;
   readonly exposureContract: ExposureContract;
 }): void {
-  assertContains({ text: input.output, expected: 'Mullgate doctor', message: 'doctor header missing.' });
-  assertContains({ text: input.output, expected: 'overall: degraded', message: 'doctor should stay degraded in the idle-runtime verifier.' });
+  assertContains({
+    text: input.output,
+    expected: 'Mullgate doctor',
+    message: 'doctor header missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: 'overall: degraded',
+    message: 'doctor should stay degraded in the idle-runtime verifier.',
+  });
 
-  const exposureOutcome = input.exposureContract.warnings.some((warning) => warning.severity === 'warning') ? 'degraded' : 'pass';
-  assertContains({ text: input.output, expected: `exposure-contract: ${exposureOutcome}`, message: 'doctor exposure-contract check drifted away from the expected severity.' });
-  assertContains({ text: input.output, expected: `detail: mode=${input.exposureContract.mode}`, message: 'doctor mode detail missing.' });
-  assertContains({ text: input.output, expected: `detail: mode-label=${input.exposureContract.posture.modeLabel}`, message: 'doctor mode-label detail missing.' });
-  assertContains({ text: input.output, expected: `detail: recommendation=${input.exposureContract.posture.recommendation}`, message: 'doctor recommendation detail missing.' });
-  assertContains({ text: input.output, expected: `detail: posture-summary=${input.exposureContract.posture.summary}`, message: 'doctor posture-summary detail missing.' });
-  assertContains({ text: input.output, expected: `detail: remote-story=${input.exposureContract.posture.remoteStory}`, message: 'doctor remote-story detail missing.' });
-  assertContains({ text: input.output, expected: `detail: bind-remediation=${input.exposureContract.remediation.bindPosture}`, message: 'doctor bind-remediation detail missing.' });
-  assertContains({ text: input.output, expected: `detail: hostname-remediation=${input.exposureContract.remediation.hostnameResolution}`, message: 'doctor hostname-remediation detail missing.' });
-  assertContains({ text: input.output, expected: `detail: restart-remediation=${input.exposureContract.remediation.restart}`, message: 'doctor restart-remediation detail missing.' });
+  const exposureOutcome = input.exposureContract.warnings.some(
+    (warning) => warning.severity === 'warning',
+  )
+    ? 'degraded'
+    : 'pass';
+  assertContains({
+    text: input.output,
+    expected: `exposure-contract: ${exposureOutcome}`,
+    message: 'doctor exposure-contract check drifted away from the expected severity.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `detail: mode=${input.exposureContract.mode}`,
+    message: 'doctor mode detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `detail: mode-label=${input.exposureContract.posture.modeLabel}`,
+    message: 'doctor mode-label detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `detail: recommendation=${input.exposureContract.posture.recommendation}`,
+    message: 'doctor recommendation detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `detail: posture-summary=${input.exposureContract.posture.summary}`,
+    message: 'doctor posture-summary detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `detail: remote-story=${input.exposureContract.posture.remoteStory}`,
+    message: 'doctor remote-story detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `detail: bind-remediation=${input.exposureContract.remediation.bindPosture}`,
+    message: 'doctor bind-remediation detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `detail: hostname-remediation=${input.exposureContract.remediation.hostnameResolution}`,
+    message: 'doctor hostname-remediation detail missing.',
+  });
+  assertContains({
+    text: input.output,
+    expected: `detail: restart-remediation=${input.exposureContract.remediation.restart}`,
+    message: 'doctor restart-remediation detail missing.',
+  });
 
   for (const warning of input.exposureContract.warnings) {
-    assertContains({ text: input.output, expected: `detail: ${warning.severity}: ${warning.message}`, message: 'doctor warning detail missing.' });
+    assertContains({
+      text: input.output,
+      expected: `detail: ${warning.severity}: ${warning.message}`,
+      message: 'doctor warning detail missing.',
+    });
   }
 }
 
@@ -847,7 +1158,9 @@ function assertManifestSurface(input: {
   readonly scenarioId: string;
 }): void {
   if (input.manifest.exposure.mode !== input.exposureContract.mode) {
-    throw new Error(`${input.scenarioId}: manifest exposure mode drifted to ${input.manifest.exposure.mode}.`);
+    throw new Error(
+      `${input.scenarioId}: manifest exposure mode drifted to ${input.manifest.exposure.mode}.`,
+    );
   }
 
   if (input.manifest.exposure.allowLan !== input.exposureContract.allowLan) {
@@ -862,7 +1175,10 @@ function assertManifestSurface(input: {
     throw new Error(`${input.scenarioId}: manifest runtime-status phase drifted.`);
   }
 
-  if (input.manifest.exposure.runtimeStatus.restartRequired !== input.exposureContract.runtimeStatus.restartRequired) {
+  if (
+    input.manifest.exposure.runtimeStatus.restartRequired !==
+    input.exposureContract.runtimeStatus.restartRequired
+  ) {
     throw new Error(`${input.scenarioId}: manifest restart-required drifted.`);
   }
 
@@ -870,7 +1186,9 @@ function assertManifestSurface(input: {
     throw new Error(`${input.scenarioId}: manifest mode-label drifted.`);
   }
 
-  if (input.manifest.exposure.posture.recommendation !== input.exposureContract.posture.recommendation) {
+  if (
+    input.manifest.exposure.posture.recommendation !== input.exposureContract.posture.recommendation
+  ) {
     throw new Error(`${input.scenarioId}: manifest recommendation drifted.`);
   }
 
@@ -890,20 +1208,28 @@ function assertManifestSurface(input: {
 
   for (const warning of input.exposureContract.warnings) {
     const expected = `${warning.severity}: ${warning.message}`;
-    if (!input.manifest.exposure.warnings.some((candidate) => `${candidate.severity}: ${candidate.message}` === expected)) {
+    if (
+      !input.manifest.exposure.warnings.some(
+        (candidate) => `${candidate.severity}: ${candidate.message}` === expected,
+      )
+    ) {
       throw new Error(`${input.scenarioId}: manifest warning missing: ${expected}`);
     }
   }
 
   for (const route of input.exposureContract.routes) {
-    const manifestRoute = input.manifest.exposure.routes.find((candidate) => candidate.routeId === route.routeId);
+    const manifestRoute = input.manifest.exposure.routes.find(
+      (candidate) => candidate.routeId === route.routeId,
+    );
 
     if (!manifestRoute) {
       throw new Error(`${input.scenarioId}: manifest exposure route missing for ${route.routeId}.`);
     }
 
     if (manifestRoute.hostname !== route.hostname || manifestRoute.bindIp !== route.bindIp) {
-      throw new Error(`${input.scenarioId}: manifest exposure route wiring drifted for ${route.routeId}.`);
+      throw new Error(
+        `${input.scenarioId}: manifest exposure route wiring drifted for ${route.routeId}.`,
+      );
     }
   }
 }
@@ -918,28 +1244,64 @@ function assertCliAndManifestAgree(input: {
 }): void {
   for (const route of input.manifest.exposure.routes) {
     const header = `${route.index + 1}. ${route.hostname} -> ${route.bindIp}`;
-    assertContains({ text: input.exposureOutput, expected: header, message: `${input.scenarioId}: exposure/manifest route drifted.` });
-    assertContains({ text: input.statusOutput, expected: header, message: `${input.scenarioId}: status/manifest route drifted.` });
+    assertContains({
+      text: input.exposureOutput,
+      expected: header,
+      message: `${input.scenarioId}: exposure/manifest route drifted.`,
+    });
+    assertContains({
+      text: input.statusOutput,
+      expected: header,
+      message: `${input.scenarioId}: status/manifest route drifted.`,
+    });
 
     const dnsLine = `dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`;
-    assertContains({ text: input.exposureOutput, expected: dnsLine, message: `${input.scenarioId}: exposure/manifest dns drifted.` });
-    assertContains({ text: input.statusOutput, expected: dnsLine, message: `${input.scenarioId}: status/manifest dns drifted.` });
+    assertContains({
+      text: input.exposureOutput,
+      expected: dnsLine,
+      message: `${input.scenarioId}: exposure/manifest dns drifted.`,
+    });
+    assertContains({
+      text: input.statusOutput,
+      expected: dnsLine,
+      message: `${input.scenarioId}: status/manifest dns drifted.`,
+    });
 
     for (const endpoint of route.endpoints) {
-      assertContains({ text: input.exposureOutput, expected: endpoint.redactedHostnameUrl, message: `${input.scenarioId}: exposure/manifest hostname endpoint drifted.` });
-      assertContains({ text: input.statusOutput, expected: endpoint.redactedHostnameUrl, message: `${input.scenarioId}: status/manifest hostname endpoint drifted.` });
+      assertContains({
+        text: input.exposureOutput,
+        expected: endpoint.redactedHostnameUrl,
+        message: `${input.scenarioId}: exposure/manifest hostname endpoint drifted.`,
+      });
+      assertContains({
+        text: input.statusOutput,
+        expected: endpoint.redactedHostnameUrl,
+        message: `${input.scenarioId}: status/manifest hostname endpoint drifted.`,
+      });
     }
   }
 
-  assertContains({ text: input.doctorOutput, expected: `detail: mode=${input.manifest.exposure.mode}`, message: `${input.scenarioId}: doctor/manifest mode drifted.` });
-  assertContains({ text: input.doctorOutput, expected: `detail: mode-label=${input.manifest.exposure.posture.modeLabel}`, message: `${input.scenarioId}: doctor/manifest mode-label drifted.` });
+  assertContains({
+    text: input.doctorOutput,
+    expected: `detail: mode=${input.manifest.exposure.mode}`,
+    message: `${input.scenarioId}: doctor/manifest mode drifted.`,
+  });
+  assertContains({
+    text: input.doctorOutput,
+    expected: `detail: mode-label=${input.manifest.exposure.posture.modeLabel}`,
+    message: `${input.scenarioId}: doctor/manifest mode-label drifted.`,
+  });
 
   if (input.manifest.exposure.posture.modeLabel !== input.exposureContract.posture.modeLabel) {
-    throw new Error(`${input.scenarioId}: in-memory contract no longer matches verified manifest posture.`);
+    throw new Error(
+      `${input.scenarioId}: in-memory contract no longer matches verified manifest posture.`,
+    );
   }
 }
 
-function tamperManifest(input: { readonly manifest: RuntimeBundleManifest }): RuntimeBundleManifest {
+function tamperManifest(input: {
+  readonly manifest: RuntimeBundleManifest;
+}): RuntimeBundleManifest {
   const [firstRoute, ...remainingRoutes] = input.manifest.exposure.routes;
 
   if (!firstRoute) {
@@ -961,25 +1323,43 @@ function tamperManifest(input: { readonly manifest: RuntimeBundleManifest }): Ru
   };
 }
 
-function assertExitCode(input: { readonly result: CommandResult; readonly expected: number; readonly message: string }): void {
+function assertExitCode(input: {
+  readonly result: CommandResult;
+  readonly expected: number;
+  readonly message: string;
+}): void {
   if (input.result.exitCode !== input.expected) {
-    throw new Error(`${input.message}\nexpected: ${input.expected}\nactual: ${input.result.exitCode}\nstdout:\n${input.result.stdout || '<empty>'}\nstderr:\n${input.result.stderr || '<empty>'}`);
+    throw new Error(
+      `${input.message}\nexpected: ${input.expected}\nactual: ${input.result.exitCode}\nstdout:\n${input.result.stdout || '<empty>'}\nstderr:\n${input.result.stderr || '<empty>'}`,
+    );
   }
 }
 
-function assertContains(input: { readonly text: string; readonly expected: string; readonly message: string }): void {
+function assertContains(input: {
+  readonly text: string;
+  readonly expected: string;
+  readonly message: string;
+}): void {
   if (!input.text.includes(input.expected)) {
     throw new Error(`${input.message}\nmissing: ${input.expected}`);
   }
 }
 
-function assertNotContains(input: { readonly text: string; readonly unexpected: string; readonly message: string }): void {
+function assertNotContains(input: {
+  readonly text: string;
+  readonly unexpected: string;
+  readonly message: string;
+}): void {
   if (input.text.includes(input.unexpected)) {
     throw new Error(`${input.message}\nunexpected: ${input.unexpected}`);
   }
 }
 
-function assertNoSecretLeaks(input: { readonly label: string; readonly text: string; readonly config: MullgateConfig }): void {
+function assertNoSecretLeaks(input: {
+  readonly label: string;
+  readonly text: string;
+  readonly config: MullgateConfig;
+}): void {
   for (const secret of collectSecrets({ config: input.config })) {
     assertNotContains({
       text: input.text,
@@ -994,7 +1374,10 @@ function collectSecrets(input: { readonly config: MullgateConfig }): string[] {
     input.config.setup.auth.password,
     input.config.mullvad.accountNumber,
     input.config.mullvad.wireguard.privateKey,
-    ...input.config.routing.locations.flatMap((route) => [route.mullvad.accountNumber, route.mullvad.wireguard.privateKey]),
+    ...input.config.routing.locations.flatMap((route) => [
+      route.mullvad.accountNumber,
+      route.mullvad.wireguard.privateKey,
+    ]),
   ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 }
 

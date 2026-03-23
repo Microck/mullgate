@@ -4,17 +4,17 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
-  FEASIBILITY_ARTIFACT_VERSION,
-  FEASIBILITY_PROOF_MODEL,
   createEntryIdentityFromRelay,
   createFeasibilityArtifact,
   createSingleEntryTopology,
-  selectFeasibilityExitRelays,
-  serializeFeasibilityArtifact,
+  FEASIBILITY_ARTIFACT_VERSION,
+  FEASIBILITY_PROOF_MODEL,
   type FeasibilityArtifact,
   type FeasibilityLogicalExit,
   type FeasibilityProbeObservation,
   type HostRouteSnapshot,
+  selectFeasibilityExitRelays,
+  serializeFeasibilityArtifact,
 } from '../../src/m004/feasibility-contract.js';
 import { runFeasibilityVerifier } from '../../src/m004/feasibility-runner.js';
 import { normalizeRelayPayload } from '../../src/mullvad/fetch-relays.js';
@@ -277,21 +277,24 @@ describe('m004 feasibility contract', () => {
           ip: '185.65.134.10',
           country: 'Austria',
           city: 'Vienna',
-          proxyUrl: 'socks5://alice:super-secret-password@at-vie-wg-socks5-001.relays.mullvad.net:1080',
+          proxyUrl:
+            'socks5://alice:super-secret-password@at-vie-wg-socks5-001.relays.mullvad.net:1080',
         }),
         createSuccessfulProbe({
           logicalExitId: 'exit-2',
           ip: '185.65.135.20',
           country: 'Sweden',
           city: 'Stockholm',
-          proxyUrl: 'socks5://alice:super-secret-password@se-sto-wg-socks5-001.relays.mullvad.net:1080',
+          proxyUrl:
+            'socks5://alice:super-secret-password@se-sto-wg-socks5-001.relays.mullvad.net:1080',
         }),
         createSuccessfulProbe({
           logicalExitId: 'exit-3',
           ip: '185.65.136.30',
           country: 'Sweden',
           city: 'Gothenburg',
-          proxyUrl: 'socks5://alice:super-secret-password@se-got-wg-socks5-101.relays.mullvad.net:1080',
+          proxyUrl:
+            'socks5://alice:super-secret-password@se-got-wg-socks5-101.relays.mullvad.net:1080',
         }),
       ],
     });
@@ -339,21 +342,24 @@ describe('m004 feasibility contract', () => {
           ip: '185.65.134.10',
           country: 'Austria',
           city: 'Vienna',
-          proxyUrl: 'socks5://alice:super-secret-password@at-vie-wg-socks5-001.relays.mullvad.net:1080',
+          proxyUrl:
+            'socks5://alice:super-secret-password@at-vie-wg-socks5-001.relays.mullvad.net:1080',
         }),
         createSuccessfulProbe({
           logicalExitId: 'exit-2',
           ip: '185.65.135.20',
           country: 'Sweden',
           city: 'Stockholm',
-          proxyUrl: 'socks5://alice:super-secret-password@se-sto-wg-socks5-001.relays.mullvad.net:1080',
+          proxyUrl:
+            'socks5://alice:super-secret-password@se-sto-wg-socks5-001.relays.mullvad.net:1080',
         }),
         createSuccessfulProbe({
           logicalExitId: 'exit-3',
           ip: '185.65.136.30',
           country: 'Sweden',
           city: 'Gothenburg',
-          proxyUrl: 'socks5://alice:super-secret-password@se-got-wg-socks5-101.relays.mullvad.net:1080',
+          proxyUrl:
+            'socks5://alice:super-secret-password@se-got-wg-socks5-101.relays.mullvad.net:1080',
         }),
       ],
       summary: {
@@ -369,7 +375,8 @@ describe('m004 feasibility contract', () => {
         reason: 'distinct-exits-confirmed',
         phase: 'summary',
         stopReason: 'distinct-exits-confirmed',
-        summary: 'The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged.',
+        summary:
+          'The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged.',
       },
     });
   });
@@ -441,7 +448,8 @@ describe('m004 feasibility contract', () => {
       reason: 'collapsed-exits',
       phase: 'summary',
       stopReason: 'collapsed-exits',
-      summary: 'Two or more logical exits resolved to the same observed exit, so the shared-entry topology did not prove distinct exits.',
+      summary:
+        'Two or more logical exits resolved to the same observed exit, so the shared-entry topology did not prove distinct exits.',
     });
   });
 
@@ -518,7 +526,8 @@ describe('m004 feasibility contract', () => {
       reason: 'route-drift',
       phase: 'route-check',
       stopReason: 'route-drift',
-      summary: 'The host route baseline changed during the feasibility run, so the result cannot prove standalone proxy behavior.',
+      summary:
+        'The host route baseline changed during the feasibility run, so the result cannot prove standalone proxy behavior.',
     });
   });
 
@@ -566,7 +575,8 @@ describe('m004 feasibility contract', () => {
           ip: '185.65.134.10',
           country: 'Austria',
           city: 'Vienna',
-          proxyUrl: 'socks5://alice:super-secret-password@at-vie-wg-socks5-001.relays.mullvad.net:1080',
+          proxyUrl:
+            'socks5://alice:super-secret-password@at-vie-wg-socks5-001.relays.mullvad.net:1080',
         }),
         createFailureProbe('exit-2'),
       ],
@@ -603,7 +613,8 @@ describe('m004 feasibility contract', () => {
       reason: 'collapsed-exits',
       phase: 'summary',
       stopReason: 'collapsed-exits',
-      summary: 'Two or more logical exits resolved to the same observed exit, so the shared-entry topology did not prove distinct exits.',
+      summary:
+        'Two or more logical exits resolved to the same observed exit, so the shared-entry topology did not prove distinct exits.',
     });
 
     const summaryJson = await readFile(result.summaryJsonPath, 'utf8');
@@ -613,7 +624,11 @@ describe('m004 feasibility contract', () => {
     expect(summaryJson).toContain('"reason": "collapsed-exits"');
     expect(summaryText).toContain('M004 feasibility verdict: FAIL');
     expect(summaryText).toContain('distinct observed exits: 1');
-    expect(summaryText).toContain('exit-1: relay=at-vie-wg-001, observed=185.65.134.10 Austria/Vienna');
-    expect(summaryText).toContain('exit-2: relay=se-got-wg-101, observed=185.65.134.10 Austria/Vienna');
+    expect(summaryText).toContain(
+      'exit-1: relay=at-vie-wg-001, observed=185.65.134.10 Austria/Vienna',
+    );
+    expect(summaryText).toContain(
+      'exit-2: relay=se-got-wg-101, observed=185.65.134.10 Austria/Vienna',
+    );
   });
 });

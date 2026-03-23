@@ -3,7 +3,13 @@ import path from 'node:path';
 
 const forwardedArgs = process.argv.slice(2);
 const normalizedArgs = forwardedArgs[0] === '--' ? forwardedArgs.slice(1) : forwardedArgs;
-const vitestEntrypoint = path.resolve(import.meta.dirname, '..', 'node_modules', 'vitest', 'vitest.mjs');
+const vitestEntrypoint = path.resolve(
+  import.meta.dirname,
+  '..',
+  'node_modules',
+  'vitest',
+  'vitest.mjs',
+);
 
 const child = spawn(process.execPath, [vitestEntrypoint, ...normalizedArgs], {
   stdio: 'inherit',

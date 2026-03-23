@@ -7,7 +7,15 @@ import {
 
 export const COMPATIBILITY_ARTIFACT_VERSION = 1 as const;
 export const COMPATIBILITY_PROOF_MODEL = 'shared-entry-compatibility-matrix' as const;
-export const COMPATIBILITY_REQUIREMENT_IDS = ['R004', 'R005', 'R006', 'R007', 'R008', 'R017', 'R019'] as const;
+export const COMPATIBILITY_REQUIREMENT_IDS = [
+  'R004',
+  'R005',
+  'R006',
+  'R007',
+  'R008',
+  'R017',
+  'R019',
+] as const;
 export const COMPATIBILITY_PROTOCOLS = ['socks5', 'http', 'https'] as const;
 
 export type CompatibilityProofModel = typeof COMPATIBILITY_PROOF_MODEL;
@@ -15,7 +23,10 @@ export type CompatibilityRequirementId = (typeof COMPATIBILITY_REQUIREMENT_IDS)[
 export type CompatibilityProtocol = (typeof COMPATIBILITY_PROTOCOLS)[number];
 export type CompatibilityOutcome = 'supported' | 'degraded' | 'blocked';
 export type CompatibilityRequirementStatus = 'preserved' | 'degraded' | 'failed';
-export type CompatibilityRecommendationPosture = 'approved' | 'possible-with-contract-change' | 'blocked';
+export type CompatibilityRecommendationPosture =
+  | 'approved'
+  | 'possible-with-contract-change'
+  | 'blocked';
 export type CompatibilityProtocolReason =
   | 'supported-as-is'
   | 'explicit-relay-selection-required'
@@ -138,7 +149,9 @@ const REQUIREMENT_TITLES: Record<CompatibilityRequirementId, string> = {
   R019: 'Easy location naming and discovery',
 };
 
-export function createCompatibilityArtifact(options: CreateCompatibilityArtifactOptions): CompatibilityArtifact {
+export function createCompatibilityArtifact(
+  options: CreateCompatibilityArtifactOptions,
+): CompatibilityArtifact {
   const hostnameRouting = classifyHostnameRoutingTruthfulness(options.hostnameRouting);
   const protocols = COMPATIBILITY_PROTOCOLS.map((protocol) => {
     const observation = options.protocols.find((candidate) => candidate.protocol === protocol);
@@ -172,7 +185,8 @@ export function createCompatibilityArtifact(options: CreateCompatibilityArtifact
     recommendation,
     operator: {
       authPreserved: options.operator.authPreserved,
-      requiresClientSpecificRelayConfiguration: options.operator.requiresClientSpecificRelayConfiguration,
+      requiresClientSpecificRelayConfiguration:
+        options.operator.requiresClientSpecificRelayConfiguration,
       locationSelectionDiscoverable: options.operator.locationSelectionDiscoverable,
       notes: [...(options.operator.notes ?? [])],
     },
@@ -288,7 +302,9 @@ export function classifyProtocolVerdict(options: {
   };
 }
 
-export function serializeCompatibilityArtifact(options: SerializeCompatibilityArtifactOptions): string {
+export function serializeCompatibilityArtifact(
+  options: SerializeCompatibilityArtifactOptions,
+): string {
   const secrets = collectCompatibilitySecrets({
     artifact: options.artifact,
     additionalSecrets: options.additionalSecrets ?? [],
@@ -382,11 +398,12 @@ function createRequirementDeltas(input: {
     {
       requirementId: 'R019',
       title: REQUIREMENT_TITLES.R019,
-      status: input.hostnameRouting.status === 'truthful'
-        ? 'preserved'
-        : input.operator.locationSelectionDiscoverable
-          ? 'degraded'
-          : 'failed',
+      status:
+        input.hostnameRouting.status === 'truthful'
+          ? 'preserved'
+          : input.operator.locationSelectionDiscoverable
+            ? 'degraded'
+            : 'failed',
       summary: (() => {
         if (input.hostnameRouting.status === 'truthful') {
           return 'Route naming and exit discovery stay understandable because hostnames remain truthful selectors.';
@@ -538,5 +555,8 @@ function redactSecretStrings(value: string, secrets: readonly string[]): string 
     return current.split(secret).join(REDACTED);
   }, value);
 
-  return redacted.replace(/-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/g, REDACTED);
+  return redacted.replace(
+    /-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/g,
+    REDACTED,
+  );
 }

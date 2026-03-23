@@ -30,14 +30,22 @@ describe('m004 milestone runner', () => {
 
       const decisionJson = await readJsonFile<MilestoneDecisionBundle>(result.decisionJsonPath);
       const decisionText = await readFile(result.decisionTextPath, 'utf8');
-      const compatibilitySummaryJson = await readJsonFile<CompatibilitySummaryBundle>(result.compatibilitySummaryJsonPath);
+      const compatibilitySummaryJson = await readJsonFile<CompatibilitySummaryBundle>(
+        result.compatibilitySummaryJsonPath,
+      );
       const compatibilitySummaryText = await readFile(result.compatibilitySummaryTextPath, 'utf8');
 
       expect(result.exitCode).toBe(0);
       expect(result.outputDir).toBe(path.join(outputRoot, 'latest'));
-      expect(result.compatibilityArtifactJsonPath).toBe(path.join(outputRoot, 'latest', 'compatibility-artifact.json'));
-      expect(result.compatibilitySummaryJsonPath).toBe(path.join(outputRoot, 'latest', 'compatibility-summary.json'));
-      expect(result.compatibilitySummaryTextPath).toBe(path.join(outputRoot, 'latest', 'compatibility-summary.txt'));
+      expect(result.compatibilityArtifactJsonPath).toBe(
+        path.join(outputRoot, 'latest', 'compatibility-artifact.json'),
+      );
+      expect(result.compatibilitySummaryJsonPath).toBe(
+        path.join(outputRoot, 'latest', 'compatibility-summary.json'),
+      );
+      expect(result.compatibilitySummaryTextPath).toBe(
+        path.join(outputRoot, 'latest', 'compatibility-summary.txt'),
+      );
       expect(result.decisionJsonPath).toBe(path.join(outputRoot, 'latest', 'decision.json'));
       expect(result.decisionTextPath).toBe(path.join(outputRoot, 'latest', 'decision.txt'));
 
@@ -63,22 +71,40 @@ describe('m004 milestone runner', () => {
         },
       });
       expect(decisionJson.requirement.summary).toContain('R028 is blocked');
-      expect(decisionJson.requirement.blockedRequirementIds).toEqual(expect.arrayContaining(['R004', 'R006', 'R007']));
+      expect(decisionJson.requirement.blockedRequirementIds).toEqual(
+        expect.arrayContaining(['R004', 'R006', 'R007']),
+      );
       expect(decisionJson.requirement.contractChangeRequirementIds).toContain('R005');
-      expect(decisionJson.artifactLinks.summaryJson).toBe(path.join(outputRoot, 'latest', 'compatibility-summary.json'));
-      expect(decisionJson.artifactLinks.summaryText).toBe(path.join(outputRoot, 'latest', 'compatibility-summary.txt'));
-      expect(decisionJson.artifactLinks.artifactJson).toBe(path.join(outputRoot, 'latest', 'compatibility-artifact.json'));
+      expect(decisionJson.artifactLinks.summaryJson).toBe(
+        path.join(outputRoot, 'latest', 'compatibility-summary.json'),
+      );
+      expect(decisionJson.artifactLinks.summaryText).toBe(
+        path.join(outputRoot, 'latest', 'compatibility-summary.txt'),
+      );
+      expect(decisionJson.artifactLinks.artifactJson).toBe(
+        path.join(outputRoot, 'latest', 'compatibility-artifact.json'),
+      );
       expect(decisionText).toContain('M004 shared-entry redesign decision: FAIL');
       expect(decisionText).toContain('next action: stop-redesign');
       expect(decisionText).toContain('R028: blocked');
-      expect(decisionText).toContain('hostname routing failure: Hostname-selected routing fails under the one-entry topology');
+      expect(decisionText).toContain(
+        'hostname routing failure: Hostname-selected routing fails under the one-entry topology',
+      );
       expect(decisionText).toContain('compatibility summary json:');
       expect(decisionText).toContain('preserved workspace: yes');
 
-      expect(compatibilitySummaryJson.summary.artifactLinks.summaryJson).toBe(path.join(outputRoot, 'latest', 'compatibility-summary.json'));
-      expect(compatibilitySummaryJson.summary.artifactLinks.summaryText).toBe(path.join(outputRoot, 'latest', 'compatibility-summary.txt'));
-      expect(compatibilitySummaryJson.summary.artifactLinks.artifactJson).toBe(path.join(outputRoot, 'latest', 'compatibility-artifact.json'));
-      expect(compatibilitySummaryJson.summary.hostnameRouting.explicitFailure).toContain('Hostname-selected routing fails');
+      expect(compatibilitySummaryJson.summary.artifactLinks.summaryJson).toBe(
+        path.join(outputRoot, 'latest', 'compatibility-summary.json'),
+      );
+      expect(compatibilitySummaryJson.summary.artifactLinks.summaryText).toBe(
+        path.join(outputRoot, 'latest', 'compatibility-summary.txt'),
+      );
+      expect(compatibilitySummaryJson.summary.artifactLinks.artifactJson).toBe(
+        path.join(outputRoot, 'latest', 'compatibility-artifact.json'),
+      );
+      expect(compatibilitySummaryJson.summary.hostnameRouting.explicitFailure).toContain(
+        'Hostname-selected routing fails',
+      );
       expect(compatibilitySummaryJson.diagnostics.preservedWorkspace).toBe(true);
       expect(compatibilitySummaryJson.diagnostics.workspacePath).toBe('/tmp/mullgate-m004-fixture');
       expect(compatibilitySummaryJson.diagnostics.notes).toEqual(

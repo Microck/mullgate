@@ -1,6 +1,10 @@
 #!/usr/bin/env tsx
 
-import { parseMilestoneArgs, renderMilestoneHelp, runMilestoneVerifier } from '../src/m004/milestone-runner.js';
+import {
+  parseMilestoneArgs,
+  renderMilestoneHelp,
+  runMilestoneVerifier,
+} from '../src/m004/milestone-runner.js';
 
 async function main(): Promise<void> {
   try {

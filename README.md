@@ -1,24 +1,25 @@
 <p align="center">
-  <img src="docs/mullgate-hero-logo.png" alt="mullgate" width="220" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/mullgate-logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/mullgate-logo-light.svg">
+    <img src=".github/assets/mullgate-logo-light.svg" alt="mullgate" width="720">
+  </picture>
 </p>
 
-<p align="center">
-  <a href="https://github.com/Microck/mullgate/releases"><img src="https://img.shields.io/github/v/release/Microck/mullgate?display_name=tag&color=000000" alt="release" /></a>
-  <a href="https://github.com/Microck/mullgate/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Microck/mullgate/ci.yml?branch=main&label=ci&color=000000" alt="ci" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Microck/mullgate?color=000000" alt="license" /></a>
-</p>
 
 <p align="center">
-  <code>mullgate</code> turns your Mullvad subscription into authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. it is built for people who want one command surface for setup, named exit locations, and app-level routing without sending the whole machine through a VPN.
-</p>
-
-<p align="center">
-  <a href="docs/usage.md">documentation</a> |
-  <a href="#quickstart">install</a> |
-  <a href="#platform-support">platform support</a>
+  <a href="https://github.com/Microck/mullgate/releases"><img src="https://img.shields.io/github/v/release/Microck/mullgate?display_name=tag&style=flat-square&label=release&color=000000" alt="release badge"></a>
+  <a href="https://github.com/Microck/mullgate/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Microck/mullgate/ci.yml?branch=main&style=flat-square&label=ci&color=000000" alt="ci badge"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-mit-000000?style=flat-square" alt="license badge"></a>
 </p>
 
 ---
+
+`mullgate` turns your Mullvad subscription into authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. it is built for people who want one command surface for setup, named exit locations, exposure control, and app-level routing without sending the whole machine through a VPN.
+
+the main setup path is `mullgate setup`. on a real terminal it opens a guided flow that collects your Mullvad account number, proxy credentials, route aliases, bind posture, and optional HTTPS settings, then persists canonical config plus the derived runtime artifacts needed for `start`, `status`, and `doctor`. if you prefer automation, the same surface also supports a fully non-interactive env-driven setup path.
+
+[documentation](docs/usage.md) | [npm](https://www.npmjs.com/package/mullgate) | [github](https://github.com/Microck/mullgate)
 
 ## why
 
@@ -33,7 +34,7 @@ if you want Mullvad-backed proxy access without replacing your computer's normal
 
 Mullgate currently requires Node.js 22+.
 
-The commands below describe the public install surface that the repo now targets. until the first npm publish lands, use the GitHub release `.tgz` asset or a source checkout from the usage guide.
+Install from npm for the normal path, or use a GitHub release standalone binary/archive when you want a pinned platform artifact.
 
 ### Linux or macOS
 
@@ -134,18 +135,25 @@ curl \
 ## install and release notes
 
 - npm is the canonical install surface for the published CLI
-- GitHub Releases attach the packed `.tgz` artifact and checksums for users who want a pinned release asset
+- GitHub Releases attach standalone binaries, platform archives, checksums, and extracted release notes
 - `scripts/install.sh` and `scripts/install.ps1` are convenience wrappers around the published npm package
-- until the first npm publish lands, install from the GitHub release `.tgz` asset or from a source checkout instead
 - `pnpm verify:s06` remains the Linux-first end-to-end proof for the assembled runtime
 
 ## documentation
 
 - [usage guide](docs/usage.md)
+- [publishing guide](docs/publishing.md)
 - [multi-exit architecture spec](docs/multi-exit-architecture-spec.md)
 - [`.env.example`](.env.example) - documented setup inputs for local runs
 - `pnpm verify:s06` - integrated Linux-first runtime proof
 - `pnpm verify:m003-install-path` - packed release/install-path proof
+
+## community
+
+- [contributing guide](CONTRIBUTING.md)
+- [security policy](SECURITY.md)
+- [support guide](SUPPORT.md)
+- [code of conduct](CODE_OF_CONDUCT.md)
 
 ## disclaimer
 

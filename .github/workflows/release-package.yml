@@ -6,37 +6,44 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      tag:
-        description: tag to release, e.g. v0.1.0
+      release_tag:
+        description: Existing release tag to build and publish, e.g. v0.1.1
         required: true
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5.0.0
         with:
           version: 10.18.3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
 
       - name: Build
         run: pnpm build
@@ -63,15 +70,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5.0.0
         with:
           version: 10.18.3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: 22
           cache: pnpm
@@ -82,81 +92,200 @@ jobs:
       - name: Verify install surface
         run: pnpm verify:install-smoke
 
-  release:
+  build-standalone:
     needs:
       - verify
       - install-smoke
-    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bun_target: bun-linux-x64
+            archive_ext: tar.gz
+            binary_name: mullgate
+            smoke_command: ./dist/mullgate --help
+            run_smoke: true
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            bun_target: bun-linux-arm64
+            archive_ext: tar.gz
+            binary_name: mullgate
+            smoke_command: ''
+            run_smoke: false
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            bun_target: bun-darwin-x64
+            archive_ext: tar.gz
+            binary_name: mullgate
+            smoke_command: ./dist/mullgate --help
+            run_smoke: true
+          - os: macos-14
+            target: aarch64-apple-darwin
+            bun_target: bun-darwin-arm64
+            archive_ext: tar.gz
+            binary_name: mullgate
+            smoke_command: ./dist/mullgate --help
+            run_smoke: true
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bun_target: bun-windows-x64
+            archive_ext: zip
+            binary_name: mullgate.exe
+            smoke_command: .\\dist\\mullgate.exe --help
+            run_smoke: true
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5.0.0
         with:
           version: 10.18.3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: 22
           cache: pnpm
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.3.10
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm build
-
-      - id: tag
-        name: Determine tag
+      - name: Compile standalone binary
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          fi
+          mkdir -p dist
+          bun build \
+            --compile \
+            --no-compile-autoload-dotenv \
+            --no-compile-autoload-bunfig \
+            --no-compile-autoload-tsconfig \
+            --no-compile-autoload-package-json \
+            --target="${{ matrix.bun_target }}" \
+            --outfile="dist/${{ matrix.binary_name }}" \
+            ./src/cli.ts
 
-      - id: notes
-        name: Extract release notes from CHANGELOG
+      - name: Smoke test standalone binary
+        if: ${{ matrix.run_smoke }}
+        run: ${{ matrix.smoke_command }}
+
+      - name: Package release archive (unix)
+        if: runner.os != 'Windows'
+        env:
+          TARGET: ${{ matrix.target }}
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          VERSION="${TAG#v}"
-          VERSION_REGEX="$(printf '%s\n' "$VERSION" | sed 's/[][(){}.+*?^$|\\]/\\&/g')"
-          NOTES="$(awk -v version="$VERSION_REGEX" '
-            $0 ~ "^##[[:space:]]+\\[?" version "\\]?([[:space:]]+-.*)?$" { capture=1; next }
-            capture && /^##[[:space:]]+/ { exit }
-            capture { print }
-          ' CHANGELOG.md)"
-          {
-            echo "notes<<EOF"
-            echo "$NOTES"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          tar -C dist -czf "mullgate-${TAG}-${TARGET}.tar.gz" "${{ matrix.binary_name }}"
+          cp "dist/${{ matrix.binary_name }}" "mullgate-${TAG}-${TARGET}"
 
-      - name: Verify npm package metadata
-        run: npm pack --dry-run
-
-      - name: Pack release tarball
+      - name: Package release archive (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
-          pnpm pack
-          TARFILE="$(ls -t ./*.tgz | head -n 1)"
-          mv "$TARFILE" "mullgate-${{ steps.tag.outputs.tag }}.tgz"
+          Compress-Archive -Path "dist/${{ matrix.binary_name }}" -DestinationPath "mullgate-$env:TAG-$env:TARGET.zip" -Force
+          Copy-Item "dist/${{ matrix.binary_name }}" "mullgate-$env:TAG-$env:TARGET.exe"
+
+      - name: Upload packaged assets (unix)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            mullgate-${{ env.RELEASE_TAG }}-${{ matrix.target }}.${{ matrix.archive_ext }}
+            mullgate-${{ env.RELEASE_TAG }}-${{ matrix.target }}
+
+      - name: Upload packaged assets (windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            mullgate-${{ env.RELEASE_TAG }}-${{ matrix.target }}.${{ matrix.archive_ext }}
+            mullgate-${{ env.RELEASE_TAG }}-${{ matrix.target }}.exe
+
+  release:
+    needs: build-standalone
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+          persist-credentials: false
+
+      - name: Download packaged archives
+        uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
 
       - name: Generate checksums
-        run: sha256sum "mullgate-${{ steps.tag.outputs.tag }}.tgz" > checksums.txt
+        working-directory: dist
+        run: |
+          sha256sum * > "mullgate-${RELEASE_TAG}-checksums.txt"
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: mullgate (${{ steps.tag.outputs.tag }})
-          body: ${{ steps.notes.outputs.notes }}
-          files: |
-            mullgate-${{ steps.tag.outputs.tag }}.tgz
-            checksums.txt
+      - name: Generate release notes
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${VERSION#v}"
+          VERSION_REGEX="$(printf '%s\n' "$VERSION" | sed 's/[][(){}.+*?^$|\\]/\\&/g')"
+
+          awk -v version="$VERSION_REGEX" '
+            $0 ~ "^##[[:space:]]+\\[?" version "\\]?([[:space:]]+-.*)?$" { in_section=1; print; next }
+            in_section && /^##[[:space:]]+/ { exit }
+            in_section { print }
+          ' CHANGELOG.md > dist/release-notes.md
+
+          if [ ! -s dist/release-notes.md ]; then
+            echo "Failed to extract release notes for ${VERSION} from CHANGELOG.md" >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          notes = Path("dist/release-notes.md").read_text(encoding="utf-8")
+          Path("dist/release-notes.json").write_text(
+              json.dumps({"body": notes}),
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')"
+            gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" --method PATCH --input dist/release-notes.json
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/* --notes-file dist/release-notes.md --title "$RELEASE_TAG" --verify-tag
+          fi

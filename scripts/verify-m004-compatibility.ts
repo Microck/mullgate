@@ -1,6 +1,10 @@
 #!/usr/bin/env tsx
 
-import { parseCompatibilityArgs, renderCompatibilityHelp, runCompatibilityVerifier } from '../src/m004/compatibility-runner.js';
+import {
+  parseCompatibilityArgs,
+  renderCompatibilityHelp,
+  runCompatibilityVerifier,
+} from '../src/m004/compatibility-runner.js';
 
 async function main(): Promise<void> {
   try {

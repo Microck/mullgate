@@ -2,20 +2,19 @@ import { copyFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
-  runCompatibilityVerifier,
-  renderCompatibilityHelp,
-  renderMissingCompatibilityEnvError,
-  renderCompatibilitySummary,
   type CompatibilityParseResult,
   type CompatibilityRunnerOptions,
-  type CompatibilityRunnerResult,
   type CompatibilitySummaryBundle,
+  renderCompatibilityHelp,
+  renderCompatibilitySummary,
+  renderMissingCompatibilityEnvError,
+  runCompatibilityVerifier,
 } from './compatibility-runner.js';
 import {
   createMilestoneDecisionBundle,
+  type MilestoneDecisionBundle,
   renderMilestoneDecisionText,
   serializeMilestoneDecisionBundle,
-  type MilestoneDecisionBundle,
 } from './milestone-contract.js';
 
 const DEFAULT_OUTPUT_ROOT = '.tmp/m004';
@@ -38,10 +37,14 @@ export type MilestoneRunnerResult = {
   readonly workspacePath?: string;
 };
 
-export function parseMilestoneArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): CompatibilityParseResult {
+export function parseMilestoneArgs(
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): CompatibilityParseResult {
   let targetUrl = env.MULLGATE_VERIFY_TARGET_URL?.trim() || DEFAULT_TARGET_URL;
   let routeCheckIp = env.MULLGATE_VERIFY_ROUTE_CHECK_IP?.trim() || DEFAULT_ROUTE_CHECK_IP;
-  let logicalExitCount: 2 | 3 = readLogicalExitCount(env.MULLGATE_M004_LOGICAL_EXIT_COUNT?.trim()) ?? 3;
+  let logicalExitCount: 2 | 3 =
+    readLogicalExitCount(env.MULLGATE_M004_LOGICAL_EXIT_COUNT?.trim()) ?? 3;
   let outputRoot = env.MULLGATE_M004_OUTPUT_ROOT?.trim() || DEFAULT_OUTPUT_ROOT;
   let keepTempHome = false;
   let fixturePath: string | undefined;
@@ -130,13 +133,25 @@ export function parseMilestoneArgs(argv: readonly string[], env: NodeJS.ProcessE
       outputRoot,
       keepTempHome,
       ...(fixturePath ? { fixturePath } : {}),
-      ...(env.MULLGATE_ACCOUNT_NUMBER?.trim() ? { accountNumber: env.MULLGATE_ACCOUNT_NUMBER.trim() } : {}),
-      ...(env.MULLGATE_PROXY_USERNAME?.trim() ? { proxyUsername: env.MULLGATE_PROXY_USERNAME.trim() } : {}),
-      ...(env.MULLGATE_PROXY_PASSWORD?.trim() ? { proxyPassword: env.MULLGATE_PROXY_PASSWORD.trim() } : {}),
+      ...(env.MULLGATE_ACCOUNT_NUMBER?.trim()
+        ? { accountNumber: env.MULLGATE_ACCOUNT_NUMBER.trim() }
+        : {}),
+      ...(env.MULLGATE_PROXY_USERNAME?.trim()
+        ? { proxyUsername: env.MULLGATE_PROXY_USERNAME.trim() }
+        : {}),
+      ...(env.MULLGATE_PROXY_PASSWORD?.trim()
+        ? { proxyPassword: env.MULLGATE_PROXY_PASSWORD.trim() }
+        : {}),
       ...(env.MULLGATE_DEVICE_NAME?.trim() ? { deviceName: env.MULLGATE_DEVICE_NAME.trim() } : {}),
-      ...(env.MULLGATE_MULLVAD_WG_URL?.trim() ? { mullvadWgUrl: env.MULLGATE_MULLVAD_WG_URL.trim() } : {}),
-      ...(env.MULLGATE_MULLVAD_RELAYS_URL?.trim() ? { mullvadRelaysUrl: env.MULLGATE_MULLVAD_RELAYS_URL.trim() } : {}),
-      ...(env.MULLGATE_M004_WIREPROXY_IMAGE?.trim() ? { wireproxyImage: env.MULLGATE_M004_WIREPROXY_IMAGE.trim() } : {}),
+      ...(env.MULLGATE_MULLVAD_WG_URL?.trim()
+        ? { mullvadWgUrl: env.MULLGATE_MULLVAD_WG_URL.trim() }
+        : {}),
+      ...(env.MULLGATE_MULLVAD_RELAYS_URL?.trim()
+        ? { mullvadRelaysUrl: env.MULLGATE_MULLVAD_RELAYS_URL.trim() }
+        : {}),
+      ...(env.MULLGATE_M004_WIREPROXY_IMAGE?.trim()
+        ? { wireproxyImage: env.MULLGATE_M004_WIREPROXY_IMAGE.trim() }
+        : {}),
     },
   };
 }
@@ -193,7 +208,9 @@ export function renderMilestoneHelp(): string {
   ].join('\n');
 }
 
-export async function runMilestoneVerifier(options: MilestoneRunnerOptions): Promise<MilestoneRunnerResult> {
+export async function runMilestoneVerifier(
+  options: MilestoneRunnerOptions,
+): Promise<MilestoneRunnerResult> {
   const compatibilityResult = await runCompatibilityVerifier(options);
   const outputDir = compatibilityResult.outputDir;
   const compatibilitySummaryJsonPath = path.join(outputDir, 'compatibility-summary.json');
@@ -216,7 +233,9 @@ export async function runMilestoneVerifier(options: MilestoneRunnerOptions): Pro
   });
 
   await Promise.all([
-    writeFile(compatibilitySummaryJsonPath, `${JSON.stringify(compatibilityBundle, null, 2)}\n`, { mode: 0o600 }),
+    writeFile(compatibilitySummaryJsonPath, `${JSON.stringify(compatibilityBundle, null, 2)}\n`, {
+      mode: 0o600,
+    }),
     writeFile(compatibilitySummaryTextPath, `${compatibilitySummaryText}\n`, { mode: 0o600 }),
   ]);
 
@@ -246,14 +265,23 @@ export async function runMilestoneVerifier(options: MilestoneRunnerOptions): Pro
     compatibilityBundle,
     decisionBundle,
     preservedWorkspace: compatibilityResult.preservedWorkspace,
-    ...(compatibilityResult.workspacePath ? { workspacePath: compatibilityResult.workspacePath } : {}),
+    ...(compatibilityResult.workspacePath
+      ? { workspacePath: compatibilityResult.workspacePath }
+      : {}),
   };
 }
 
-export function renderMilestoneFailureHelp(error: unknown, env: NodeJS.ProcessEnv = process.env): string {
+export function renderMilestoneFailureHelp(
+  error: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
   const liveEnvError = renderMissingCompatibilityEnvError(env);
 
-  if (liveEnvError && error instanceof Error && error.message.startsWith('Missing required environment variables')) {
+  if (
+    liveEnvError &&
+    error instanceof Error &&
+    error.message.startsWith('Missing required environment variables')
+  ) {
     return `${liveEnvError}\n\n${renderMilestoneHelp()}`;
   }
 
@@ -298,7 +326,11 @@ function rewriteCompatibilityBundlePaths(input: {
   };
 }
 
-function readFlagValue(input: { readonly argv: readonly string[]; readonly index: number; readonly flag: string }): string {
+function readFlagValue(input: {
+  readonly argv: readonly string[];
+  readonly index: number;
+  readonly flag: string;
+}): string {
   const value = input.argv[input.index + 1];
 
   if (!value || value.startsWith('-')) {

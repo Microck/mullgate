@@ -7,10 +7,15 @@ on:
     types:
       - completed
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to publish from, e.g. v0.1.1
+        required: true
+        type: string
 
 jobs:
   publish:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,11 +36,14 @@ jobs:
 
       - name: Checkout
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.release_tag) || github.event.workflow_run.head_sha }}
 
       - name: Setup Node.js
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
@@ -43,11 +51,25 @@ jobs:
 
       - name: Install pnpm
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5.0.0
+        with:
+          version: 10.18.3
 
       - name: Install dependencies
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
         run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
+        run: pnpm lint
+
+      - name: Typecheck
+        if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
+        run: pnpm typecheck
+
+      - name: Test
+        if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
+        run: pnpm test -- --run
 
       - name: Build
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}

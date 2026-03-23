@@ -7,10 +7,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createStatusCommandAction } from '../../src/commands/status.js';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
+import {
+  CONFIG_VERSION,
+  type MullgateConfig,
+  type RuntimeStartDiagnostic,
+} from '../../src/config/schema.js';
 import { ConfigStore } from '../../src/config/store.js';
-import { CONFIG_VERSION, type MullgateConfig, type RuntimeStartDiagnostic } from '../../src/config/schema.js';
-import { renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
 import type { DockerComposeStatusResult } from '../../src/runtime/docker-runtime.js';
+import { renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -210,10 +214,16 @@ async function seedSavedConfig(
     readonly lastStart?: RuntimeStartDiagnostic | null;
     readonly renderManifest?: boolean;
   } = {},
-): Promise<{ readonly store: ConfigStore; readonly paths: ReturnType<typeof resolveMullgatePaths>; readonly config: MullgateConfig }> {
+): Promise<{
+  readonly store: ConfigStore;
+  readonly paths: ReturnType<typeof resolveMullgatePaths>;
+  readonly config: MullgateConfig;
+}> {
   const paths = resolveMullgatePaths(env);
   const store = new ConfigStore(paths);
-  const config = options.configure ? options.configure(createFixtureConfig(env)) : createFixtureConfig(env);
+  const config = options.configure
+    ? options.configure(createFixtureConfig(env))
+    : createFixtureConfig(env);
 
   await store.save(config);
 
@@ -231,7 +241,11 @@ async function seedSavedConfig(
 
   if (options.lastStart) {
     await mkdir(path.dirname(paths.runtimeStartDiagnosticsFile), { recursive: true, mode: 0o700 });
-    await writeFile(paths.runtimeStartDiagnosticsFile, `${JSON.stringify(options.lastStart, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(
+      paths.runtimeStartDiagnosticsFile,
+      `${JSON.stringify(options.lastStart, null, 2)}\n`,
+      { mode: 0o600 },
+    );
   }
 
   return { store, paths, config };
@@ -246,8 +260,12 @@ function createComposeStatusSuccess(
   containers: NonNullable<Extract<DockerComposeStatusResult, { ok: true }>['containers']>,
 ): Extract<DockerComposeStatusResult, { ok: true }> {
   const running = containers.filter((container) => container.state === 'running').length;
-  const healthy = containers.filter((container) => container.health === 'healthy' || container.health === null).length;
-  const starting = containers.filter((container) => container.health === 'starting' || container.state === 'restarting').length;
+  const healthy = containers.filter(
+    (container) => container.health === 'healthy' || container.health === null,
+  ).length;
+  const starting = containers.filter(
+    (container) => container.health === 'starting' || container.state === 'restarting',
+  ).length;
   const stopped = containers.filter((container) => container.state === 'exited').length;
   const unhealthy = containers.filter((container) => container.health === 'unhealthy').length;
 
@@ -282,7 +300,11 @@ function createComposeStatusSuccess(
 
 afterEach(async () => {
   process.exitCode = 0;
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 describe('mullgate status command', () => {
@@ -296,15 +318,14 @@ describe('mullgate status command', () => {
       store,
       stdout,
       stderr,
-      inspectRuntime: async (options) =>
-        createComposeStatusSuccess(options.composeFilePath, []),
+      inspectRuntime: async (options) => createComposeStatusSuccess(options.composeFilePath, []),
     });
 
     await action();
 
     expect(process.exitCode).toBe(0);
     expect(stderr.value.current).toBe('');
-    expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
 "\nMullgate runtime status
 phase: unconfigured
 config: /tmp/mullgate-home/config/mullgate/config.json
@@ -396,7 +417,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
     expect(stdout.value.current).not.toContain('proxy-password');
     expect(stdout.value.current).not.toContain('123456789012');
     expect(stdout.value.current).not.toContain('private-key-value-1');
-    expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate runtime status
       phase: running
@@ -478,7 +499,8 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       phase: 'compose-launch',
       source: 'docker-compose',
       code: 'COMPOSE_UP_FAILED',
-      message: 'Docker Compose failed to start the Mullgate runtime bundle for proxy-password / 123456789012 / private-key-value-2.',
+      message:
+        'Docker Compose failed to start the Mullgate runtime bundle for proxy-password / 123456789012 / private-key-value-2.',
       cause:
         'service wireproxy-at-vie-wg-001 crashed while reading -----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY----- and account 123456789012',
       artifactPath: null,
@@ -554,7 +576,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
     expect(stdout.value.current).not.toContain('123456789012');
     expect(stdout.value.current).not.toContain('private-key-value-2');
     expect(stdout.value.current).not.toContain('BEGIN PRIVATE KEY');
-    expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate runtime status
       phase: degraded
@@ -693,7 +715,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
 
     expect(process.exitCode).toBe(0);
     expect(stderr.value.current).toBe('');
-    expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate runtime status
       phase: stopped

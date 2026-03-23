@@ -2,10 +2,15 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { renderExposureReport, renderHostsReport, renderPathReport, updateExposureConfig } from '../../src/commands/config.js';
+import {
+  renderExposureReport,
+  renderHostsReport,
+  renderPathReport,
+  updateExposureConfig,
+} from '../../src/commands/config.js';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
-import { ConfigStore } from '../../src/config/store.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
+import { ConfigStore } from '../../src/config/store.js';
 
 function createFixtureConfig(): MullgateConfig {
   const env = {
@@ -232,7 +237,7 @@ describe('config inspection helpers', () => {
     expect(report).not.toContain('123456789012');
     expect(report).not.toContain('private-key-value-1');
     expect(report).not.toContain('private-key-value-2');
-    expect('\n' + report).toMatchInlineSnapshot(`
+    expect(`\n${report}`).toMatchInlineSnapshot(`
 "\nMullgate routed hosts
 phase: inspect-config
 source: canonical-config
@@ -263,7 +268,8 @@ copy/paste hosts block
     config.runtime.status = {
       phase: 'unvalidated',
       lastCheckedAt: null,
-      message: 'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+      message:
+        'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
     };
 
     const report = renderExposureReport(config, '/tmp/mullgate-home/config/mullgate/config.json');
@@ -272,7 +278,7 @@ copy/paste hosts block
     expect(report).not.toContain('123456789012');
     expect(report).not.toContain('private-key-value-1');
     expect(report).toContain('[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080');
-    expect('\n' + report).toMatchInlineSnapshot(`
+    expect(`\n${report}`).toMatchInlineSnapshot(`
       "
       Mullgate exposure report
       phase: inspect-config
@@ -345,7 +351,8 @@ copy/paste hosts block
     config.runtime.status = {
       phase: 'unvalidated',
       lastCheckedAt: null,
-      message: 'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+      message:
+        'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
     };
 
     const report = renderExposureReport(config, '/tmp/mullgate-home/config/mullgate/config.json');
@@ -354,7 +361,7 @@ copy/paste hosts block
     expect(report).not.toContain('123456789012');
     expect(report).not.toContain('private-key-value-1');
     expect(report).toContain('[redacted]:[redacted]@203.0.113.10:1080');
-    expect('\n' + report).toMatchInlineSnapshot(`
+    expect(`\n${report}`).toMatchInlineSnapshot(`
       "
       Mullgate exposure report
       phase: inspect-config
@@ -434,18 +441,24 @@ copy/paste hosts block
       baseDomain: 'proxy.example.com',
     });
     expect(result.config.setup.bind.host).toBe('192.168.10.10');
-    expect(result.config.routing.locations.map((location) => ({ hostname: location.hostname, bindIp: location.bindIp }))).toEqual([
+    expect(
+      result.config.routing.locations.map((location) => ({
+        hostname: location.hostname,
+        bindIp: location.bindIp,
+      })),
+    ).toEqual([
       { hostname: 'sweden-gothenburg.proxy.example.com', bindIp: '192.168.10.10' },
       { hostname: 'austria-vienna.proxy.example.com', bindIp: '192.168.10.11' },
     ]);
     expect(result.config.runtime.status).toEqual({
       phase: 'unvalidated',
       lastCheckedAt: null,
-      message: 'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+      message:
+        'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
     });
-    expect('\n' + renderExposureReport(result.config, '/tmp/mullgate-home/config/mullgate/config.json')).toContain(
-      'dns: sweden-gothenburg.proxy.example.com A 192.168.10.10',
-    );
+    expect(
+      `\n${renderExposureReport(result.config, '/tmp/mullgate-home/config/mullgate/config.json')}`,
+    ).toContain('dns: sweden-gothenburg.proxy.example.com A 192.168.10.10');
   });
 
   it('rejects ambiguous non-loopback bind IP edits with an explicit routed-exposure failure', () => {
@@ -462,8 +475,10 @@ copy/paste hosts block
       phase: 'setup-validation',
       source: 'input',
       code: 'AMBIGUOUS_SHARED_BIND_IP',
-      message: 'Non-loopback multi-route exposure requires distinct bind IPs, but found duplicates: 192.168.10.10.',
-      cause: 'S03 routing still dispatches by destination bind IP, so multiple remote routes cannot safely share one published IP.',
+      message:
+        'Non-loopback multi-route exposure requires distinct bind IPs, but found duplicates: 192.168.10.10.',
+      cause:
+        'S03 routing still dispatches by destination bind IP, so multiple remote routes cannot safely share one published IP.',
       artifactPath: '/tmp/mullgate-home/config/mullgate/config.json',
     });
   });

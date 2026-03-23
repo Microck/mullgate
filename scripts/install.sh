@@ -38,7 +38,7 @@ BIN_DIR="${USER_PREFIX}/bin"
 printf '\n%s\n' "Global install failed, retrying with a user prefix at ${USER_PREFIX}."
 if ! npm install --global --prefix "$USER_PREFIX" "$PACKAGE_SPEC"; then
   printf '\n%s\n' "mullgate installer: npm installation failed."
-  printf '%s\n' "If the package has not been published yet, install from the GitHub release .tgz asset or from a source checkout."
+  printf '%s\n' "If the package is unavailable from npm, install from a GitHub Releases standalone binary or from a source checkout."
   exit 1
 fi
 

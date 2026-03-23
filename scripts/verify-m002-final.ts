@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 
+import { spawn } from 'node:child_process';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 
 import { buildExposureContract } from '../src/config/exposure-contract.js';
 import { resolveMullgatePaths } from '../src/config/paths.js';
@@ -94,7 +94,9 @@ async function main(): Promise<void> {
     const summaryText = renderSummaryText(summary);
 
     await Promise.all([
-      writeFile(path.join(outputDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 }),
+      writeFile(path.join(outputDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`, {
+        mode: 0o600,
+      }),
       writeFile(path.join(outputDir, 'summary.txt'), `${summaryText}\n`, { mode: 0o600 }),
     ]);
 
@@ -213,7 +215,10 @@ async function runScript(scriptPath: string): Promise<ScriptResult> {
   });
 }
 
-function collectPreservedTempHomes(input: { readonly stdout: string; readonly stderr: string }): readonly string[] {
+function collectPreservedTempHomes(input: {
+  readonly stdout: string;
+  readonly stderr: string;
+}): readonly string[] {
   const matches = `${input.stdout}\n${input.stderr}`.matchAll(/^preserved temp home: (.+)$/gm);
   const homes = new Set<string>();
 
@@ -228,14 +233,24 @@ function collectPreservedTempHomes(input: { readonly stdout: string; readonly st
   return [...homes];
 }
 
-async function writeStepArtifacts(input: { readonly outputDir: string; readonly step: StepResult }): Promise<void> {
+async function writeStepArtifacts(input: {
+  readonly outputDir: string;
+  readonly step: StepResult;
+}): Promise<void> {
   await Promise.all([
-    writeFile(path.join(input.outputDir, `${input.step.id}.stdout.txt`), input.step.result.stdout, { mode: 0o600 }),
-    writeFile(path.join(input.outputDir, `${input.step.id}.stderr.txt`), input.step.result.stderr, { mode: 0o600 }),
+    writeFile(path.join(input.outputDir, `${input.step.id}.stdout.txt`), input.step.result.stdout, {
+      mode: 0o600,
+    }),
+    writeFile(path.join(input.outputDir, `${input.step.id}.stderr.txt`), input.step.result.stderr, {
+      mode: 0o600,
+    }),
   ]);
 }
 
-function buildSummary(input: { readonly outputDir: string; readonly steps: readonly StepResult[] }): FinalSummary {
+function buildSummary(input: {
+  readonly outputDir: string;
+  readonly steps: readonly StepResult[];
+}): FinalSummary {
   const verdict = input.steps.every((step) => step.result.exitCode === 0) ? 'pass' : 'fail';
   const contractSummary = buildContractSummary();
 
@@ -270,9 +285,10 @@ function buildSummary(input: { readonly outputDir: string; readonly steps: reado
 function renderSummaryText(summary: FinalSummary): string {
   const stepLines = summary.steps.map((step) => {
     const status = step.exitCode === 0 ? 'ok' : 'failed';
-    const preservedHomes = step.preservedTempHomes.length > 0
-      ? ` | preserved temp homes: ${step.preservedTempHomes.join(', ')}`
-      : '';
+    const preservedHomes =
+      step.preservedTempHomes.length > 0
+        ? ` | preserved temp homes: ${step.preservedTempHomes.join(', ')}`
+        : '';
 
     return `- ${step.id}: ${status}${preservedHomes}`;
   });

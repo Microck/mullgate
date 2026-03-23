@@ -65,7 +65,11 @@ const legacyRelayPayloadSchema = z.array(legacyRelaySchema);
 
 export type MullvadRelaySource = 'app-wireguard-v1' | 'www-relays-all';
 export type FetchRelaysPhase = 'relay-fetch' | 'relay-normalize';
-export type FetchRelaysFailureCode = 'NETWORK_ERROR' | 'HTTP_ERROR' | 'INVALID_RESPONSE' | 'UNSUPPORTED_PAYLOAD';
+export type FetchRelaysFailureCode =
+  | 'NETWORK_ERROR'
+  | 'HTTP_ERROR'
+  | 'INVALID_RESPONSE'
+  | 'UNSUPPORTED_PAYLOAD';
 
 export type MullvadRelay = {
   readonly hostname: string;
@@ -271,7 +275,10 @@ export function normalizeRelayPayload(
     }
 
     const relays = parsed.data
-      .filter((relay) => relay.type === 'wireguard' && typeof relay.pubkey === 'string' && relay.pubkey.length > 0)
+      .filter(
+        (relay) =>
+          relay.type === 'wireguard' && typeof relay.pubkey === 'string' && relay.pubkey.length > 0,
+      )
       .map<MullvadRelay>((relay) => ({
         hostname: relay.hostname,
         fqdn: relay.fqdn ?? `${relay.hostname}.relays.mullvad.net`,
@@ -368,7 +375,10 @@ function compareRelays(left: MullvadRelay, right: MullvadRelay): number {
 }
 
 function summarizeCountries(relays: readonly MullvadRelay[]): MullvadRelayCountry[] {
-  const countries = new Map<string, { name: string; cities: Map<string, MullvadRelayCountry['cities'][number]> }>();
+  const countries = new Map<
+    string,
+    { name: string; cities: Map<string, MullvadRelayCountry['cities'][number]> }
+  >();
 
   for (const relay of relays) {
     const existingCountry = countries.get(relay.location.countryCode) ?? {
@@ -393,7 +403,9 @@ function summarizeCountries(relays: readonly MullvadRelay[]): MullvadRelayCountr
     .map(([code, country]) => ({
       code,
       name: country.name,
-      cities: [...country.cities.values()].sort((left, right) => left.code.localeCompare(right.code)),
+      cities: [...country.cities.values()].sort((left, right) =>
+        left.code.localeCompare(right.code),
+      ),
     }));
 }
 
@@ -410,5 +422,7 @@ function formatUnknownError(error: unknown): string {
 }
 
 function formatZodIssues(error: z.ZodError): string {
-  return error.issues.map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`).join('; ');
+  return error.issues
+    .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
+    .join('; ');
 }

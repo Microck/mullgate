@@ -1,5 +1,5 @@
-import path from 'node:path';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -80,7 +80,7 @@ describe('mullgate help command contract', () => {
       expectHelpOutput(['config', 'validate', '--help']),
     ]);
 
-    expect('\n' + topLevelHelp).toMatchInlineSnapshot(`
+    expect(`\n${topLevelHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate [options] [command]
 
@@ -102,7 +102,7 @@ describe('mullgate help command contract', () => {
                          paths.
         help [command]   display help for command"
     `);
-    expect('\n' + setupHelp).toMatchInlineSnapshot(`
+    expect(`\n${setupHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate setup [options]
 
@@ -150,7 +150,7 @@ describe('mullgate help command contract', () => {
                                     metadata.
         -h, --help                  display help for command"
     `);
-    expect('\n' + startHelp).toMatchInlineSnapshot(`
+    expect(`\n${startHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate start [options]
 
@@ -160,7 +160,7 @@ describe('mullgate help command contract', () => {
       Options:
         -h, --help  display help for command"
     `);
-    expect('\n' + statusHelp).toMatchInlineSnapshot(`
+    expect(`\n${statusHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate status [options]
 
@@ -170,7 +170,7 @@ describe('mullgate help command contract', () => {
       Options:
         -h, --help  display help for command"
     `);
-    expect('\n' + doctorHelp).toMatchInlineSnapshot(`
+    expect(`\n${doctorHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate doctor [options]
 
@@ -180,7 +180,7 @@ describe('mullgate help command contract', () => {
       Options:
         -h, --help  display help for command"
     `);
-    expect('\n' + configHelp).toMatchInlineSnapshot(`
+    expect(`\n${configHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate config [options] [command]
 
@@ -210,7 +210,7 @@ describe('mullgate help command contract', () => {
                                          metadata.
         help [command]                   display help for command"
     `);
-    expect('\n' + configHostsHelp).toMatchInlineSnapshot(`
+    expect(`\n${configHostsHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate config hosts [options]
 
@@ -220,7 +220,7 @@ describe('mullgate help command contract', () => {
       Options:
         -h, --help  display help for command"
     `);
-    expect('\n' + configExposureHelp).toMatchInlineSnapshot(`
+    expect(`\n${configExposureHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate config exposure [options]
 
@@ -238,7 +238,7 @@ describe('mullgate help command contract', () => {
                                 route. (default: [])
         -h, --help              display help for command"
     `);
-    expect('\n' + configValidateHelp).toMatchInlineSnapshot(`
+    expect(`\n${configValidateHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate config validate [options]
 

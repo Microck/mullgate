@@ -53,7 +53,12 @@ export type ExposureRouteContract = {
 };
 
 export type ExposureWarning = {
-  readonly code: 'LOOPBACK_ONLY' | 'DNS_REQUIRED' | 'PUBLIC_EXPOSURE' | 'SINGLE_ROUTE' | 'RUNTIME_UNVALIDATED';
+  readonly code:
+    | 'LOOPBACK_ONLY'
+    | 'DNS_REQUIRED'
+    | 'PUBLIC_EXPOSURE'
+    | 'SINGLE_ROUTE'
+    | 'RUNTIME_UNVALIDATED';
   readonly severity: 'info' | 'warning';
   readonly message: string;
 };
@@ -103,7 +108,8 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
     warnings.push({
       code: 'LOOPBACK_ONLY',
       severity: 'info',
-      message: 'Loopback mode is local-only. Keep using `mullgate config hosts` for host-file testing on this machine.',
+      message:
+        'Loopback mode is local-only. Keep using `mullgate config hosts` for host-file testing on this machine.',
     });
   }
 
@@ -111,7 +117,8 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
     warnings.push({
       code: 'DNS_REQUIRED',
       severity: 'info',
-      message: 'Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.',
+      message:
+        'Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.',
     });
   }
 
@@ -119,7 +126,8 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
     warnings.push({
       code: 'PUBLIC_EXPOSURE',
       severity: 'warning',
-      message: 'Public exposure publishes authenticated proxy listeners on publicly routable IPs. Confirm firewalling, rate limits, and monitoring before enabling it on the open internet.',
+      message:
+        'Public exposure publishes authenticated proxy listeners on publicly routable IPs. Confirm firewalling, rate limits, and monitoring before enabling it on the open internet.',
     });
   }
 
@@ -127,7 +135,8 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
     warnings.push({
       code: 'SINGLE_ROUTE',
       severity: 'warning',
-      message: 'Only one routed bind IP is configured, so remote exposure will not provide hostname-based route selection until additional routes are added.',
+      message:
+        'Only one routed bind IP is configured, so remote exposure will not provide hostname-based route selection until additional routes are added.',
     });
   }
 
@@ -182,7 +191,9 @@ export function validateExposureSettings(input: {
   }
 
   if (input.exposureMode === 'loopback') {
-    const routeBindIps = Array.from({ length: input.routeCount }, (_, index) => deriveLoopbackBindIp(index)) as [string, ...string[]];
+    const routeBindIps = Array.from({ length: input.routeCount }, (_, index) =>
+      deriveLoopbackBindIp(index),
+    ) as [string, ...string[]];
 
     return {
       ok: true,
@@ -224,7 +235,8 @@ export function validateExposureSettings(input: {
       source: 'input',
       code: 'AMBIGUOUS_SHARED_BIND_IP',
       message: `Non-loopback multi-route exposure requires distinct bind IPs, but found duplicates: ${duplicates.join(', ')}.`,
-      cause: 'S03 routing still dispatches by destination bind IP, so multiple remote routes cannot safely share one published IP.',
+      cause:
+        'S03 routing still dispatches by destination bind IP, so multiple remote routes cannot safely share one published IP.',
       artifactPath: input.artifactPath,
     };
   }
@@ -248,7 +260,8 @@ export function validateExposureSettings(input: {
         source: 'input',
         code: 'UNSAFE_PRIVATE_BIND_IP',
         message: `Private-network exposure requires RFC1918 IPv4 bind IPs, but route ${index + 1} uses ${bindIp}.`,
-        cause: 'Use 10.0.0.0/8, 172.16.0.0/12, or 192.168.0.0/16 addresses for private-network exposure.',
+        cause:
+          'Use 10.0.0.0/8, 172.16.0.0/12, or 192.168.0.0/16 addresses for private-network exposure.',
         artifactPath: input.artifactPath,
       };
     }
@@ -260,7 +273,8 @@ export function validateExposureSettings(input: {
         source: 'input',
         code: 'UNSAFE_PUBLIC_BIND_IP',
         message: `Public exposure requires publicly routable IPv4 bind IPs, but route ${index + 1} uses ${bindIp}.`,
-        cause: 'Choose a real public IPv4 address for each route or switch to private-network / loopback exposure.',
+        cause:
+          'Choose a real public IPv4 address for each route or switch to private-network / loopback exposure.',
         artifactPath: input.artifactPath,
       };
     }
@@ -280,7 +294,12 @@ export function normalizeExposureBaseDomain(value: string | null | undefined): s
   return trimmed ? trimmed : null;
 }
 
-export function deriveExposureHostname(alias: string, bindIp: string, baseDomain: string | null, exposureMode: ExposureMode): string {
+export function deriveExposureHostname(
+  alias: string,
+  bindIp: string,
+  baseDomain: string | null,
+  exposureMode: ExposureMode,
+): string {
   if (baseDomain) {
     return `${alias}.${baseDomain}`;
   }
@@ -301,11 +320,20 @@ function collectExposurePorts(config: MullgateConfig): ExposurePort[] {
     { protocol: 'http', port: config.setup.bind.httpPort },
     ...(config.setup.bind.httpsPort === null
       ? []
-      : [{ protocol: 'https', port: config.setup.bind.httpsPort ?? HTTPS_DEFAULT_PORT } satisfies ExposurePort]),
+      : [
+          {
+            protocol: 'https',
+            port: config.setup.bind.httpsPort ?? HTTPS_DEFAULT_PORT,
+          } satisfies ExposurePort,
+        ]),
   ];
 }
 
-function createExposureEndpoint(hostname: string, bindIp: string, entry: ExposurePort): ExposureEndpoint {
+function createExposureEndpoint(
+  hostname: string,
+  bindIp: string,
+  entry: ExposurePort,
+): ExposureEndpoint {
   return {
     protocol: entry.protocol,
     port: entry.port,
@@ -333,9 +361,13 @@ function buildExposureGuidance(config: MullgateConfig, dnsRecords: readonly stri
   ];
 
   if (dnsRecords.length > 0) {
-    guidance.push('Publish the DNS records below so every route hostname resolves to its matching bind IP.');
+    guidance.push(
+      'Publish the DNS records below so every route hostname resolves to its matching bind IP.',
+    );
   } else {
-    guidance.push('No base domain is configured, so clients must reach each route via the direct bind IP entrypoints below.');
+    guidance.push(
+      'No base domain is configured, so clients must reach each route via the direct bind IP entrypoints below.',
+    );
   }
 
   return guidance;
@@ -346,8 +378,10 @@ function buildExposurePosture(config: MullgateConfig): ExposureContract['posture
     return {
       recommendation: 'local-default',
       modeLabel: 'Loopback / local-only',
-      summary: 'Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.',
-      remoteStory: 'Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.',
+      summary:
+        'Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.',
+      remoteStory:
+        'Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.',
     };
   }
 
@@ -355,40 +389,53 @@ function buildExposurePosture(config: MullgateConfig): ExposureContract['posture
     return {
       recommendation: 'recommended-remote',
       modeLabel: 'Private network / Tailscale-first',
-      summary: 'Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.',
-      remoteStory: 'Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use `mullgate config hosts` when local host-file wiring is the easiest path.',
+      summary:
+        'Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.',
+      remoteStory:
+        'Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use `mullgate config hosts` when local host-file wiring is the easiest path.',
     };
   }
 
   return {
     recommendation: 'advanced-remote',
     modeLabel: 'Advanced public exposure',
-    summary: 'Expert-only remote posture. Publicly routable listeners are possible, but Mullgate does not treat this as the default or safest operating mode.',
-    remoteStory: 'Prefer private-network mode unless you intentionally need internet-reachable listeners and can provide DNS, firewalling, monitoring, and host hardening yourself.',
+    summary:
+      'Expert-only remote posture. Publicly routable listeners are possible, but Mullgate does not treat this as the default or safest operating mode.',
+    remoteStory:
+      'Prefer private-network mode unless you intentionally need internet-reachable listeners and can provide DNS, firewalling, monitoring, and host hardening yourself.',
   };
 }
 
 function buildExposureRemediation(config: MullgateConfig): ExposureContract['remediation'] {
   if (config.setup.exposure.mode === 'loopback') {
     return {
-      bindPosture: 'Keep loopback mode on local-only bind IPs. If you need remote access, rerun `mullgate config exposure --mode private-network ...` with one trusted-network bind IP per route.',
-      hostnameResolution: 'For local host-file testing, use `mullgate config hosts` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.',
-      restart: 'After changing exposure settings, rerun `mullgate config validate` or `mullgate start` so the runtime artifacts match the saved local-only posture.',
+      bindPosture:
+        'Keep loopback mode on local-only bind IPs. If you need remote access, rerun `mullgate config exposure --mode private-network ...` with one trusted-network bind IP per route.',
+      hostnameResolution:
+        'For local host-file testing, use `mullgate config hosts` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.',
+      restart:
+        'After changing exposure settings, rerun `mullgate config validate` or `mullgate start` so the runtime artifacts match the saved local-only posture.',
     };
   }
 
   if (config.setup.exposure.mode === 'private-network') {
     return {
-      bindPosture: 'Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.',
-      hostnameResolution: 'Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use `mullgate config hosts` when host-file wiring is the intended local workaround.',
-      restart: 'After exposure or bind-IP changes, rerun `mullgate config validate` or `mullgate start` so the runtime artifacts and operator guidance match the recommended private-network posture.',
+      bindPosture:
+        'Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.',
+      hostnameResolution:
+        'Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use `mullgate config hosts` when host-file wiring is the intended local workaround.',
+      restart:
+        'After exposure or bind-IP changes, rerun `mullgate config validate` or `mullgate start` so the runtime artifacts and operator guidance match the recommended private-network posture.',
     };
   }
 
   return {
-    bindPosture: 'Use public mode only with intentionally public, distinct bind IPs per route. If you are not deliberately publishing internet-reachable listeners, switch back to private-network mode.',
-    hostnameResolution: 'Publish DNS A records so every route hostname resolves to its saved public bind IP before expecting remote hostname access to work on the open internet.',
-    restart: 'After changing exposure or DNS-facing bind IPs, rerun `mullgate config validate` or `mullgate start` so runtime artifacts reflect the advanced public posture accurately.',
+    bindPosture:
+      'Use public mode only with intentionally public, distinct bind IPs per route. If you are not deliberately publishing internet-reachable listeners, switch back to private-network mode.',
+    hostnameResolution:
+      'Publish DNS A records so every route hostname resolves to its saved public bind IP before expecting remote hostname access to work on the open internet.',
+    restart:
+      'After changing exposure or DNS-facing bind IPs, rerun `mullgate config validate` or `mullgate start` so runtime artifacts reflect the advanced public posture accurately.',
   };
 }
 
@@ -425,7 +472,11 @@ function findDuplicateValues(values: readonly string[]): string[] {
 function isPrivateIpv4(value: string): boolean {
   const [first, second] = parseIpv4Octets(value);
 
-  return first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
+  return (
+    first === 10 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
 }
 
 function isPublicExposureIpv4(value: string): boolean {

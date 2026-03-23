@@ -37,7 +37,10 @@ export async function readJsonArtifact<T>(targetPath: string): Promise<ArtifactR
   }
 }
 
-export function formatArtifactPresence<T>(artifactPath: string, result: ArtifactReadResult<T>): string {
+export function formatArtifactPresence<T>(
+  artifactPath: string,
+  result: ArtifactReadResult<T>,
+): string {
   switch (result.kind) {
     case 'present':
       return `${artifactPath} (present)`;
@@ -66,9 +69,10 @@ export function findContainerForService(
   return containers.find((container) => container.service === serviceName) ?? null;
 }
 
-export function classifyContainerState(
-  container: DockerComposeContainer | null,
-): { readonly liveState: ContainerLiveState; readonly detail: string } {
+export function classifyContainerState(container: DockerComposeContainer | null): {
+  readonly liveState: ContainerLiveState;
+  readonly detail: string;
+} {
   if (!container) {
     return {
       liveState: 'stopped',
@@ -127,7 +131,9 @@ export function classifyContainerState(
   };
 }
 
-export function renderComposeRemediation(code: 'DOCKER_COMPOSE_MISSING' | 'COMPOSE_PS_FAILED' | 'COMPOSE_PS_INVALID_JSON'): string {
+export function renderComposeRemediation(
+  code: 'DOCKER_COMPOSE_MISSING' | 'COMPOSE_PS_FAILED' | 'COMPOSE_PS_INVALID_JSON',
+): string {
   switch (code) {
     case 'DOCKER_COMPOSE_MISSING':
       return 'Install Docker plus the Compose plugin, then rerun `mullgate status`, `mullgate doctor`, or `mullgate start`.';

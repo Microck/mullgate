@@ -2,26 +2,26 @@ import type { Command } from 'commander';
 
 import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
 import { redactSensitiveText } from '../config/redact.js';
-import { ConfigStore, type LoadConfigResult } from '../config/store.js';
-import { buildPlatformSupportContract, type PlatformSupportContract } from '../platform/support-contract.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
+import { ConfigStore, type LoadConfigResult } from '../config/store.js';
+import { buildPlatformSupportContract } from '../platform/support-contract.js';
 import {
+  type DockerComposeContainer,
+  type DockerComposeStatusResult,
+  type QueryDockerComposeStatusOptions,
+  queryDockerComposeStatus,
+} from '../runtime/docker-runtime.js';
+import type { RuntimeBundleManifest } from '../runtime/render-runtime-bundle.js';
+import {
+  type ArtifactReadResult,
+  type ContainerLiveState,
   classifyContainerState,
   findContainerForService,
   formatArtifactPresence,
   readJsonArtifact,
   renderComposeRemediation,
   resolveLastStartDiagnostic,
-  type ArtifactReadResult,
-  type ContainerLiveState,
 } from './runtime-diagnostics.js';
-import {
-  queryDockerComposeStatus,
-  type DockerComposeContainer,
-  type DockerComposeStatusResult,
-  type QueryDockerComposeStatusOptions,
-} from '../runtime/docker-runtime.js';
-import type { RuntimeBundleManifest } from '../runtime/render-runtime-bundle.js';
 
 const ROUTING_LAYER_SERVICE = 'routing-layer';
 
@@ -76,19 +76,28 @@ type RouteContainerView = {
 type StatusCommandDependencies = {
   readonly store?: ConfigStore;
   readonly checkedAt?: string;
-  readonly inspectRuntime?: (options: QueryDockerComposeStatusOptions) => Promise<DockerComposeStatusResult>;
+  readonly inspectRuntime?: (
+    options: QueryDockerComposeStatusOptions,
+  ) => Promise<DockerComposeStatusResult>;
   readonly stdout?: WritableTextSink;
   readonly stderr?: WritableTextSink;
 };
 
-export function registerStatusCommand(program: Command, dependencies: StatusCommandDependencies = {}): void {
+export function registerStatusCommand(
+  program: Command,
+  dependencies: StatusCommandDependencies = {},
+): void {
   program
     .command('status')
-    .description('Inspect saved Mullgate state, runtime artifacts, and live Docker Compose status in one report.')
+    .description(
+      'Inspect saved Mullgate state, runtime artifacts, and live Docker Compose status in one report.',
+    )
     .action(createStatusCommandAction(dependencies));
 }
 
-export function createStatusCommandAction(dependencies: StatusCommandDependencies = {}): () => Promise<void> {
+export function createStatusCommandAction(
+  dependencies: StatusCommandDependencies = {},
+): () => Promise<void> {
   return async () => {
     const result = await runStatusFlow(dependencies);
     writeStatusResult(result, dependencies);
@@ -96,7 +105,9 @@ export function createStatusCommandAction(dependencies: StatusCommandDependencie
   };
 }
 
-export async function runStatusFlow(dependencies: Omit<StatusCommandDependencies, 'stdout' | 'stderr'> = {}): Promise<StatusFlowResult> {
+export async function runStatusFlow(
+  dependencies: Omit<StatusCommandDependencies, 'stdout' | 'stderr'> = {},
+): Promise<StatusFlowResult> {
   const store = dependencies.store ?? new ConfigStore();
   const loadResult = await store.load();
 
@@ -113,7 +124,11 @@ export async function runStatusFlow(dependencies: Omit<StatusCommandDependencies
       ok: true,
       exitCode: 0,
       phase: 'unconfigured',
-      summary: renderUnconfiguredStatus(loadResult.message, store.paths.configFile, store.paths.runtimeDir),
+      summary: renderUnconfiguredStatus(
+        loadResult.message,
+        store.paths.configFile,
+        store.paths.runtimeDir,
+      ),
     };
   }
 
@@ -132,11 +147,25 @@ export async function runStatusFlow(dependencies: Omit<StatusCommandDependencies
     }),
   ]);
 
-  const exposure = manifestResult.kind === 'present' ? manifestResult.value.exposure : buildExposureContract(config);
-  const platform = manifestResult.kind === 'present' ? manifestResult.value.platform : buildPlatformSupportContract({ paths: store.paths });
-  const routes = buildRouteSurfaces(config, exposure, manifestResult.kind === 'present' ? manifestResult.value : null);
-  const routeViews = composeStatus.ok ? buildRouteContainerViews(routes, composeStatus.containers) : routes.map((route) => createRouteContainerView(route, null));
-  const routingLayerContainer = composeStatus.ok ? findContainerForService(composeStatus.containers, ROUTING_LAYER_SERVICE) : null;
+  const exposure =
+    manifestResult.kind === 'present'
+      ? manifestResult.value.exposure
+      : buildExposureContract(config);
+  const platform =
+    manifestResult.kind === 'present'
+      ? manifestResult.value.platform
+      : buildPlatformSupportContract({ paths: store.paths });
+  const routes = buildRouteSurfaces(
+    config,
+    exposure,
+    manifestResult.kind === 'present' ? manifestResult.value : null,
+  );
+  const routeViews = composeStatus.ok
+    ? buildRouteContainerViews(routes, composeStatus.containers)
+    : routes.map((route) => createRouteContainerView(route, null));
+  const routingLayerContainer = composeStatus.ok
+    ? findContainerForService(composeStatus.containers, ROUTING_LAYER_SERVICE)
+    : null;
   const routingLayerState = classifyContainerState(routingLayerContainer);
   const lastStart = resolveLastStartDiagnostic(config, lastStartResult);
   const diagnostics = buildDiagnostics({
@@ -216,7 +245,11 @@ export async function runStatusFlow(dependencies: Omit<StatusCommandDependencies
       'platform guidance',
       ...platform.guidance.map((line) => `- ${line}`),
       ...(platform.warnings.length > 0
-        ? ['', 'platform warnings', ...platform.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`)]
+        ? [
+            '',
+            'platform warnings',
+            ...platform.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`),
+          ]
         : []),
       '',
       'network-mode guidance',
@@ -287,11 +320,19 @@ function buildRouteSurfaces(
   });
 }
 
-function buildRouteContainerViews(routes: readonly RouteSurface[], containers: readonly DockerComposeContainer[]): RouteContainerView[] {
-  return routes.map((route) => createRouteContainerView(route, findContainerForService(containers, route.serviceName)));
+function buildRouteContainerViews(
+  routes: readonly RouteSurface[],
+  containers: readonly DockerComposeContainer[],
+): RouteContainerView[] {
+  return routes.map((route) =>
+    createRouteContainerView(route, findContainerForService(containers, route.serviceName)),
+  );
 }
 
-function createRouteContainerView(route: RouteSurface, container: DockerComposeContainer | null): RouteContainerView {
+function createRouteContainerView(
+  route: RouteSurface,
+  container: DockerComposeContainer | null,
+): RouteContainerView {
   const classified = classifyContainerState(container);
 
   return {
@@ -313,14 +354,18 @@ function classifyOverallPhase(input: {
     return 'error';
   }
 
-  const liveStates = [input.routingLayerState.liveState, ...input.routeViews.map((view) => view.liveState)];
+  const liveStates = [
+    input.routingLayerState.liveState,
+    ...input.routeViews.map((view) => view.liveState),
+  ];
   const hasRunning = liveStates.includes('running');
   const hasStarting = liveStates.includes('starting');
   const hasStopped = liveStates.includes('stopped');
   const hasDegraded = liveStates.includes('degraded');
   const expectedServices = input.routeViews.length + 1;
   const hasNoContainers = input.composeStatus.containers.length === 0;
-  const hasMissingExpectedServices = input.composeStatus.containers.length < expectedServices && hasStopped;
+  const hasMissingExpectedServices =
+    input.composeStatus.containers.length < expectedServices && hasStopped;
 
   if (hasDegraded) {
     return 'degraded';
@@ -365,19 +410,25 @@ function buildDiagnostics(input: {
   const diagnostics: string[] = [];
 
   if (input.manifestResult.kind === 'missing') {
-    diagnostics.push('runtime manifest is missing; rerun `mullgate start` to re-render the Docker/runtime artifact bundle.');
+    diagnostics.push(
+      'runtime manifest is missing; rerun `mullgate start` to re-render the Docker/runtime artifact bundle.',
+    );
   } else if (input.manifestResult.kind === 'invalid') {
     diagnostics.push(`runtime manifest could not be parsed: ${input.manifestResult.reason}`);
   }
 
   if (input.lastStartResult.kind === 'missing' && !input.config.diagnostics.lastRuntimeStart) {
-    diagnostics.push('no persisted last-start report exists yet; run `mullgate start` to capture a fresh launch diagnostic.');
+    diagnostics.push(
+      'no persisted last-start report exists yet; run `mullgate start` to capture a fresh launch diagnostic.',
+    );
   } else if (input.lastStartResult.kind === 'invalid') {
     diagnostics.push(`last-start report could not be parsed: ${input.lastStartResult.reason}`);
   }
 
   if (!input.composeStatus.ok) {
-    diagnostics.push(`${input.composeStatus.message} ${renderComposeRemediation(input.composeStatus.code)}`.trim());
+    diagnostics.push(
+      `${input.composeStatus.message} ${renderComposeRemediation(input.composeStatus.code)}`.trim(),
+    );
     return diagnostics;
   }
 
@@ -391,16 +442,25 @@ function buildDiagnostics(input: {
     }
   }
 
-  if (input.config.runtime.status.phase === 'running' && input.routeViews.some((view) => view.liveState !== 'running')) {
-    diagnostics.push('saved runtime status says running, but live compose status shows stopped or degraded route containers. Trust live compose over the saved phase and rerun `mullgate start` after fixing the failing route.');
+  if (
+    input.config.runtime.status.phase === 'running' &&
+    input.routeViews.some((view) => view.liveState !== 'running')
+  ) {
+    diagnostics.push(
+      'saved runtime status says running, but live compose status shows stopped or degraded route containers. Trust live compose over the saved phase and rerun `mullgate start` after fixing the failing route.',
+    );
   }
 
   if (input.config.runtime.status.phase === 'unvalidated') {
-    diagnostics.push('saved config is still marked unvalidated, so runtime artifacts may lag behind recent config or exposure edits.');
+    diagnostics.push(
+      'saved config is still marked unvalidated, so runtime artifacts may lag behind recent config or exposure edits.',
+    );
   }
 
   if (input.lastStart?.status === 'failure') {
-    diagnostics.push('the last recorded `mullgate start` attempt failed; inspect the last-start diagnostics below before restarting blindly.');
+    diagnostics.push(
+      'the last recorded `mullgate start` attempt failed; inspect the last-start diagnostics below before restarting blindly.',
+    );
   }
 
   return diagnostics;
@@ -427,7 +487,10 @@ function renderUnconfiguredStatus(message: string, configPath: string, runtimeDi
   ].join('\n');
 }
 
-function writeStatusResult(result: StatusFlowResult, dependencies: Pick<StatusCommandDependencies, 'stdout' | 'stderr'>): void {
+function writeStatusResult(
+  result: StatusFlowResult,
+  dependencies: Pick<StatusCommandDependencies, 'stdout' | 'stderr'>,
+): void {
   const stdout = dependencies.stdout ?? process.stdout;
   const stderr = dependencies.stderr ?? process.stderr;
 

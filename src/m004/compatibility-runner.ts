@@ -2,25 +2,25 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
-  createCompatibilityArtifact,
-  serializeCompatibilityArtifact,
   type CompatibilityArtifact,
   type CompatibilityHostnameRoutingObservation,
   type CompatibilityOperatorObservation,
   type CompatibilityProtocolObservation,
+  createCompatibilityArtifact,
+  serializeCompatibilityArtifact,
 } from './compatibility-contract.js';
-import {
-  runFeasibilityVerifier,
-  type FeasibilityParseResult,
-  type FeasibilityRunnerOptions,
-  type FeasibilityRunnerResult,
-} from './feasibility-runner.js';
 import type { FeasibilityArtifact } from './feasibility-contract.js';
+import { type FeasibilityRunnerOptions, runFeasibilityVerifier } from './feasibility-runner.js';
 
 const DEFAULT_OUTPUT_ROOT = '.tmp/m004-compatibility';
 const DEFAULT_TARGET_URL = 'https://am.i.mullvad.net/json';
 const DEFAULT_ROUTE_CHECK_IP = '1.1.1.1';
-const REQUIRED_ENV_KEYS = ['MULLGATE_ACCOUNT_NUMBER', 'MULLGATE_PROXY_USERNAME', 'MULLGATE_PROXY_PASSWORD', 'MULLGATE_DEVICE_NAME'] as const;
+const REQUIRED_ENV_KEYS = [
+  'MULLGATE_ACCOUNT_NUMBER',
+  'MULLGATE_PROXY_USERNAME',
+  'MULLGATE_PROXY_PASSWORD',
+  'MULLGATE_DEVICE_NAME',
+] as const;
 
 export type CompatibilityRunnerOptions = {
   readonly targetUrl: string;
@@ -89,7 +89,10 @@ export type CompatibilitySummaryBundle = {
     readonly operatorImpact: {
       readonly authSurface: 'preserved' | 'failed';
       readonly relaySelectionFlow: 'hostname-selected' | 'explicit-relay-selection-required';
-      readonly locationDiscovery: 'truthful-hostname-selection' | 'explicit-relay-mapping' | 'not-truthful';
+      readonly locationDiscovery:
+        | 'truthful-hostname-selection'
+        | 'explicit-relay-mapping'
+        | 'not-truthful';
       readonly notes: readonly string[];
     };
     readonly hostnameRouting: {
@@ -145,11 +148,18 @@ export type CompatibilityRunnerResult = {
   readonly workspacePath?: string;
 };
 
-export function parseCompatibilityArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): CompatibilityParseResult {
+export function parseCompatibilityArgs(
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): CompatibilityParseResult {
   let targetUrl = env.MULLGATE_VERIFY_TARGET_URL?.trim() || DEFAULT_TARGET_URL;
   let routeCheckIp = env.MULLGATE_VERIFY_ROUTE_CHECK_IP?.trim() || DEFAULT_ROUTE_CHECK_IP;
-  let logicalExitCount: 2 | 3 = readLogicalExitCount(env.MULLGATE_M004_LOGICAL_EXIT_COUNT?.trim()) ?? 3;
-  let outputRoot = env.MULLGATE_M004_COMPATIBILITY_OUTPUT_ROOT?.trim() || env.MULLGATE_M004_OUTPUT_ROOT?.trim() || DEFAULT_OUTPUT_ROOT;
+  let logicalExitCount: 2 | 3 =
+    readLogicalExitCount(env.MULLGATE_M004_LOGICAL_EXIT_COUNT?.trim()) ?? 3;
+  let outputRoot =
+    env.MULLGATE_M004_COMPATIBILITY_OUTPUT_ROOT?.trim() ||
+    env.MULLGATE_M004_OUTPUT_ROOT?.trim() ||
+    DEFAULT_OUTPUT_ROOT;
   let keepTempHome = false;
   let fixturePath: string | undefined;
 
@@ -237,13 +247,25 @@ export function parseCompatibilityArgs(argv: readonly string[], env: NodeJS.Proc
       outputRoot,
       keepTempHome,
       ...(fixturePath ? { fixturePath } : {}),
-      ...(env.MULLGATE_ACCOUNT_NUMBER?.trim() ? { accountNumber: env.MULLGATE_ACCOUNT_NUMBER.trim() } : {}),
-      ...(env.MULLGATE_PROXY_USERNAME?.trim() ? { proxyUsername: env.MULLGATE_PROXY_USERNAME.trim() } : {}),
-      ...(env.MULLGATE_PROXY_PASSWORD?.trim() ? { proxyPassword: env.MULLGATE_PROXY_PASSWORD.trim() } : {}),
+      ...(env.MULLGATE_ACCOUNT_NUMBER?.trim()
+        ? { accountNumber: env.MULLGATE_ACCOUNT_NUMBER.trim() }
+        : {}),
+      ...(env.MULLGATE_PROXY_USERNAME?.trim()
+        ? { proxyUsername: env.MULLGATE_PROXY_USERNAME.trim() }
+        : {}),
+      ...(env.MULLGATE_PROXY_PASSWORD?.trim()
+        ? { proxyPassword: env.MULLGATE_PROXY_PASSWORD.trim() }
+        : {}),
       ...(env.MULLGATE_DEVICE_NAME?.trim() ? { deviceName: env.MULLGATE_DEVICE_NAME.trim() } : {}),
-      ...(env.MULLGATE_MULLVAD_WG_URL?.trim() ? { mullvadWgUrl: env.MULLGATE_MULLVAD_WG_URL.trim() } : {}),
-      ...(env.MULLGATE_MULLVAD_RELAYS_URL?.trim() ? { mullvadRelaysUrl: env.MULLGATE_MULLVAD_RELAYS_URL.trim() } : {}),
-      ...(env.MULLGATE_M004_WIREPROXY_IMAGE?.trim() ? { wireproxyImage: env.MULLGATE_M004_WIREPROXY_IMAGE.trim() } : {}),
+      ...(env.MULLGATE_MULLVAD_WG_URL?.trim()
+        ? { mullvadWgUrl: env.MULLGATE_MULLVAD_WG_URL.trim() }
+        : {}),
+      ...(env.MULLGATE_MULLVAD_RELAYS_URL?.trim()
+        ? { mullvadRelaysUrl: env.MULLGATE_MULLVAD_RELAYS_URL.trim() }
+        : {}),
+      ...(env.MULLGATE_M004_WIREPROXY_IMAGE?.trim()
+        ? { wireproxyImage: env.MULLGATE_M004_WIREPROXY_IMAGE.trim() }
+        : {}),
     },
   };
 }
@@ -295,7 +317,9 @@ export function renderCompatibilityHelp(): string {
   ].join('\n');
 }
 
-export async function runCompatibilityVerifier(options: CompatibilityRunnerOptions): Promise<CompatibilityRunnerResult> {
+export async function runCompatibilityVerifier(
+  options: CompatibilityRunnerOptions,
+): Promise<CompatibilityRunnerResult> {
   const outputDir = await prepareLatestOutputDir({ outputRoot: options.outputRoot });
   const artifactJsonPath = path.join(outputDir, 'artifact.json');
   const protocolEvidencePath = path.join(outputDir, 'protocol-evidence.json');
@@ -319,7 +343,10 @@ export async function runCompatibilityVerifier(options: CompatibilityRunnerOptio
       artifact,
       mode: 'fixture',
       phase: fixture.phase,
-      notes: [...(fixture.notes ?? []), 'Fixture replay mode skipped all live Mullvad and Docker prerequisites.'],
+      notes: [
+        ...(fixture.notes ?? []),
+        'Fixture replay mode skipped all live Mullvad and Docker prerequisites.',
+      ],
       protocolEvidence: fixture.protocols,
       hostnameRoutingEvidence: fixture.hostnameRouting,
       preservedWorkspace: true,
@@ -351,7 +378,10 @@ export async function runCompatibilityVerifier(options: CompatibilityRunnerOptio
     keepTempHome: true,
   });
 
-  const phase = feasibilityResult.exitCode === 0 ? 'compatibility-summary' : feasibilityResult.artifact.verdict.phase;
+  const phase =
+    feasibilityResult.exitCode === 0
+      ? 'compatibility-summary'
+      : feasibilityResult.artifact.verdict.phase;
   const compatibilityInputs = createCompatibilityInputsFromFeasibility({
     artifact: feasibilityResult.artifact,
     workspacePath: feasibilityResult.workspacePath,
@@ -364,7 +394,10 @@ export async function runCompatibilityVerifier(options: CompatibilityRunnerOptio
     operator: compatibilityInputs.operator,
   });
 
-  const preservedWorkspace = options.keepTempHome || feasibilityResult.exitCode !== 0 || artifact.recommendation.posture !== 'approved';
+  const preservedWorkspace =
+    options.keepTempHome ||
+    feasibilityResult.exitCode !== 0 ||
+    artifact.recommendation.posture !== 'approved';
 
   const bundle = await writeCompatibilityOutputs({
     outputDir,
@@ -398,7 +431,9 @@ export async function runCompatibilityVerifier(options: CompatibilityRunnerOptio
     artifactJsonPath,
     bundle,
     preservedWorkspace,
-    ...(preservedWorkspace && feasibilityResult.workspacePath ? { workspacePath: feasibilityResult.workspacePath } : {}),
+    ...(preservedWorkspace && feasibilityResult.workspacePath
+      ? { workspacePath: feasibilityResult.workspacePath }
+      : {}),
   };
 }
 
@@ -453,7 +488,9 @@ function createCompatibilityInputsFromFeasibility(input: {
       observedCapabilitySummary: socksChainingWorked
         ? `SOCKS5 client-side chaining reached ${input.artifact.summary.distinctObservedExitCount} distinct Mullvad exits only when the client explicitly targeted relay hostnames from the reused shared-entry probe set.`
         : `SOCKS5 client-side chaining did not complete truthfully because the reused shared-entry feasibility phase stopped at ${input.artifact.verdict.phase} with reason ${input.artifact.verdict.reason}.`,
-      artifactPath: input.workspacePath ? path.join(input.workspacePath, 'artifacts', 'artifact.json') : undefined,
+      artifactPath: input.workspacePath
+        ? path.join(input.workspacePath, 'artifacts', 'artifact.json')
+        : undefined,
     },
     {
       protocol: 'http',
@@ -462,7 +499,9 @@ function createCompatibilityInputsFromFeasibility(input: {
       canSelectExitWithExplicitRelaySelection: false,
       observedCapabilitySummary:
         'HTTP can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTP clients, so hostname-selected routing cannot survive.',
-      artifactPath: input.workspacePath ? path.join(input.workspacePath, 'artifacts', 'artifact.json') : undefined,
+      artifactPath: input.workspacePath
+        ? path.join(input.workspacePath, 'artifacts', 'artifact.json')
+        : undefined,
     },
     {
       protocol: 'https',
@@ -471,7 +510,9 @@ function createCompatibilityInputsFromFeasibility(input: {
       canSelectExitWithExplicitRelaySelection: false,
       observedCapabilitySummary:
         'HTTPS can reach the shared entry itself, but the one-entry topology does not expose a truthful second-hop Mullvad relay selector for HTTPS clients, so hostname-selected routing cannot survive.',
-      artifactPath: input.workspacePath ? path.join(input.workspacePath, 'artifacts', 'artifact.json') : undefined,
+      artifactPath: input.workspacePath
+        ? path.join(input.workspacePath, 'artifacts', 'artifact.json')
+        : undefined,
     },
   ];
 
@@ -520,8 +561,14 @@ async function writeCompatibilityOutputs(input: {
   const artifactText = serializeCompatibilityArtifact({ artifact: input.artifact });
   await Promise.all([
     writeFile(input.artifactJsonPath, `${artifactText}\n`, { mode: 0o600 }),
-    writeFile(input.protocolEvidencePath, `${JSON.stringify(input.protocolEvidence, null, 2)}\n`, { mode: 0o600 }),
-    writeFile(input.hostnameRoutingEvidencePath, `${JSON.stringify(input.hostnameRoutingEvidence, null, 2)}\n`, { mode: 0o600 }),
+    writeFile(input.protocolEvidencePath, `${JSON.stringify(input.protocolEvidence, null, 2)}\n`, {
+      mode: 0o600,
+    }),
+    writeFile(
+      input.hostnameRoutingEvidencePath,
+      `${JSON.stringify(input.hostnameRoutingEvidence, null, 2)}\n`,
+      { mode: 0o600 },
+    ),
     writeFile(
       input.evaluationMetadataPath,
       `${JSON.stringify(
@@ -557,8 +604,12 @@ async function writeCompatibilityOutputs(input: {
         protocolEvidence: input.protocolEvidencePath,
         hostnameRoutingEvidence: input.hostnameRoutingEvidencePath,
         evaluationMetadata: input.evaluationMetadataPath,
-        ...(input.feasibilitySummaryJsonPath ? { feasibilitySummaryJson: input.feasibilitySummaryJsonPath } : {}),
-        ...(input.feasibilitySummaryTextPath ? { feasibilitySummaryText: input.feasibilitySummaryTextPath } : {}),
+        ...(input.feasibilitySummaryJsonPath
+          ? { feasibilitySummaryJson: input.feasibilitySummaryJsonPath }
+          : {}),
+        ...(input.feasibilitySummaryTextPath
+          ? { feasibilitySummaryText: input.feasibilitySummaryTextPath }
+          : {}),
       },
     },
   };
@@ -573,7 +624,9 @@ async function writeCompatibilityOutputs(input: {
 
   const summaryText = renderCompatibilitySummary({ bundle: bundleWithSummary });
   await Promise.all([
-    writeFile(input.summaryJsonPath, `${JSON.stringify(bundleWithSummary, null, 2)}\n`, { mode: 0o600 }),
+    writeFile(input.summaryJsonPath, `${JSON.stringify(bundleWithSummary, null, 2)}\n`, {
+      mode: 0o600,
+    }),
     writeFile(input.summaryTextPath, `${summaryText}\n`, { mode: 0o600 }),
   ]);
   process.stdout.write(`${summaryText}\n`);
@@ -658,7 +711,9 @@ function createCompatibilitySummarySurface(input: {
   };
 }
 
-export function renderCompatibilitySummary(input: { readonly bundle: CompatibilitySummaryBundle }): string {
+export function renderCompatibilitySummary(input: {
+  readonly bundle: CompatibilitySummaryBundle;
+}): string {
   const lines: string[] = [
     `M004 compatibility verdict: ${input.bundle.overallVerdict.toUpperCase()}`,
     `phase: ${input.bundle.phase}`,
@@ -670,7 +725,9 @@ export function renderCompatibilitySummary(input: { readonly bundle: Compatibili
   ];
 
   if (input.bundle.summary.hostnameRouting.explicitFailure) {
-    lines.push(`hostname-selected routing failure: ${input.bundle.summary.hostnameRouting.explicitFailure}`);
+    lines.push(
+      `hostname-selected routing failure: ${input.bundle.summary.hostnameRouting.explicitFailure}`,
+    );
   }
 
   lines.push('protocol matrix:');
@@ -691,7 +748,9 @@ export function renderCompatibilitySummary(input: { readonly bundle: Compatibili
 
   lines.push('requirement deltas:');
   input.bundle.summary.requirementDeltas.forEach((requirement) => {
-    lines.push(`- ${requirement.requirementId} ${requirement.title}: ${requirement.status} — ${requirement.summary}`);
+    lines.push(
+      `- ${requirement.requirementId} ${requirement.title}: ${requirement.status} — ${requirement.summary}`,
+    );
   });
 
   lines.push('artifact links:');
@@ -703,11 +762,15 @@ export function renderCompatibilitySummary(input: { readonly bundle: Compatibili
   lines.push(`- evaluation metadata: ${input.bundle.summary.artifactLinks.evaluationMetadata}`);
 
   if (input.bundle.summary.artifactLinks.feasibilitySummaryJson) {
-    lines.push(`- feasibility summary json: ${input.bundle.summary.artifactLinks.feasibilitySummaryJson}`);
+    lines.push(
+      `- feasibility summary json: ${input.bundle.summary.artifactLinks.feasibilitySummaryJson}`,
+    );
   }
 
   if (input.bundle.summary.artifactLinks.feasibilitySummaryText) {
-    lines.push(`- feasibility summary text: ${input.bundle.summary.artifactLinks.feasibilitySummaryText}`);
+    lines.push(
+      `- feasibility summary text: ${input.bundle.summary.artifactLinks.feasibilitySummaryText}`,
+    );
   }
 
   if (input.bundle.diagnostics.workspacePath) {
@@ -736,7 +799,9 @@ function summarizeHeadline(input: {
   return 'The shared-entry topology fails one or more tracked contracts and is not truthful enough to recommend as-is.';
 }
 
-function toProtocolContractStatus(outcome: CompatibilityArtifact['protocols'][number]['outcome']): 'preserved' | 'contract-change' | 'failed' {
+function toProtocolContractStatus(
+  outcome: CompatibilityArtifact['protocols'][number]['outcome'],
+): 'preserved' | 'contract-change' | 'failed' {
   if (outcome === 'supported') {
     return 'preserved';
   }
@@ -769,7 +834,11 @@ async function prepareLatestOutputDir(input: { readonly outputRoot: string }): P
   return latestDir;
 }
 
-function readFlagValue(input: { readonly argv: readonly string[]; readonly index: number; readonly flag: string }): string {
+function readFlagValue(input: {
+  readonly argv: readonly string[];
+  readonly index: number;
+  readonly flag: string;
+}): string {
   const value = input.argv[input.index + 1];
 
   if (!value || value.startsWith('-')) {
@@ -795,7 +864,9 @@ function readLogicalExitCount(value: string | undefined): 2 | 3 | null {
   return null;
 }
 
-export function renderMissingCompatibilityEnvError(env: NodeJS.ProcessEnv = process.env): string | null {
+export function renderMissingCompatibilityEnvError(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
   const missingKeys = REQUIRED_ENV_KEYS.filter((key) => !env[key]?.trim());
 
   if (missingKeys.length === 0) {

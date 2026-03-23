@@ -1,19 +1,19 @@
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { renderPathReport } from '../src/commands/config.js';
 import { resolveMullgatePaths } from '../src/config/paths.js';
 import { formatRedactedConfig, redactConfig } from '../src/config/redact.js';
+import { CONFIG_VERSION, type MullgateConfig, mullgateConfigSchema } from '../src/config/schema.js';
 import { ConfigStore, listTemporaryArtifacts } from '../src/config/store.js';
-import { CONFIG_VERSION, mullgateConfigSchema, type MullgateConfig } from '../src/config/schema.js';
 
 const temporaryDirectories: string[] = [];
-const windowsFixturePaths = [
+const windowsFixturePrefixes = [
   'C:\\Users\\alice\\AppData\\Local\\mullgate',
   'C:\\Users\\alice\\AppData\\Roaming\\mullgate',
 ] as const;
@@ -77,8 +77,12 @@ function createPlatformEnvironment(platform: 'linux' | 'macos' | 'windows'): Nod
 }
 
 function cleanupWindowsFixturePaths(): void {
-  windowsFixturePaths.forEach((target) => {
-    rmSync(target, { recursive: true, force: true });
+  readdirSync('.').forEach((entry) => {
+    if (!windowsFixturePrefixes.some((prefix) => entry.startsWith(prefix))) {
+      return;
+    }
+
+    rmSync(entry, { recursive: true, force: true });
   });
 }
 
@@ -223,7 +227,11 @@ function createLegacyFixtureConfig(env: NodeJS.ProcessEnv): Record<string, unkno
 
 afterEach(async () => {
   cleanupWindowsFixturePaths();
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 describe('mullgate config store', () => {
@@ -452,7 +460,9 @@ describe('mullgate config store', () => {
         requested: 'se-sto',
       },
     });
-    expect(loaded.config.setup.location).toEqual(loaded.config.routing.locations[0]?.relayPreference);
+    expect(loaded.config.setup.location).toEqual(
+      loaded.config.routing.locations[0]?.relayPreference,
+    );
     expect(loaded.config.setup.exposure.baseDomain).toBeNull();
     expect(loaded.config.mullvad).toEqual(loaded.config.routing.locations[0]?.mullvad);
 
@@ -687,7 +697,13 @@ describe('mullgate config store', () => {
     expect(parsedRendered.setup.auth.password).toBe('[redacted]');
     expect(parsedRendered.mullvad.accountNumber).toBe('[redacted]');
     expect(parsedRendered.routing.locations).toHaveLength(2);
-    expect(parsedRendered.routing.locations.map((location) => ({ alias: location.alias, hostname: location.hostname, bindIp: location.bindIp }))).toEqual([
+    expect(
+      parsedRendered.routing.locations.map((location) => ({
+        alias: location.alias,
+        hostname: location.hostname,
+        bindIp: location.bindIp,
+      })),
+    ).toEqual([
       { alias: 'se-sto', hostname: 'se-sto', bindIp: '127.0.0.1' },
       { alias: 'se-got', hostname: 'got.internal', bindIp: '127.0.0.11' },
     ]);
@@ -696,20 +712,16 @@ describe('mullgate config store', () => {
     expect(parsedRendered.runtime.sourceConfigPath).toContain('/config/mullgate/config.json');
   });
 
-  it(
-    'prints a clear empty-home message from the real CLI entrypoint',
-    () => {
-      const env = createTempEnvironment();
-      const result = spawnSync('pnpm', ['exec', 'tsx', 'src/cli.ts', 'config', 'show'], {
-        cwd: path.resolve(import.meta.dirname, '..'),
-        env,
-        encoding: 'utf8',
-      });
+  it('prints a clear empty-home message from the real CLI entrypoint', () => {
+    const env = createTempEnvironment();
+    const result = spawnSync('pnpm', ['exec', 'tsx', 'src/cli.ts', 'config', 'show'], {
+      cwd: path.resolve(import.meta.dirname, '..'),
+      env,
+      encoding: 'utf8',
+    });
 
-      expect(result.status).toBe(0);
-      expect(result.stdout).toContain('Mullgate is not configured yet.');
-      expect(result.stdout).toContain(resolveMullgatePaths(env).configFile);
-    },
-    15000,
-  );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Mullgate is not configured yet.');
+    expect(result.stdout).toContain(resolveMullgatePaths(env).configFile);
+  }, 15000);
 });

@@ -1,12 +1,14 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { spawn } from 'node:child_process';
-import net from 'node:net';
 import { lookup } from 'node:dns/promises';
-
-import { ConfigStore } from '../src/config/store.js';
+import { readFile } from 'node:fs/promises';
+import net from 'node:net';
+import path from 'node:path';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../src/config/schema.js';
-import type { RuntimeBundleManifest, RuntimeEndpoint } from '../src/runtime/render-runtime-bundle.js';
+import { ConfigStore } from '../src/config/store.js';
+import type {
+  RuntimeBundleManifest,
+  RuntimeEndpoint,
+} from '../src/runtime/render-runtime-bundle.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
@@ -63,10 +65,12 @@ async function main(): Promise<void> {
   const hostsCommand = await runCliCommand(['config', 'hosts']);
 
   if (hostsCommand.exitCode !== 0) {
-    throw new Error([
-      'mullgate config hosts failed before live verification.',
-      hostsCommand.stderr || hostsCommand.stdout || 'No CLI output.',
-    ].join('\n'));
+    throw new Error(
+      [
+        'mullgate config hosts failed before live verification.',
+        hostsCommand.stderr || hostsCommand.stdout || 'No CLI output.',
+      ].join('\n'),
+    );
   }
 
   assertHostsOutput(hostsCommand.stdout, configBeforeStart);
@@ -76,7 +80,10 @@ async function main(): Promise<void> {
 
   if (startResult.exitCode !== 0) {
     throw new Error(
-      ['mullgate start failed during live verification.', startResult.stderr || startResult.stdout || 'No CLI output.'].join('\n'),
+      [
+        'mullgate start failed during live verification.',
+        startResult.stderr || startResult.stdout || 'No CLI output.',
+      ].join('\n'),
     );
   }
 
@@ -93,8 +100,14 @@ async function main(): Promise<void> {
   }
 
   const configAfterStart = await loadConfig(store);
-  const manifest = await loadJsonFile<RuntimeBundleManifest>(store.paths.runtimeBundleManifestFile, 'runtime manifest');
-  const lastStart = await loadJsonFile<RuntimeStartDiagnostic>(store.paths.runtimeStartDiagnosticsFile, 'last-start report');
+  const manifest = await loadJsonFile<RuntimeBundleManifest>(
+    store.paths.runtimeBundleManifestFile,
+    'runtime manifest',
+  );
+  const lastStart = await loadJsonFile<RuntimeStartDiagnostic>(
+    store.paths.runtimeStartDiagnosticsFile,
+    'last-start report',
+  );
 
   assertStartSummary(startResult.stdout, manifest, configAfterStart);
   assertManifestTopology(manifest, configAfterStart);
@@ -134,7 +147,10 @@ async function main(): Promise<void> {
   }
 
   assertPerRouteProtocolConsistency(exitProbes);
-  assertDistinctExits(exitProbes, selectedRoutes.map((route) => route.routeId));
+  assertDistinctExits(
+    exitProbes,
+    selectedRoutes.map((route) => route.routeId),
+  );
 
   const directAfter = await runDirectProbe(options.targetUrl);
 
@@ -232,7 +248,9 @@ async function loadConfig(store: ConfigStore): Promise<MullgateConfig> {
 
 function assertAtLeastTwoRoutes(config: MullgateConfig): void {
   if (config.routing.locations.length < 2) {
-    throw new Error(`Expected at least two routed locations, found ${config.routing.locations.length}.`);
+    throw new Error(
+      `Expected at least two routed locations, found ${config.routing.locations.length}.`,
+    );
   }
 }
 
@@ -254,7 +272,9 @@ async function loadJsonFile<T>(filePath: string, label: string): Promise<T> {
   try {
     return JSON.parse(await readFile(filePath, 'utf8')) as T;
   } catch (error) {
-    throw new Error(`Failed to read ${label} at ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to read ${label} at ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -272,30 +292,44 @@ function assertHostsOutput(output: string, config: MullgateConfig): void {
     }
 
     if (!output.includes(hostsBlockLine)) {
-      throw new Error(`Expected \`mullgate config hosts\` output to include hosts block line ${hostsBlockLine}.`);
+      throw new Error(
+        `Expected \`mullgate config hosts\` output to include hosts block line ${hostsBlockLine}.`,
+      );
     }
   }
 }
 
-function assertStartSummary(output: string, manifest: RuntimeBundleManifest, config: MullgateConfig): void {
+function assertStartSummary(
+  output: string,
+  manifest: RuntimeBundleManifest,
+  config: MullgateConfig,
+): void {
   if (!output.includes('exposure entrypoints:')) {
-    throw new Error('`mullgate start` success output did not include the exposure entrypoint inventory.');
+    throw new Error(
+      '`mullgate start` success output did not include the exposure entrypoint inventory.',
+    );
   }
 
   for (const route of manifest.routes.slice(0, 2)) {
     if (!output.includes(`${route.hostname} -> ${route.bindIp}`)) {
-      throw new Error(`Expected start output to include routed endpoint header for ${route.hostname} -> ${route.bindIp}.`);
+      throw new Error(
+        `Expected start output to include routed endpoint header for ${route.hostname} -> ${route.bindIp}.`,
+      );
     }
 
     for (const protocol of REQUIRED_PROTOCOLS) {
       const endpoint = findEndpoint(route.publishedEndpoints, protocol);
 
       if (!output.includes(`   ${protocol} hostname: ${endpoint.redactedHostnameUrl}`)) {
-        throw new Error(`Expected start output to include ${protocol} hostname endpoint ${endpoint.redactedHostnameUrl}.`);
+        throw new Error(
+          `Expected start output to include ${protocol} hostname endpoint ${endpoint.redactedHostnameUrl}.`,
+        );
       }
 
       if (!output.includes(`   ${protocol} direct ip: ${endpoint.redactedBindUrl}`)) {
-        throw new Error(`Expected start output to include ${protocol} direct-ip endpoint ${endpoint.redactedBindUrl}.`);
+        throw new Error(
+          `Expected start output to include ${protocol} direct-ip endpoint ${endpoint.redactedBindUrl}.`,
+        );
       }
     }
   }
@@ -305,15 +339,21 @@ function assertStartSummary(output: string, manifest: RuntimeBundleManifest, con
 
 function assertManifestTopology(manifest: RuntimeBundleManifest, config: MullgateConfig): void {
   if (manifest.topology !== 'multi-route-wireproxy-haproxy') {
-    throw new Error(`Expected runtime manifest topology to be multi-route-wireproxy-haproxy, got ${manifest.topology}.`);
+    throw new Error(
+      `Expected runtime manifest topology to be multi-route-wireproxy-haproxy, got ${manifest.topology}.`,
+    );
   }
 
   if (manifest.routes.length < 2) {
-    throw new Error(`Expected runtime manifest to list at least two routes, found ${manifest.routes.length}.`);
+    throw new Error(
+      `Expected runtime manifest to list at least two routes, found ${manifest.routes.length}.`,
+    );
   }
 
   for (const route of config.routing.locations) {
-    const manifestRoute = manifest.routes.find((candidate) => candidate.routeId === route.runtime.routeId);
+    const manifestRoute = manifest.routes.find(
+      (candidate) => candidate.routeId === route.runtime.routeId,
+    );
 
     if (!manifestRoute) {
       throw new Error(`Runtime manifest is missing route ${route.runtime.routeId}.`);
@@ -344,13 +384,18 @@ function assertManifestTopology(manifest: RuntimeBundleManifest, config: Mullgat
         !endpoint.redactedHostnameUrl.includes(REDACTED) ||
         !endpoint.redactedBindUrl.includes(REDACTED)
       ) {
-        throw new Error(`Runtime manifest endpoint ${protocol} for ${route.runtime.routeId} was not redacted.`);
+        throw new Error(
+          `Runtime manifest endpoint ${protocol} for ${route.runtime.routeId} was not redacted.`,
+        );
       }
     }
   }
 }
 
-function assertLastStartReport(report: RuntimeStartDiagnostic, manifest: RuntimeBundleManifest): void {
+function assertLastStartReport(
+  report: RuntimeStartDiagnostic,
+  manifest: RuntimeBundleManifest,
+): void {
   const requiredKeys = [
     'attemptedAt',
     'status',
@@ -380,24 +425,31 @@ function assertLastStartReport(report: RuntimeStartDiagnostic, manifest: Runtime
   }
 
   if (!report.phase || !report.source || !report.validationSource) {
-    throw new Error('last-start.json is missing success diagnostics for phase/source/validationSource.');
+    throw new Error(
+      'last-start.json is missing success diagnostics for phase/source/validationSource.',
+    );
   }
 
   if (!report.composeFilePath || !report.command) {
     throw new Error('last-start.json is missing compose launch diagnostics on the success path.');
   }
 
-  if (!manifest.routes.some((route) => report.composeFilePath === route.wireproxyConfigPath) && !report.composeFilePath.endsWith('docker-compose.yml')) {
+  if (
+    !manifest.routes.some((route) => report.composeFilePath === route.wireproxyConfigPath) &&
+    !report.composeFilePath.endsWith('docker-compose.yml')
+  ) {
     throw new Error(`Unexpected compose file path in last-start.json: ${report.composeFilePath}`);
   }
 }
 
 async function assertHostnameResolution(hostname: string, expectedBindIp: string): Promise<void> {
-  const addresses = await lookup(hostname, { all: true, family: 4, verbatim: true }).catch((error: unknown) => {
-    throw new Error(
-      `Hostname ${hostname} did not resolve locally. Add the emitted hosts block so it resolves to ${expectedBindIp}. Cause: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  });
+  const addresses = await lookup(hostname, { all: true, family: 4, verbatim: true }).catch(
+    (error: unknown) => {
+      throw new Error(
+        `Hostname ${hostname} did not resolve locally. Add the emitted hosts block so it resolves to ${expectedBindIp}. Cause: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    },
+  );
   const uniqueAddresses = [...new Set(addresses.map((address) => address.address))];
 
   if (uniqueAddresses.length !== 1 || uniqueAddresses[0] !== expectedBindIp) {
@@ -411,7 +463,10 @@ async function assertHostnameResolution(hostname: string, expectedBindIp: string
   }
 }
 
-function findEndpoint(endpoints: readonly RuntimeEndpoint[], protocol: ProxyProtocol): RuntimeEndpoint {
+function findEndpoint(
+  endpoints: readonly RuntimeEndpoint[],
+  protocol: ProxyProtocol,
+): RuntimeEndpoint {
   const endpoint = endpoints.find((candidate) => candidate.protocol === protocol);
 
   if (!endpoint) {
@@ -453,7 +508,19 @@ async function waitForPort(host: string, port: number, timeoutMs: number): Promi
 async function runDirectProbe(targetUrl: string): Promise<ExitPayload> {
   const result = await runCommand(
     'curl',
-    ['--silent', '--show-error', '--fail', '--location', '--connect-timeout', '20', '--max-time', '60', '--noproxy', '*', targetUrl],
+    [
+      '--silent',
+      '--show-error',
+      '--fail',
+      '--location',
+      '--connect-timeout',
+      '20',
+      '--max-time',
+      '60',
+      '--noproxy',
+      '*',
+      targetUrl,
+    ],
     { env: createProxyNeutralEnv() },
   );
 
@@ -468,7 +535,10 @@ function formatDirectProbe(payload: ExitPayload): string {
   const ip = payload.ip ?? 'unknown';
   const country = payload.country ?? 'unknown';
   const city = payload.city ?? 'unknown';
-  const mullvad = payload.mullvad_exit_ip === null || payload.mullvad_exit_ip === undefined ? 'unknown' : String(payload.mullvad_exit_ip);
+  const mullvad =
+    payload.mullvad_exit_ip === null || payload.mullvad_exit_ip === undefined
+      ? 'unknown'
+      : String(payload.mullvad_exit_ip);
   return `ip=${ip}, country=${country}, city=${city}, mullvad_exit_ip=${mullvad}`;
 }
 
@@ -518,7 +588,9 @@ async function runProxyProbe(input: {
   const payload = parseExitPayload(result.stdout, `${input.protocol} probe for ${input.hostname}`);
 
   if (!payload.ip) {
-    throw new Error(`${input.protocol} probe for ${input.hostname} returned JSON without an ip field.`);
+    throw new Error(
+      `${input.protocol} probe for ${input.hostname} returned JSON without an ip field.`,
+    );
   }
 
   if (payload.mullvad_exit_ip === false) {
@@ -544,7 +616,9 @@ function parseExitPayload(raw: string, label: string): ExitPayload {
   try {
     return JSON.parse(raw) as ExitPayload;
   } catch (error) {
-    throw new Error(`Failed to parse ${label} JSON: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to parse ${label} JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -584,12 +658,12 @@ function assertDistinctExits(probes: readonly ExitProbe[], routeIds: readonly st
     };
   });
 
-  if (routeSummaries[0]!.exitKey === routeSummaries[1]!.exitKey) {
+  if (routeSummaries[0]?.exitKey === routeSummaries[1]?.exitKey) {
     throw new Error(
       [
         'Two routed hostnames collapsed to the same Mullvad exit.',
-        `route 1: ${routeSummaries[0]!.probe.hostname} -> ${routeSummaries[0]!.probe.ip} (${routeSummaries[0]!.probe.country ?? 'unknown'})`,
-        `route 2: ${routeSummaries[1]!.probe.hostname} -> ${routeSummaries[1]!.probe.ip} (${routeSummaries[1]!.probe.country ?? 'unknown'})`,
+        `route 1: ${routeSummaries[0]?.probe.hostname} -> ${routeSummaries[0]?.probe.ip} (${routeSummaries[0]?.probe.country ?? 'unknown'})`,
+        `route 2: ${routeSummaries[1]?.probe.hostname} -> ${routeSummaries[1]?.probe.ip} (${routeSummaries[1]?.probe.country ?? 'unknown'})`,
       ].join('\n'),
     );
   }
@@ -621,10 +695,19 @@ function collectSecrets(config: MullgateConfig): string[] {
     config.setup.auth.password,
     config.mullvad.accountNumber,
     config.mullvad.wireguard.privateKey,
-    ...config.routing.locations.flatMap((route) => [route.mullvad.accountNumber, route.mullvad.wireguard.privateKey]),
+    ...config.routing.locations.flatMap((route) => [
+      route.mullvad.accountNumber,
+      route.mullvad.wireguard.privateKey,
+    ]),
   ];
 
-  return [...new Set(candidates.filter((value): value is string => typeof value === 'string' && value.trim().length > 0))];
+  return [
+    ...new Set(
+      candidates.filter(
+        (value): value is string => typeof value === 'string' && value.trim().length > 0,
+      ),
+    ),
+  ];
 }
 
 async function runCliCommand(args: readonly string[]): Promise<CommandResult> {
@@ -668,7 +751,16 @@ async function runCommand(
 function createProxyNeutralEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
 
-  for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy']) {
+  for (const key of [
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'ALL_PROXY',
+    'NO_PROXY',
+    'http_proxy',
+    'https_proxy',
+    'all_proxy',
+    'no_proxy',
+  ]) {
     delete env[key];
   }
 

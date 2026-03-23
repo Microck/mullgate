@@ -81,7 +81,9 @@ export type LocationAliasFailure = {
   candidates?: readonly LocationAliasTarget[];
 };
 
-export type CreateLocationAliasCatalogResult = CreateLocationAliasCatalogSuccess | LocationAliasFailure;
+export type CreateLocationAliasCatalogResult =
+  | CreateLocationAliasCatalogSuccess
+  | LocationAliasFailure;
 export type ResolveLocationAliasResult =
   | {
       ok: true;
@@ -92,7 +94,9 @@ export type ResolveLocationAliasResult =
     }
   | LocationAliasFailure;
 
-export function createLocationAliasCatalog(relays: readonly MullvadRelay[]): CreateLocationAliasCatalogResult {
+export function createLocationAliasCatalog(
+  relays: readonly MullvadRelay[],
+): CreateLocationAliasCatalogResult {
   const countriesByCode = new Map<string, CountryAliasEntry>();
   const citiesByKey = new Map<string, CityAliasEntry>();
   const relayEntries: RelayAliasEntry[] = [];
@@ -167,9 +171,12 @@ export function createLocationAliasCatalog(relays: readonly MullvadRelay[]): Cre
     });
   }
 
-  const countries = [...countriesByCode.values()].sort((left, right) => left.code.localeCompare(right.code));
+  const countries = [...countriesByCode.values()].sort((left, right) =>
+    left.code.localeCompare(right.code),
+  );
   const cities = [...citiesByKey.values()].sort(
-    (left, right) => left.countryCode.localeCompare(right.countryCode) || left.code.localeCompare(right.code),
+    (left, right) =>
+      left.countryCode.localeCompare(right.countryCode) || left.code.localeCompare(right.code),
   );
   const relaysSorted = [...relayEntries].sort(
     (left, right) =>
@@ -204,8 +211,15 @@ export function createLocationAliasCatalog(relays: readonly MullvadRelay[]): Cre
     };
 
     for (const alias of city.aliases) {
-      const required = alias.startsWith(`${city.countryCode}-`) || alias.startsWith(`${normalizeLocationToken(city.countryName)}-`);
-      const registration = registerAlias(aliasIndex, alias, target, required ? 'required' : 'optional');
+      const required =
+        alias.startsWith(`${city.countryCode}-`) ||
+        alias.startsWith(`${normalizeLocationToken(city.countryName)}-`);
+      const registration = registerAlias(
+        aliasIndex,
+        alias,
+        target,
+        required ? 'required' : 'optional',
+      );
 
       if (!registration.ok) {
         return registration;
@@ -263,7 +277,10 @@ export function createLocationAliasCatalog(relays: readonly MullvadRelay[]): Cre
   };
 }
 
-export function resolveLocationAlias(catalog: LocationAliasCatalog, input: string): ResolveLocationAliasResult {
+export function resolveLocationAlias(
+  catalog: LocationAliasCatalog,
+  input: string,
+): ResolveLocationAliasResult {
   const alias = normalizeLocationToken(input);
   const candidates = catalog.index[alias] ?? [];
 

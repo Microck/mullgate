@@ -1,13 +1,22 @@
-import { chmod, mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
+import {
+  chmod,
+  type FileHandle,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+} from 'node:fs/promises';
 import path from 'node:path';
 
 import { normalizeLocationToken } from '../domain/location-aliases.js';
-import { resolveMullgatePaths, type MullgatePaths } from './paths.js';
+import { type MullgatePaths, resolveMullgatePaths } from './paths.js';
 import {
-  mullgateConfigInputSchema,
-  mullgateConfigSchema,
   type MullgateConfig,
   type MullgateConfigInput,
+  mullgateConfigInputSchema,
+  mullgateConfigSchema,
   type RoutedLocation,
   type RoutedLocationInput,
 } from './schema.js';
@@ -270,14 +279,20 @@ function normalizeRoutedLocation(
     mullvad: structuredClone(location.mullvad),
     runtime: {
       routeId,
-      wireproxyServiceName: location.runtime?.wireproxyServiceName?.trim() || `wireproxy-${routeId}`,
+      wireproxyServiceName:
+        location.runtime?.wireproxyServiceName?.trim() || `wireproxy-${routeId}`,
       haproxyBackendName: location.runtime?.haproxyBackendName?.trim() || `route-${routeId}`,
-      wireproxyConfigFile: location.runtime?.wireproxyConfigFile?.trim() || `wireproxy-${routeId}.conf`,
+      wireproxyConfigFile:
+        location.runtime?.wireproxyConfigFile?.trim() || `wireproxy-${routeId}.conf`,
     },
   };
 }
 
-function chooseAlias(location: RoutedLocationInput, relayPreference: RoutedLocationInput['relayPreference'], index: number): string {
+function chooseAlias(
+  location: RoutedLocationInput,
+  relayPreference: RoutedLocationInput['relayPreference'],
+  index: number,
+): string {
   const explicit = location.alias?.trim();
 
   if (explicit) {
@@ -336,9 +351,12 @@ async function ensureDirectory(directoryPath: string): Promise<void> {
 
 async function writeFileAtomic(filePath: string, content: string, mode: number): Promise<void> {
   const directory = path.dirname(filePath);
-  const temporaryPath = path.join(directory, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
+  const temporaryPath = path.join(
+    directory,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
+  );
 
-  let fileHandle;
+  let fileHandle: FileHandle | undefined;
   try {
     fileHandle = await open(temporaryPath, 'w', mode);
     await fileHandle.writeFile(content, 'utf8');

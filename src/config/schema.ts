@@ -40,7 +40,10 @@ export const httpsConfigSchema = z.object({
 });
 
 export const mullvadProvisioningSchema = z.object({
-  accountNumber: z.string().trim().regex(/^\d{6,16}$/, 'Mullvad account number must be 6-16 digits.'),
+  accountNumber: z
+    .string()
+    .trim()
+    .regex(/^\d{6,16}$/, 'Mullvad account number must be 6-16 digits.'),
   deviceName: nonEmptyString.optional(),
   lastProvisionedAt: timestampString.nullable(),
   relayConstraints: z.object({

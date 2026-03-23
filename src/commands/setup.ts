@@ -1,7 +1,11 @@
 import type { Command } from 'commander';
-
+import {
+  type RawSetupInputValues,
+  type RunSetupFlowOptions,
+  runSetupFlow,
+  type SetupFlowResult,
+} from '../app/setup-runner.js';
 import { ConfigStore } from '../config/store.js';
-import { runSetupFlow, type RawSetupInputValues, type RunSetupFlowOptions, type SetupFlowResult } from '../app/setup-runner.js';
 
 const ACCOUNT_NUMBER_ENV = 'MULLGATE_ACCOUNT_NUMBER';
 const PROXY_PASSWORD_ENV = 'MULLGATE_PROXY_PASSWORD';
@@ -44,8 +48,13 @@ type SetupCommandOptions = {
 export function registerSetupCommand(program: Command): void {
   program
     .command('setup')
-    .description('Run the guided Mullvad-backed setup flow and persist config plus derived runtime artifacts.')
-    .option(`--account-number <digits>`, `Override ${ACCOUNT_NUMBER_ENV} or prompt for the Mullvad account number.`)
+    .description(
+      'Run the guided Mullvad-backed setup flow and persist config plus derived runtime artifacts.',
+    )
+    .option(
+      `--account-number <digits>`,
+      `Override ${ACCOUNT_NUMBER_ENV} or prompt for the Mullvad account number.`,
+    )
     .option(`--bind-host <host>`, `Override ${BIND_HOST_ENV} or prompt for the bind host.`)
     .option(
       `--route-bind-ip <ip>`,
@@ -53,23 +62,41 @@ export function registerSetupCommand(program: Command): void {
       collectLocationOption,
       [],
     )
-    .option(`--exposure-mode <mode>`, `Override ${EXPOSURE_MODE_ENV} with loopback, private-network, or public.`)
-    .option(`--base-domain <domain>`, `Override ${EXPOSURE_DOMAIN_ENV} for derived route hostnames like route.example.com.`)
+    .option(
+      `--exposure-mode <mode>`,
+      `Override ${EXPOSURE_MODE_ENV} with loopback, private-network, or public.`,
+    )
+    .option(
+      `--base-domain <domain>`,
+      `Override ${EXPOSURE_DOMAIN_ENV} for derived route hostnames like route.example.com.`,
+    )
     .option(`--socks-port <port>`, `Override ${SOCKS_PORT_ENV} or prompt for the SOCKS5 port.`)
     .option(`--http-port <port>`, `Override ${HTTP_PORT_ENV} or prompt for the HTTP port.`)
     .option(`--https-port <port>`, `Override ${HTTPS_PORT_ENV} for optional HTTPS proxy support.`)
     .option(`--username <name>`, `Override ${PROXY_USERNAME_ENV} or prompt for the proxy username.`)
-    .option(`--password <secret>`, `Override ${PROXY_PASSWORD_ENV} or prompt for the proxy password.`)
+    .option(
+      `--password <secret>`,
+      `Override ${PROXY_PASSWORD_ENV} or prompt for the proxy password.`,
+    )
     .option(
       `--location <alias>`,
       `Append a routed Mullvad location alias. Repeat or comma-separate values for multiple routes. ${LOCATION_ENV} stays shorthand for route 1; ${LOCATIONS_ENV} accepts a comma-separated ordered list.`,
       collectLocationOption,
       [],
     )
-    .option(`--https-cert-path <path>`, `Override ${HTTPS_CERT_ENV} for optional HTTPS certificate validation.`)
-    .option(`--https-key-path <path>`, `Override ${HTTPS_KEY_ENV} for optional HTTPS key validation.`)
+    .option(
+      `--https-cert-path <path>`,
+      `Override ${HTTPS_CERT_ENV} for optional HTTPS certificate validation.`,
+    )
+    .option(
+      `--https-key-path <path>`,
+      `Override ${HTTPS_KEY_ENV} for optional HTTPS key validation.`,
+    )
     .option(`--device-name <name>`, `Override ${DEVICE_NAME_ENV} for the Mullvad device label.`)
-    .option('--non-interactive', 'Fail instead of prompting when required setup values are missing.')
+    .option(
+      '--non-interactive',
+      'Fail instead of prompting when required setup values are missing.',
+    )
     .option(`--mullvad-wg-url <url>`, `Override ${PROVISIONING_URL_ENV} for provisioning.`)
     .option(`--mullvad-relays-url <url>`, `Override ${RELAYS_URL_ENV} for relay metadata.`)
     .action(async (options: SetupCommandOptions) => {
@@ -80,12 +107,20 @@ export function registerSetupCommand(program: Command): void {
     });
 }
 
-function buildRunOptions(options: SetupCommandOptions, env: NodeJS.ProcessEnv, store: ConfigStore): RunSetupFlowOptions {
+function buildRunOptions(
+  options: SetupCommandOptions,
+  env: NodeJS.ProcessEnv,
+  store: ConfigStore,
+): RunSetupFlowOptions {
   const configuredLocations = readLocationInputs(options.location, env);
   const configuredRouteBindIps = readRouteBindIpInputs(options.routeBindIp, env);
   const initialValues: Partial<RawSetupInputValues> = {
-    ...(readOptionalString(options.accountNumber ?? env[ACCOUNT_NUMBER_ENV]) ? { accountNumber: readOptionalString(options.accountNumber ?? env[ACCOUNT_NUMBER_ENV]) } : {}),
-    ...(readOptionalString(options.bindHost ?? env[BIND_HOST_ENV]) ? { bindHost: readOptionalString(options.bindHost ?? env[BIND_HOST_ENV]) } : {}),
+    ...(readOptionalString(options.accountNumber ?? env[ACCOUNT_NUMBER_ENV])
+      ? { accountNumber: readOptionalString(options.accountNumber ?? env[ACCOUNT_NUMBER_ENV]) }
+      : {}),
+    ...(readOptionalString(options.bindHost ?? env[BIND_HOST_ENV])
+      ? { bindHost: readOptionalString(options.bindHost ?? env[BIND_HOST_ENV]) }
+      : {}),
     ...(configuredRouteBindIps.length > 0 ? { routeBindIps: configuredRouteBindIps } : {}),
     ...(readOptionalExposureMode(options.exposureMode ?? env[EXPOSURE_MODE_ENV])
       ? { exposureMode: readOptionalExposureMode(options.exposureMode ?? env[EXPOSURE_MODE_ENV]) }
@@ -102,10 +137,17 @@ function buildRunOptions(options: SetupCommandOptions, env: NodeJS.ProcessEnv, s
     ...(readOptionalNumber(options.httpsPort ?? env[HTTPS_PORT_ENV]) !== undefined
       ? { httpsPort: readOptionalNumber(options.httpsPort ?? env[HTTPS_PORT_ENV]) }
       : {}),
-    ...(readOptionalString(options.username ?? env[PROXY_USERNAME_ENV]) ? { username: readOptionalString(options.username ?? env[PROXY_USERNAME_ENV]) } : {}),
-    ...(readOptionalString(options.password ?? env[PROXY_PASSWORD_ENV]) ? { password: readOptionalString(options.password ?? env[PROXY_PASSWORD_ENV]) } : {}),
+    ...(readOptionalString(options.username ?? env[PROXY_USERNAME_ENV])
+      ? { username: readOptionalString(options.username ?? env[PROXY_USERNAME_ENV]) }
+      : {}),
+    ...(readOptionalString(options.password ?? env[PROXY_PASSWORD_ENV])
+      ? { password: readOptionalString(options.password ?? env[PROXY_PASSWORD_ENV]) }
+      : {}),
     ...(configuredLocations.length > 0
-      ? { locations: configuredLocations as [string, ...string[]], location: configuredLocations[0] }
+      ? {
+          locations: configuredLocations as [string, ...string[]],
+          location: configuredLocations[0],
+        }
       : {}),
     ...(readOptionalString(options.httpsCertPath ?? env[HTTPS_CERT_ENV])
       ? { httpsCertPath: readOptionalString(options.httpsCertPath ?? env[HTTPS_CERT_ENV]) }
@@ -113,7 +155,9 @@ function buildRunOptions(options: SetupCommandOptions, env: NodeJS.ProcessEnv, s
     ...(readOptionalString(options.httpsKeyPath ?? env[HTTPS_KEY_ENV])
       ? { httpsKeyPath: readOptionalString(options.httpsKeyPath ?? env[HTTPS_KEY_ENV]) }
       : {}),
-    ...(readOptionalString(options.deviceName ?? env[DEVICE_NAME_ENV]) ? { deviceName: readOptionalString(options.deviceName ?? env[DEVICE_NAME_ENV]) } : {}),
+    ...(readOptionalString(options.deviceName ?? env[DEVICE_NAME_ENV])
+      ? { deviceName: readOptionalString(options.deviceName ?? env[DEVICE_NAME_ENV]) }
+      : {}),
   };
 
   return {
@@ -121,7 +165,11 @@ function buildRunOptions(options: SetupCommandOptions, env: NodeJS.ProcessEnv, s
     initialValues,
     interactive: !options.nonInteractive,
     ...(readOptionalString(options.mullvadWgUrl ?? env[PROVISIONING_URL_ENV])
-      ? { provisioningBaseUrl: readOptionalString(options.mullvadWgUrl ?? env[PROVISIONING_URL_ENV]) }
+      ? {
+          provisioningBaseUrl: readOptionalString(
+            options.mullvadWgUrl ?? env[PROVISIONING_URL_ENV],
+          ),
+        }
       : {}),
     ...(readOptionalString(options.mullvadRelaysUrl ?? env[RELAYS_URL_ENV])
       ? { relayCatalogUrl: readOptionalString(options.mullvadRelaysUrl ?? env[RELAYS_URL_ENV]) }
@@ -150,7 +198,9 @@ function writeSetupResult(result: SetupFlowResult): void {
           `device: ${result.route.deviceName}`,
         ]
       : []),
-    ...('artifactPath' in result && result.artifactPath ? [`artifact: ${result.artifactPath}`] : []),
+    ...('artifactPath' in result && result.artifactPath
+      ? [`artifact: ${result.artifactPath}`]
+      : []),
     ...('endpoint' in result && result.endpoint ? [`endpoint: ${result.endpoint}`] : []),
     `reason: ${result.message}`,
     ...(result.cancelled ? [] : [`config: ${result.paths.configFile}`]),
@@ -164,7 +214,10 @@ function collectLocationOption(value: string, previous: string[] = []): string[]
   return [...previous, ...parseLocationEntries(value)];
 }
 
-function readLocationInputs(cliValues: readonly string[] | undefined, env: NodeJS.ProcessEnv): string[] {
+function readLocationInputs(
+  cliValues: readonly string[] | undefined,
+  env: NodeJS.ProcessEnv,
+): string[] {
   const cliLocations = (cliValues ?? []).flatMap((value) => parseLocationEntries(value));
 
   if (cliLocations.length > 0) {
@@ -180,7 +233,10 @@ function readLocationInputs(cliValues: readonly string[] | undefined, env: NodeJ
   return parseLocationEntries(env[LOCATION_ENV]);
 }
 
-function readRouteBindIpInputs(cliValues: readonly string[] | undefined, env: NodeJS.ProcessEnv): string[] {
+function readRouteBindIpInputs(
+  cliValues: readonly string[] | undefined,
+  env: NodeJS.ProcessEnv,
+): string[] {
   const cliBindIps = (cliValues ?? []).flatMap((value) => parseLocationEntries(value));
 
   if (cliBindIps.length > 0) {
@@ -202,7 +258,9 @@ function readOptionalString(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function readOptionalExposureMode(value: string | undefined): RawSetupInputValues['exposureMode'] | undefined {
+function readOptionalExposureMode(
+  value: string | undefined,
+): RawSetupInputValues['exposureMode'] | undefined {
   const trimmed = value?.trim();
 
   if (trimmed === 'loopback' || trimmed === 'private-network' || trimmed === 'public') {

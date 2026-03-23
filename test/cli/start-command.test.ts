@@ -7,8 +7,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createStartCommandAction } from '../../src/commands/start.js';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
+import {
+  CONFIG_VERSION,
+  type MullgateConfig,
+  type RuntimeStartDiagnostic,
+} from '../../src/config/schema.js';
 import { ConfigStore } from '../../src/config/store.js';
-import { CONFIG_VERSION, type MullgateConfig, type RuntimeStartDiagnostic } from '../../src/config/schema.js';
 import { normalizeRelayPayload } from '../../src/mullvad/fetch-relays.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
@@ -236,7 +240,10 @@ async function createFakeWireproxyBinary(root: string): Promise<string> {
   return binaryPath;
 }
 
-async function seedSavedConfig(env: NodeJS.ProcessEnv, configure?: (config: MullgateConfig) => MullgateConfig): Promise<ConfigStore> {
+async function seedSavedConfig(
+  env: NodeJS.ProcessEnv,
+  configure?: (config: MullgateConfig) => MullgateConfig,
+): Promise<ConfigStore> {
   const paths = resolveMullgatePaths(env);
   const store = new ConfigStore(paths);
   const config = configure ? configure(createFixtureConfig(env)) : createFixtureConfig(env);
@@ -252,14 +259,26 @@ async function seedSavedConfig(env: NodeJS.ProcessEnv, configure?: (config: Mull
 
   await store.save(config);
   await mkdir(path.dirname(paths.provisioningCacheFile), { recursive: true, mode: 0o700 });
-  await writeFile(paths.provisioningCacheFile, `${JSON.stringify(normalizedCatalog.value, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(
+    paths.provisioningCacheFile,
+    `${JSON.stringify(normalizedCatalog.value, null, 2)}\n`,
+    { mode: 0o600 },
+  );
   await mkdir(path.dirname(config.setup.https.certPath!), { recursive: true, mode: 0o700 });
-  await writeFile(config.setup.https.certPath!, '-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n', {
-    mode: 0o600,
-  });
-  await writeFile(config.setup.https.keyPath!, '-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----\n', {
-    mode: 0o600,
-  });
+  await writeFile(
+    config.setup.https.certPath!,
+    '-----BEGIN CERTIFICATE-----\nfixture\n-----END CERTIFICATE-----\n',
+    {
+      mode: 0o600,
+    },
+  );
+  await writeFile(
+    config.setup.https.keyPath!,
+    '-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----\n',
+    {
+      mode: 0o600,
+    },
+  );
 
   return store;
 }
@@ -274,7 +293,11 @@ function normalizeReport(report: RuntimeStartDiagnostic, env: NodeJS.ProcessEnv)
 
 afterEach(async () => {
   process.exitCode = 0;
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
 });
 
 describe('mullgate start command', () => {
@@ -315,7 +338,8 @@ describe('mullgate start command', () => {
             rendered: `docker compose --file ${options.composeFilePath} up --detach`,
           },
           message: 'Docker Compose launched the Mullgate runtime bundle in detached mode.',
-          stdout: 'Container mullgate-routing-layer-1  Started\nContainer mullgate-wireproxy-se-got-wg-101-1  Started\nContainer mullgate-wireproxy-at-vie-wg-001-1  Started\n',
+          stdout:
+            'Container mullgate-routing-layer-1  Started\nContainer mullgate-wireproxy-se-got-wg-101-1  Started\nContainer mullgate-wireproxy-at-vie-wg-001-1  Started\n',
           stderr: '',
         };
       },
@@ -335,12 +359,22 @@ describe('mullgate start command', () => {
     }
 
     const savedConfig = savedConfigResult.config;
-    const persistedReport = JSON.parse(await readFile(paths.runtimeStartDiagnosticsFile, 'utf8')) as RuntimeStartDiagnostic;
+    const persistedReport = JSON.parse(
+      await readFile(paths.runtimeStartDiagnosticsFile, 'utf8'),
+    ) as RuntimeStartDiagnostic;
     const renderedPrimaryWireproxyConfig = await readFile(paths.wireproxyConfigFile, 'utf8');
-    const renderedRouteOneConfig = await readFile(path.join(paths.runtimeDir, 'wireproxy-se-got-wg-101.conf'), 'utf8');
-    const renderedRouteTwoConfig = await readFile(path.join(paths.runtimeDir, 'wireproxy-at-vie-wg-001.conf'), 'utf8');
+    const renderedRouteOneConfig = await readFile(
+      path.join(paths.runtimeDir, 'wireproxy-se-got-wg-101.conf'),
+      'utf8',
+    );
+    const renderedRouteTwoConfig = await readFile(
+      path.join(paths.runtimeDir, 'wireproxy-at-vie-wg-001.conf'),
+      'utf8',
+    );
     const renderedCompose = await readFile(paths.runtimeComposeFile, 'utf8');
-    const renderedManifest = JSON.parse(await readFile(paths.runtimeBundleManifestFile, 'utf8')) as { routes: Array<{ routeId: string }> };
+    const renderedManifest = JSON.parse(
+      await readFile(paths.runtimeBundleManifestFile, 'utf8'),
+    ) as { routes: Array<{ routeId: string }> };
 
     expect(renderedPrimaryWireproxyConfig).not.toContain('# stale wireproxy artifact');
     expect(renderedPrimaryWireproxyConfig).toContain('Password = proxy-password');
@@ -349,14 +383,17 @@ describe('mullgate start command', () => {
     expect(renderedCompose).not.toContain('# stale compose artifact');
     expect(renderedCompose).toContain('routing-layer');
     expect(renderedCompose).toContain('wireproxy-at-vie-wg-001');
-    expect(renderedManifest.routes.map((route) => route.routeId)).toEqual(['se-got-wg-101', 'at-vie-wg-001']);
+    expect(renderedManifest.routes.map((route) => route.routeId)).toEqual([
+      'se-got-wg-101',
+      'at-vie-wg-001',
+    ]);
     expect(savedConfig.runtime.status).toMatchObject({
       phase: 'running',
       lastCheckedAt: '2026-03-21T01:00:00.000Z',
       message: 'Runtime started via docker-compose using wireproxy-binary/configtest (2 routes).',
     });
     expect(savedConfig.diagnostics.lastRuntimeStart).toEqual(persistedReport);
-    expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate runtime started.
       phase: compose-launch
@@ -396,23 +433,23 @@ describe('mullgate start command', () => {
       - info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
       runtime status: running"
     `);
-    expect('\n' + normalizeReport(persistedReport, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeReport(persistedReport, env)}`).toMatchInlineSnapshot(`
 "\n{
-  \"attemptedAt\": \"2026-03-21T01:00:00.000Z\",
-  \"status\": \"success\",
-  \"phase\": \"compose-launch\",
-  \"source\": \"docker-compose\",
-  \"code\": null,
-  \"message\": \"Docker Compose launched the Mullgate runtime bundle in detached mode.\",
-  \"cause\": null,
-  \"artifactPath\": \"/tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml\",
-  \"composeFilePath\": \"/tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml\",
-  \"validationSource\": \"wireproxy-binary/configtest (2 routes)\",
-  \"routeId\": null,
-  \"routeHostname\": null,
-  \"routeBindIp\": null,
-  \"serviceName\": null,
-  \"command\": \"docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach\"
+  "attemptedAt": "2026-03-21T01:00:00.000Z",
+  "status": "success",
+  "phase": "compose-launch",
+  "source": "docker-compose",
+  "code": null,
+  "message": "Docker Compose launched the Mullgate runtime bundle in detached mode.",
+  "cause": null,
+  "artifactPath": "/tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml",
+  "composeFilePath": "/tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml",
+  "validationSource": "wireproxy-binary/configtest (2 routes)",
+  "routeId": null,
+  "routeHostname": null,
+  "routeBindIp": null,
+  "serviceName": null,
+  "command": "docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach"
 }"
 `);
   });
@@ -431,7 +468,8 @@ describe('mullgate start command', () => {
       updated.runtime.status = {
         phase: 'unvalidated',
         lastCheckedAt: null,
-        message: 'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+        message:
+          'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
       };
       updated.routing.locations = [
         {
@@ -468,7 +506,8 @@ describe('mullgate start command', () => {
           rendered: `docker compose --file ${options.composeFilePath} up --detach`,
         },
         message: 'Docker Compose launched the Mullgate runtime bundle in detached mode.',
-        stdout: 'Container mullgate-routing-layer-1  Started\nContainer mullgate-wireproxy-sweden-gothenburg-1  Started\n',
+        stdout:
+          'Container mullgate-routing-layer-1  Started\nContainer mullgate-wireproxy-sweden-gothenburg-1  Started\n',
         stderr: '',
       }),
     });
@@ -479,7 +518,7 @@ describe('mullgate start command', () => {
     expect(stderr.value.current).toBe('');
     expect(stdout.value.current).not.toContain('proxy-password');
     expect(stdout.value.current).not.toContain('alice');
-    expect('\n' + normalizeOutput(stdout.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate runtime started.
       phase: compose-launch
@@ -513,8 +552,14 @@ describe('mullgate start command', () => {
       runtime status: running"
     `);
 
-    const manifest = JSON.parse(await readFile(paths.runtimeBundleManifestFile, 'utf8')) as { exposure: { warnings: Array<{ code: string }> } };
-    expect(manifest.exposure.warnings.map((warning) => warning.code)).toEqual(['DNS_REQUIRED', 'PUBLIC_EXPOSURE', 'SINGLE_ROUTE']);
+    const manifest = JSON.parse(await readFile(paths.runtimeBundleManifestFile, 'utf8')) as {
+      exposure: { warnings: Array<{ code: string }> };
+    };
+    expect(manifest.exposure.warnings.map((warning) => warning.code)).toEqual([
+      'DNS_REQUIRED',
+      'PUBLIC_EXPOSURE',
+      'SINGLE_ROUTE',
+    ]);
   });
 
   it('persists secret-safe route-aware compose failure diagnostics with phase, source, code, and validation metadata', async () => {
@@ -571,7 +616,9 @@ describe('mullgate start command', () => {
     }
 
     const savedConfig = savedConfigResult.config;
-    const persistedReport = JSON.parse(await readFile(paths.runtimeStartDiagnosticsFile, 'utf8')) as RuntimeStartDiagnostic;
+    const persistedReport = JSON.parse(
+      await readFile(paths.runtimeStartDiagnosticsFile, 'utf8'),
+    ) as RuntimeStartDiagnostic;
 
     expect(savedConfig.runtime.status).toMatchObject({
       phase: 'error',
@@ -587,7 +634,7 @@ describe('mullgate start command', () => {
     expect(savedConfig.diagnostics.lastRuntimeStart?.cause).not.toContain('proxy-password');
     expect(savedConfig.diagnostics.lastRuntimeStart?.cause).not.toContain('123456789012');
     expect(savedConfig.diagnostics.lastRuntimeStart?.cause).not.toContain('private-key-value-2');
-    expect('\n' + normalizeOutput(stderr.value.current, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
 "\nMullgate start failed.
 phase: compose-launch
 source: docker-compose
@@ -607,23 +654,23 @@ validation: wireproxy-binary/configtest (2 routes)
 start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json
 runtime status: error"
 `);
-    expect('\n' + normalizeReport(persistedReport, env)).toMatchInlineSnapshot(`
+    expect(`\n${normalizeReport(persistedReport, env)}`).toMatchInlineSnapshot(`
 "\n{
-  \"attemptedAt\": \"2026-03-21T01:05:00.000Z\",
-  \"status\": \"failure\",
-  \"phase\": \"compose-launch\",
-  \"source\": \"docker-compose\",
-  \"code\": \"COMPOSE_UP_FAILED\",
-  \"message\": \"Docker Compose failed to start the Mullgate runtime bundle.\",
-  \"cause\": \"service wireproxy-at-vie-wg-001 crashed for [redacted] / [redacted] / [redacted] while reading [redacted]\",
-  \"artifactPath\": \"/tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml\",
-  \"composeFilePath\": \"/tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml\",
-  \"validationSource\": \"wireproxy-binary/configtest (2 routes)\",
-  \"routeId\": \"at-vie-wg-001\",
-  \"routeHostname\": \"at-vie-wg-001\",
-  \"routeBindIp\": \"127.0.0.2\",
-  \"serviceName\": \"wireproxy-at-vie-wg-001\",
-  \"command\": \"docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach\"
+  "attemptedAt": "2026-03-21T01:05:00.000Z",
+  "status": "failure",
+  "phase": "compose-launch",
+  "source": "docker-compose",
+  "code": "COMPOSE_UP_FAILED",
+  "message": "Docker Compose failed to start the Mullgate runtime bundle.",
+  "cause": "service wireproxy-at-vie-wg-001 crashed for [redacted] / [redacted] / [redacted] while reading [redacted]",
+  "artifactPath": "/tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml",
+  "composeFilePath": "/tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml",
+  "validationSource": "wireproxy-binary/configtest (2 routes)",
+  "routeId": "at-vie-wg-001",
+  "routeHostname": "at-vie-wg-001",
+  "routeBindIp": "127.0.0.2",
+  "serviceName": "wireproxy-at-vie-wg-001",
+  "command": "docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach"
 }"
 `);
   });

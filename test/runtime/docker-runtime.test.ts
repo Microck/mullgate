@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  queryDockerComposeStatus,
-  startDockerRuntime,
   type ProcessExecution,
   type ProcessRunner,
+  queryDockerComposeStatus,
+  startDockerRuntime,
 } from '../../src/runtime/docker-runtime.js';
 
 function createQueuedRunner(steps: ProcessExecution[]): ProcessRunner {
@@ -23,7 +23,9 @@ function createQueuedRunner(steps: ProcessExecution[]): ProcessRunner {
 
 describe('startDockerRuntime', () => {
   it('classifies a missing Docker binary before attempting compose up', async () => {
-    const missingDockerError = Object.assign(new Error('spawn docker ENOENT'), { code: 'ENOENT' }) as NodeJS.ErrnoException;
+    const missingDockerError = Object.assign(new Error('spawn docker ENOENT'), {
+      code: 'ENOENT',
+    }) as NodeJS.ErrnoException;
 
     const result = await startDockerRuntime({
       composeFilePath: '/tmp/mullgate/runtime/docker-compose.yml',
@@ -51,7 +53,8 @@ describe('startDockerRuntime', () => {
         cwd: '/tmp/mullgate/runtime',
         rendered: 'docker compose version',
       },
-      message: 'Docker CLI is not installed or is not on PATH, so Mullgate cannot launch the runtime bundle.',
+      message:
+        'Docker CLI is not installed or is not on PATH, so Mullgate cannot launch the runtime bundle.',
       cause: 'spawn docker ENOENT',
       artifactPath: '/tmp/mullgate/runtime/docker-compose.yml',
     });
@@ -83,7 +86,8 @@ describe('startDockerRuntime', () => {
         cwd: '/tmp/mullgate/runtime',
         rendered: 'docker compose version',
       },
-      message: 'Docker is installed but `docker compose` is unavailable, so Mullgate cannot launch the runtime bundle.',
+      message:
+        'Docker is installed but `docker compose` is unavailable, so Mullgate cannot launch the runtime bundle.',
       cause: "docker: 'compose' is not a docker command.",
       artifactPath: '/tmp/mullgate/runtime/docker-compose.yml',
       exitCode: 1,
@@ -140,7 +144,8 @@ describe('startDockerRuntime', () => {
         },
         {
           exitCode: 0,
-          stdout: 'Container mullgate-wireproxy-1  Started\nContainer mullgate-https-sidecar-1  Started\n',
+          stdout:
+            'Container mullgate-wireproxy-1  Started\nContainer mullgate-https-sidecar-1  Started\n',
           stderr: '',
         },
       ]),
@@ -159,7 +164,8 @@ describe('startDockerRuntime', () => {
         rendered: 'docker compose --file /tmp/mullgate/runtime/docker-compose.yml up --detach',
       },
       message: 'Docker Compose launched the Mullgate runtime bundle in detached mode.',
-      stdout: 'Container mullgate-wireproxy-1  Started\nContainer mullgate-https-sidecar-1  Started\n',
+      stdout:
+        'Container mullgate-wireproxy-1  Started\nContainer mullgate-https-sidecar-1  Started\n',
       stderr: '',
     });
   });
@@ -167,7 +173,9 @@ describe('startDockerRuntime', () => {
 
 describe('queryDockerComposeStatus', () => {
   it('classifies a missing Docker binary before attempting compose ps', async () => {
-    const missingDockerError = Object.assign(new Error('spawn docker ENOENT'), { code: 'ENOENT' }) as NodeJS.ErrnoException;
+    const missingDockerError = Object.assign(new Error('spawn docker ENOENT'), {
+      code: 'ENOENT',
+    }) as NodeJS.ErrnoException;
 
     const result = await queryDockerComposeStatus({
       composeFilePath: '/tmp/mullgate/runtime/docker-compose.yml',
@@ -195,7 +203,8 @@ describe('queryDockerComposeStatus', () => {
         cwd: '/tmp/mullgate/runtime',
         rendered: 'docker compose version',
       },
-      message: 'Docker CLI is not installed or is not on PATH, so Mullgate cannot inspect the runtime bundle.',
+      message:
+        'Docker CLI is not installed or is not on PATH, so Mullgate cannot inspect the runtime bundle.',
       cause: 'spawn docker ENOENT',
       artifactPath: '/tmp/mullgate/runtime/docker-compose.yml',
     });
@@ -254,9 +263,18 @@ describe('queryDockerComposeStatus', () => {
       composeFilePath: '/tmp/mullgate/runtime/docker-compose.yml',
       command: {
         binary: 'docker',
-        args: ['compose', '--file', '/tmp/mullgate/runtime/docker-compose.yml', 'ps', '--all', '--format', 'json'],
+        args: [
+          'compose',
+          '--file',
+          '/tmp/mullgate/runtime/docker-compose.yml',
+          'ps',
+          '--all',
+          '--format',
+          'json',
+        ],
         cwd: '/tmp/mullgate/runtime',
-        rendered: 'docker compose --file /tmp/mullgate/runtime/docker-compose.yml ps --all --format json',
+        rendered:
+          'docker compose --file /tmp/mullgate/runtime/docker-compose.yml ps --all --format json',
       },
       message: 'Docker Compose reported 3 Mullgate container(s) from typed JSON status.',
       project: 'mullgate',
@@ -330,11 +348,21 @@ describe('queryDockerComposeStatus', () => {
       composeFilePath: '/tmp/mullgate/runtime/docker-compose.yml',
       command: {
         binary: 'docker',
-        args: ['compose', '--file', '/tmp/mullgate/runtime/docker-compose.yml', 'ps', '--all', '--format', 'json'],
+        args: [
+          'compose',
+          '--file',
+          '/tmp/mullgate/runtime/docker-compose.yml',
+          'ps',
+          '--all',
+          '--format',
+          'json',
+        ],
         cwd: '/tmp/mullgate/runtime',
-        rendered: 'docker compose --file /tmp/mullgate/runtime/docker-compose.yml ps --all --format json',
+        rendered:
+          'docker compose --file /tmp/mullgate/runtime/docker-compose.yml ps --all --format json',
       },
-      message: 'Docker Compose returned runtime status that Mullgate could not parse as typed JSON.',
+      message:
+        'Docker Compose returned runtime status that Mullgate could not parse as typed JSON.',
       cause: expect.stringContaining('Unexpected token'),
       artifactPath: '/tmp/mullgate/runtime/docker-compose.yml',
     });

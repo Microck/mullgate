@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 
+import { spawn } from 'node:child_process';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
-const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
+const _tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
 
 type InstallPathOptions = {
   readonly checkOnly: boolean;
@@ -35,12 +35,16 @@ async function main(): Promise<void> {
     const buildResult = await runShellCommand('pnpm build');
     assertSuccess(buildResult);
 
-    const packResult = await runShellCommand(`pnpm pack --pack-destination ${shellEscape(packDir)}`);
+    const packResult = await runShellCommand(
+      `pnpm pack --pack-destination ${shellEscape(packDir)}`,
+    );
     assertSuccess(packResult);
 
     const packFiles = await readdir(packDir);
     if (packFiles.length !== 1) {
-      throw new Error(`Expected exactly one packed tarball in ${packDir}, found ${packFiles.length}.`);
+      throw new Error(
+        `Expected exactly one packed tarball in ${packDir}, found ${packFiles.length}.`,
+      );
     }
 
     const tarballPath = path.join(packDir, packFiles[0]!);
@@ -48,7 +52,9 @@ async function main(): Promise<void> {
     assertSuccess(tarListResult);
     assertCleanTarball(tarListResult.stdout);
 
-    const installResult = await runShellCommand(`npm install -g --prefix ${shellEscape(prefixDir)} ${shellEscape(tarballPath)}`);
+    const installResult = await runShellCommand(
+      `npm install -g --prefix ${shellEscape(prefixDir)} ${shellEscape(tarballPath)}`,
+    );
     assertSuccess(installResult);
 
     const installedCliPath = path.join(prefixDir, 'bin', 'mullgate');
@@ -56,17 +62,21 @@ async function main(): Promise<void> {
     assertSuccess(helpResult);
 
     if (!helpResult.stdout.includes('Usage: mullgate [options] [command]')) {
-      throw new Error('Installed CLI help output drifted away from the expected top-level usage contract.');
+      throw new Error(
+        'Installed CLI help output drifted away from the expected top-level usage contract.',
+      );
     }
 
-    process.stdout.write([
-      'M003 install-path verification passed.',
-      `- tarball: ${tarballPath}`,
-      `- installed cli: ${installedCliPath}`,
-      '- package contents: clean',
-      '- installed mullgate help: ok',
-      ...(options.checkOnly ? ['- mode: check-only'] : []),
-    ].join('\n') + '\n');
+    process.stdout.write(
+      `${[
+        'M003 install-path verification passed.',
+        `- tarball: ${tarballPath}`,
+        `- installed cli: ${installedCliPath}`,
+        '- package contents: clean',
+        '- installed mullgate help: ok',
+        ...(options.checkOnly ? ['- mode: check-only'] : []),
+      ].join('\n')}\n`,
+    );
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -126,13 +136,17 @@ function assertCleanTarball(stdout: string): void {
     'package/node_modules/',
   ];
 
-  const offending = lines.filter((line) => forbiddenPrefixes.some((prefix) => line.startsWith(prefix)));
+  const offending = lines.filter((line) =>
+    forbiddenPrefixes.some((prefix) => line.startsWith(prefix)),
+  );
 
   if (offending.length > 0) {
-    throw new Error([
-      'Packed tarball contains files that do not belong in the supported distribution artifact.',
-      ...offending.slice(0, 20).map((line) => `- ${line}`),
-    ].join('\n'));
+    throw new Error(
+      [
+        'Packed tarball contains files that do not belong in the supported distribution artifact.',
+        ...offending.slice(0, 20).map((line) => `- ${line}`),
+      ].join('\n'),
+    );
   }
 
   if (!lines.includes('package/dist/cli.js')) {
@@ -145,12 +159,14 @@ function assertSuccess(result: CommandResult): void {
     return;
   }
 
-  throw new Error([
-    `Install-path check failed: ${result.command}`,
-    `exit code: ${result.exitCode}`,
-    `stdout:\n${result.stdout || '<empty>'}`,
-    `stderr:\n${result.stderr || '<empty>'}`,
-  ].join('\n'));
+  throw new Error(
+    [
+      `Install-path check failed: ${result.command}`,
+      `exit code: ${result.exitCode}`,
+      `stdout:\n${result.stdout || '<empty>'}`,
+      `stderr:\n${result.stderr || '<empty>'}`,
+    ].join('\n'),
+  );
 }
 
 async function runShellCommand(command: string): Promise<CommandResult> {

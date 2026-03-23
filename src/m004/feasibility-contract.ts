@@ -146,7 +146,9 @@ export type FeasibilityRelaySelectionFailure = {
   readonly message: string;
 };
 
-export type FeasibilityRelaySelectionResult = FeasibilityRelaySelectionSuccess | FeasibilityRelaySelectionFailure;
+export type FeasibilityRelaySelectionResult =
+  | FeasibilityRelaySelectionSuccess
+  | FeasibilityRelaySelectionFailure;
 
 export type FeasibilitySummary = {
   readonly requestedLogicalExitCount: number;
@@ -232,12 +234,20 @@ export function createEntryIdentityFromRelay(options: {
   };
 }
 
-export function selectFeasibilityExitRelays(options: SelectFeasibilityExitRelaysOptions): FeasibilityRelaySelectionResult {
+export function selectFeasibilityExitRelays(
+  options: SelectFeasibilityExitRelaysOptions,
+): FeasibilityRelaySelectionResult {
   const logicalExitIdPrefix = options.logicalExitIdPrefix ?? 'exit';
   const socksCapableRelays = options.catalog.relays.filter((relay) => isSocksCapableRelay(relay));
-  const missingMetadataCount = options.catalog.relays.filter((relay) => relay.active && !isSocksCapableRelay(relay)).length;
-  const preferredRelays = socksCapableRelays.filter((relay) => relay.hostname !== options.entryRelayHostname);
-  const entryRelayFallbacks = socksCapableRelays.filter((relay) => relay.hostname === options.entryRelayHostname);
+  const missingMetadataCount = options.catalog.relays.filter(
+    (relay) => relay.active && !isSocksCapableRelay(relay),
+  ).length;
+  const preferredRelays = socksCapableRelays.filter(
+    (relay) => relay.hostname !== options.entryRelayHostname,
+  );
+  const entryRelayFallbacks = socksCapableRelays.filter(
+    (relay) => relay.hostname === options.entryRelayHostname,
+  );
 
   const selectedRelays = selectDistinctRelays({
     preferredRelays,
@@ -282,7 +292,9 @@ export function selectFeasibilityExitRelays(options: SelectFeasibilityExitRelays
   };
 }
 
-export function createFeasibilityArtifact(options: CreateFeasibilityArtifactOptions): FeasibilityArtifact {
+export function createFeasibilityArtifact(
+  options: CreateFeasibilityArtifactOptions,
+): FeasibilityArtifact {
   const prerequisiteFailures = [...(options.prerequisiteFailures ?? [])];
   const routeCheck = createRouteCheck(options.routeCheck);
   const summary = summarizeFeasibility({
@@ -320,12 +332,18 @@ export function serializeFeasibilityArtifact(options: SerializeFeasibilityArtifa
   return redactSecretStrings(serialized, secrets);
 }
 
-export function areHostRoutesEquivalent(left: HostRouteSnapshot | null, right: HostRouteSnapshot | null): boolean {
+export function areHostRoutesEquivalent(
+  left: HostRouteSnapshot | null,
+  right: HostRouteSnapshot | null,
+): boolean {
   if (!left || !right) {
     return false;
   }
 
-  return left.targetIp === right.targetIp && normalizeRouteSignature(left.normalizedRoute) === normalizeRouteSignature(right.normalizedRoute);
+  return (
+    left.targetIp === right.targetIp &&
+    normalizeRouteSignature(left.normalizedRoute) === normalizeRouteSignature(right.normalizedRoute)
+  );
 }
 
 function createRouteCheck(input: {
@@ -349,7 +367,7 @@ function summarizeFeasibility(input: {
   const distinctExitGroups = groupObservedExits(successfulProbes);
   const collapsedLogicalExitIds = [...distinctExitGroups.values()]
     .filter((logicalExitIds) => logicalExitIds.length > 1)
-    .flatMap((logicalExitIds) => logicalExitIds);
+    .flat();
 
   return {
     requestedLogicalExitCount: input.logicalExits.length,
@@ -368,13 +386,18 @@ function classifyFeasibilityVerdict(input: {
   readonly probes: readonly FeasibilityProbeObservation[];
   readonly summary: FeasibilitySummary;
 }): FeasibilityVerdict {
-  if (input.prerequisiteFailures.length > 0 || !input.routeCheck.before || !input.routeCheck.after) {
+  if (
+    input.prerequisiteFailures.length > 0 ||
+    !input.routeCheck.before ||
+    !input.routeCheck.after
+  ) {
     return {
       status: 'fail',
       reason: 'prerequisite-missing',
       phase: 'prerequisite-check',
       stopReason: 'prerequisite-missing',
-      summary: 'The feasibility verifier could not prove the topology because one or more prerequisites were missing.',
+      summary:
+        'The feasibility verifier could not prove the topology because one or more prerequisites were missing.',
     };
   }
 
@@ -384,7 +407,8 @@ function classifyFeasibilityVerdict(input: {
       reason: 'insufficient-socks-relay-metadata',
       phase: 'relay-selection',
       stopReason: 'insufficient-socks-relay-metadata',
-      summary: 'Mullvad relay metadata did not expose enough SOCKS-capable relays to drive the requested logical exits.',
+      summary:
+        'Mullvad relay metadata did not expose enough SOCKS-capable relays to drive the requested logical exits.',
     };
   }
 
@@ -394,7 +418,8 @@ function classifyFeasibilityVerdict(input: {
       reason: 'probe-failure',
       phase: 'probe-execution',
       stopReason: 'probe-failure',
-      summary: 'At least one logical exit probe failed before the verifier could compare distinct exits.',
+      summary:
+        'At least one logical exit probe failed before the verifier could compare distinct exits.',
     };
   }
 
@@ -404,17 +429,22 @@ function classifyFeasibilityVerdict(input: {
       reason: 'route-drift',
       phase: 'route-check',
       stopReason: 'route-drift',
-      summary: 'The host route baseline changed during the feasibility run, so the result cannot prove standalone proxy behavior.',
+      summary:
+        'The host route baseline changed during the feasibility run, so the result cannot prove standalone proxy behavior.',
     };
   }
 
-  if (input.summary.successfulProbeCount < 2 || input.summary.distinctObservedExitCount !== input.summary.successfulProbeCount) {
+  if (
+    input.summary.successfulProbeCount < 2 ||
+    input.summary.distinctObservedExitCount !== input.summary.successfulProbeCount
+  ) {
     return {
       status: 'fail',
       reason: 'collapsed-exits',
       phase: 'summary',
       stopReason: 'collapsed-exits',
-      summary: 'Two or more logical exits resolved to the same observed exit, so the shared-entry topology did not prove distinct exits.',
+      summary:
+        'Two or more logical exits resolved to the same observed exit, so the shared-entry topology did not prove distinct exits.',
     };
   }
 
@@ -423,7 +453,8 @@ function classifyFeasibilityVerdict(input: {
     reason: 'distinct-exits-confirmed',
     phase: 'summary',
     stopReason: 'distinct-exits-confirmed',
-    summary: 'The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged.',
+    summary:
+      'The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged.',
   };
 }
 
@@ -475,7 +506,12 @@ function selectDistinctRelays(input: {
 }
 
 function isSocksCapableRelay(relay: MullvadRelay): boolean {
-  return relay.active && typeof relay.socksName === 'string' && relay.socksName.length > 0 && typeof relay.socksPort === 'number';
+  return (
+    relay.active &&
+    typeof relay.socksName === 'string' &&
+    relay.socksName.length > 0 &&
+    typeof relay.socksPort === 'number'
+  );
 }
 
 function toRelayLocation(relay: Pick<MullvadRelay, 'location'>): FeasibilityRelayLocation {
@@ -510,7 +546,11 @@ function groupObservedExits(probes: readonly FeasibilityProbeSuccess[]): Map<str
 }
 
 function createObservedExitKey(observedExit: FeasibilityObservedExit): string {
-  return [observedExit.ip, observedExit.country.trim().toLowerCase(), observedExit.city.trim().toLowerCase()].join('|');
+  return [
+    observedExit.ip,
+    observedExit.country.trim().toLowerCase(),
+    observedExit.city.trim().toLowerCase(),
+  ].join('|');
 }
 
 function normalizeRouteSignature(value: string): string {
@@ -521,7 +561,9 @@ function collectFeasibilitySecrets(input: {
   readonly artifact: FeasibilityArtifact;
   readonly additionalSecrets: readonly string[];
 }): string[] {
-  const probeUrls = input.artifact.probes.flatMap((probe) => (probe.proxyUrl ? [probe.proxyUrl] : []));
+  const probeUrls = input.artifact.probes.flatMap((probe) =>
+    probe.proxyUrl ? [probe.proxyUrl] : [],
+  );
   const knownSecrets = [
     input.artifact.topology.entryIdentity.accountNumber,
     input.artifact.topology.entryIdentity.wireguardPrivateKey,
@@ -560,5 +602,8 @@ function redactSecretStrings(value: string, secrets: readonly string[]): string 
     redacted = redacted.split(secret).join(REDACTED);
   }
 
-  return redacted.replace(/-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/g, REDACTED);
+  return redacted.replace(
+    /-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/g,
+    REDACTED,
+  );
 }

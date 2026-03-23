@@ -1,10 +1,9 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import net from 'node:net';
-
-import { ConfigStore } from '../src/config/store.js';
+import path from 'node:path';
 import type { MullgateConfig } from '../src/config/schema.js';
+import { ConfigStore } from '../src/config/store.js';
 
 type CommandResult = {
   readonly exitCode: number;
@@ -34,7 +33,10 @@ async function main(): Promise<void> {
 
   if (startResult.exitCode !== 0) {
     throw new Error(
-      ['mullgate start failed during live verification.', startResult.stderr || startResult.stdout || 'No CLI output.'].join('\n'),
+      [
+        'mullgate start failed during live verification.',
+        startResult.stderr || startResult.stdout || 'No CLI output.',
+      ].join('\n'),
     );
   }
 
@@ -52,7 +54,9 @@ async function main(): Promise<void> {
 
   const config = await loadConfig(store);
   const probes = await runProtocolProbes(config);
-  const startReport = JSON.parse(await readFile(store.paths.runtimeStartDiagnosticsFile, 'utf8')) as {
+  const startReport = JSON.parse(
+    await readFile(store.paths.runtimeStartDiagnosticsFile, 'utf8'),
+  ) as {
     status: string;
     phase: string;
     source: string;
@@ -60,11 +64,15 @@ async function main(): Promise<void> {
   };
 
   if (config.runtime.status.phase !== 'running') {
-    throw new Error(`Expected runtime status to be running after start, got ${config.runtime.status.phase}.`);
+    throw new Error(
+      `Expected runtime status to be running after start, got ${config.runtime.status.phase}.`,
+    );
   }
 
   if (startReport.status !== 'success') {
-    throw new Error(`Expected persisted start report to record success, got ${startReport.status}.`);
+    throw new Error(
+      `Expected persisted start report to record success, got ${startReport.status}.`,
+    );
   }
 
   const lines = [
@@ -124,7 +132,9 @@ async function runProtocolProbes(config: MullgateConfig): Promise<ProbeResult[]>
   probes.push(await runProxyProbe({ config, protocol: 'http' }));
 
   if (config.setup.bind.httpsPort === null || !config.setup.https.certPath) {
-    throw new Error('HTTPS proxy verification requires a configured HTTPS port and certificate path.');
+    throw new Error(
+      'HTTPS proxy verification requires a configured HTTPS port and certificate path.',
+    );
   }
 
   await waitForPort(config.setup.bind.host, config.setup.bind.httpsPort, 30_000);
@@ -202,7 +212,9 @@ async function runProxyProbe(input: {
   const result = await runCommand('curl', args);
 
   if (result.exitCode !== 0) {
-    throw new Error(`${protocol} probe failed: ${result.stderr || result.stdout || 'curl returned a non-zero exit code.'}`);
+    throw new Error(
+      `${protocol} probe failed: ${result.stderr || result.stdout || 'curl returned a non-zero exit code.'}`,
+    );
   }
 
   const payload = JSON.parse(result.stdout) as { ip?: string; mullvad_exit_ip?: boolean };

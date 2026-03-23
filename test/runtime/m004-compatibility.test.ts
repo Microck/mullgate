@@ -6,19 +6,19 @@ import { describe, expect, it } from 'vitest';
 import {
   COMPATIBILITY_ARTIFACT_VERSION,
   COMPATIBILITY_PROOF_MODEL,
+  type CompatibilityProtocolObservation,
   createCompatibilityArtifact,
   serializeCompatibilityArtifact,
-  type CompatibilityProtocolObservation,
 } from '../../src/m004/compatibility-contract.js';
 import { runCompatibilityVerifier } from '../../src/m004/compatibility-runner.js';
 import {
+  createEntryIdentityFromRelay,
+  createFeasibilityArtifact,
+  createSingleEntryTopology,
   FEASIBILITY_PROOF_MODEL,
   type FeasibilityArtifact,
   type FeasibilityLogicalExit,
   type FeasibilityProbeObservation,
-  createEntryIdentityFromRelay,
-  createFeasibilityArtifact,
-  createSingleEntryTopology,
 } from '../../src/m004/feasibility-contract.js';
 
 function createLogicalExits(): FeasibilityLogicalExit[] {
@@ -152,14 +152,19 @@ function createFeasibilityFixture(): FeasibilityArtifact {
   });
 }
 
-function createProtocolObservations(overrides: Partial<Record<'socks5' | 'http' | 'https', Partial<CompatibilityProtocolObservation>>> = {}): CompatibilityProtocolObservation[] {
+function createProtocolObservations(
+  overrides: Partial<
+    Record<'socks5' | 'http' | 'https', Partial<CompatibilityProtocolObservation>>
+  > = {},
+): CompatibilityProtocolObservation[] {
   return [
     {
       protocol: 'socks5',
       probeSucceeded: true,
       canSelectExitByHostname: false,
       canSelectExitWithExplicitRelaySelection: true,
-      observedCapabilitySummary: 'SOCKS5 chaining reaches distinct Mullvad exits only when the client selects a relay explicitly.',
+      observedCapabilitySummary:
+        'SOCKS5 chaining reaches distinct Mullvad exits only when the client selects a relay explicitly.',
       proxyUrl: 'socks5://alice:super-secret-password@shared-entry.local:1080',
       ...overrides.socks5,
     },
@@ -168,7 +173,8 @@ function createProtocolObservations(overrides: Partial<Record<'socks5' | 'http' 
       probeSucceeded: true,
       canSelectExitByHostname: false,
       canSelectExitWithExplicitRelaySelection: false,
-      observedCapabilitySummary: 'HTTP reaches the shared entry but cannot choose an exit relay without a contract-breaking selector.',
+      observedCapabilitySummary:
+        'HTTP reaches the shared entry but cannot choose an exit relay without a contract-breaking selector.',
       ...overrides.http,
     },
     {
@@ -176,7 +182,8 @@ function createProtocolObservations(overrides: Partial<Record<'socks5' | 'http' 
       probeSucceeded: true,
       canSelectExitByHostname: false,
       canSelectExitWithExplicitRelaySelection: false,
-      observedCapabilitySummary: 'HTTPS reaches the shared entry but cannot choose an exit relay without a contract-breaking selector.',
+      observedCapabilitySummary:
+        'HTTPS reaches the shared entry but cannot choose an exit relay without a contract-breaking selector.',
       ...overrides.https,
     },
   ];
@@ -199,15 +206,18 @@ describe('m004 compatibility contract', () => {
         socks5: {
           canSelectExitByHostname: true,
           canSelectExitWithExplicitRelaySelection: true,
-          observedCapabilitySummary: 'SOCKS5 keeps working with hostname-selected routing because distinct bind IPs still exist.',
+          observedCapabilitySummary:
+            'SOCKS5 keeps working with hostname-selected routing because distinct bind IPs still exist.',
         },
         http: {
           canSelectExitByHostname: true,
-          observedCapabilitySummary: 'HTTP keeps working with hostname-selected routing because distinct bind IPs still exist.',
+          observedCapabilitySummary:
+            'HTTP keeps working with hostname-selected routing because distinct bind IPs still exist.',
         },
         https: {
           canSelectExitByHostname: true,
-          observedCapabilitySummary: 'HTTPS keeps working with hostname-selected routing because distinct bind IPs still exist.',
+          observedCapabilitySummary:
+            'HTTPS keeps working with hostname-selected routing because distinct bind IPs still exist.',
         },
       }),
       operator: {
@@ -229,7 +239,8 @@ describe('m004 compatibility contract', () => {
           reason: 'distinct-exits-confirmed',
           phase: 'summary',
           stopReason: 'distinct-exits-confirmed',
-          summary: 'The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged.',
+          summary:
+            'The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged.',
         },
         summary: {
           requestedLogicalExitCount: 2,
@@ -243,7 +254,8 @@ describe('m004 compatibility contract', () => {
       hostnameRouting: {
         status: 'truthful',
         reason: 'destination-bind-ip-selector-still-truthful',
-        summary: 'Hostname-selected routing remains truthful because distinct bind IPs still exist for the routing layer to dispatch on.',
+        summary:
+          'Hostname-selected routing remains truthful because distinct bind IPs still exist for the routing layer to dispatch on.',
         sharedBindIpCount: 2,
         requestedProxyHostnamePreserved: false,
         currentSelector: 'destination-bind-ip',
@@ -255,8 +267,10 @@ describe('m004 compatibility contract', () => {
           protocol: 'socks5',
           outcome: 'supported',
           reason: 'supported-as-is',
-          summary: 'SOCKS5 preserves the current hostname-selected routing contract without redesign.',
-          observedCapabilitySummary: 'SOCKS5 keeps working with hostname-selected routing because distinct bind IPs still exist.',
+          summary:
+            'SOCKS5 preserves the current hostname-selected routing contract without redesign.',
+          observedCapabilitySummary:
+            'SOCKS5 keeps working with hostname-selected routing because distinct bind IPs still exist.',
           probeSucceeded: true,
           canSelectExitByHostname: true,
           canSelectExitWithExplicitRelaySelection: true,
@@ -266,8 +280,10 @@ describe('m004 compatibility contract', () => {
           protocol: 'http',
           outcome: 'supported',
           reason: 'supported-as-is',
-          summary: 'HTTP preserves the current hostname-selected routing contract without redesign.',
-          observedCapabilitySummary: 'HTTP keeps working with hostname-selected routing because distinct bind IPs still exist.',
+          summary:
+            'HTTP preserves the current hostname-selected routing contract without redesign.',
+          observedCapabilitySummary:
+            'HTTP keeps working with hostname-selected routing because distinct bind IPs still exist.',
           probeSucceeded: true,
           canSelectExitByHostname: true,
           canSelectExitWithExplicitRelaySelection: false,
@@ -276,8 +292,10 @@ describe('m004 compatibility contract', () => {
           protocol: 'https',
           outcome: 'supported',
           reason: 'supported-as-is',
-          summary: 'HTTPS preserves the current hostname-selected routing contract without redesign.',
-          observedCapabilitySummary: 'HTTPS keeps working with hostname-selected routing because distinct bind IPs still exist.',
+          summary:
+            'HTTPS preserves the current hostname-selected routing contract without redesign.',
+          observedCapabilitySummary:
+            'HTTPS keeps working with hostname-selected routing because distinct bind IPs still exist.',
           probeSucceeded: true,
           canSelectExitByHostname: true,
           canSelectExitWithExplicitRelaySelection: false,
@@ -289,28 +307,39 @@ describe('m004 compatibility contract', () => {
           title: 'Hostname-selected location routing',
           status: 'preserved',
           summary: 'Hostname-selected routing still maps truthfully to the requested Mullvad exit.',
-          evidence: ['Hostname-selected routing remains truthful because distinct bind IPs still exist for the routing layer to dispatch on.'],
+          evidence: [
+            'Hostname-selected routing remains truthful because distinct bind IPs still exist for the routing layer to dispatch on.',
+          ],
         },
         {
           requirementId: 'R005',
           title: 'SOCKS5 support',
           status: 'preserved',
-          summary: 'SOCKS5 preserves the current hostname-selected routing contract without redesign.',
-          evidence: ['SOCKS5 keeps working with hostname-selected routing because distinct bind IPs still exist.'],
+          summary:
+            'SOCKS5 preserves the current hostname-selected routing contract without redesign.',
+          evidence: [
+            'SOCKS5 keeps working with hostname-selected routing because distinct bind IPs still exist.',
+          ],
         },
         {
           requirementId: 'R006',
           title: 'HTTP proxy support',
           status: 'preserved',
-          summary: 'HTTP preserves the current hostname-selected routing contract without redesign.',
-          evidence: ['HTTP keeps working with hostname-selected routing because distinct bind IPs still exist.'],
+          summary:
+            'HTTP preserves the current hostname-selected routing contract without redesign.',
+          evidence: [
+            'HTTP keeps working with hostname-selected routing because distinct bind IPs still exist.',
+          ],
         },
         {
           requirementId: 'R007',
           title: 'HTTPS proxy support',
           status: 'preserved',
-          summary: 'HTTPS preserves the current hostname-selected routing contract without redesign.',
-          evidence: ['HTTPS keeps working with hostname-selected routing because distinct bind IPs still exist.'],
+          summary:
+            'HTTPS preserves the current hostname-selected routing contract without redesign.',
+          evidence: [
+            'HTTPS keeps working with hostname-selected routing because distinct bind IPs still exist.',
+          ],
         },
         {
           requirementId: 'R008',
@@ -323,14 +352,16 @@ describe('m004 compatibility contract', () => {
           requirementId: 'R017',
           title: 'Low-friction first run for self-hosters',
           status: 'preserved',
-          summary: 'The shared-entry topology keeps the self-hoster flow aligned with the existing low-friction product story.',
+          summary:
+            'The shared-entry topology keeps the self-hoster flow aligned with the existing low-friction product story.',
           evidence: ['Operators can keep the current hostname-only route-selection flow.'],
         },
         {
           requirementId: 'R019',
           title: 'Easy location naming and discovery',
           status: 'preserved',
-          summary: 'Route naming and exit discovery stay understandable because hostnames remain truthful selectors.',
+          summary:
+            'Route naming and exit discovery stay understandable because hostnames remain truthful selectors.',
           evidence: [
             'Hostname-selected routing remains truthful because distinct bind IPs still exist for the routing layer to dispatch on.',
             'Location-selection metadata can still be described to operators in a compatibility bundle.',
@@ -339,7 +370,8 @@ describe('m004 compatibility contract', () => {
       ],
       recommendation: {
         posture: 'approved',
-        summary: 'The shared-entry redesign preserves every tracked product contract in this matrix.',
+        summary:
+          'The shared-entry redesign preserves every tracked product contract in this matrix.',
         survivingRequirementIds: ['R004', 'R005', 'R006', 'R007', 'R008', 'R017', 'R019'],
         degradedRequirementIds: [],
         failedRequirementIds: [],
@@ -386,8 +418,10 @@ describe('m004 compatibility contract', () => {
       protocol: 'socks5',
       outcome: 'degraded',
       reason: 'explicit-relay-selection-required',
-      summary: 'SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.',
-      observedCapabilitySummary: 'SOCKS5 chaining reaches distinct Mullvad exits only when the client selects a relay explicitly.',
+      summary:
+        'SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.',
+      observedCapabilitySummary:
+        'SOCKS5 chaining reaches distinct Mullvad exits only when the client selects a relay explicitly.',
       probeSucceeded: true,
       canSelectExitByHostname: false,
       canSelectExitWithExplicitRelaySelection: true,
@@ -397,8 +431,11 @@ describe('m004 compatibility contract', () => {
       requirementId: 'R005',
       title: 'SOCKS5 support',
       status: 'degraded',
-      summary: 'SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.',
-      evidence: ['SOCKS5 chaining reaches distinct Mullvad exits only when the client selects a relay explicitly.'],
+      summary:
+        'SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.',
+      evidence: [
+        'SOCKS5 chaining reaches distinct Mullvad exits only when the client selects a relay explicitly.',
+      ],
     });
     expect(artifact.requirementDeltas.find((delta) => delta.requirementId === 'R017')).toEqual({
       requirementId: 'R017',
@@ -406,11 +443,14 @@ describe('m004 compatibility contract', () => {
       status: 'failed',
       summary:
         'The shared-entry topology breaks the low-friction self-hoster story because at least one required protocol no longer works truthfully.',
-      evidence: ['Operators must configure client-specific relay selection instead of relying on hostname-only routing.'],
+      evidence: [
+        'Operators must configure client-specific relay selection instead of relying on hostname-only routing.',
+      ],
     });
     expect(artifact.recommendation).toEqual({
       posture: 'blocked',
-      summary: 'The shared-entry redesign is blocked because one or more active product requirements fail under the compatibility matrix.',
+      summary:
+        'The shared-entry redesign is blocked because one or more active product requirements fail under the compatibility matrix.',
       survivingRequirementIds: ['R008'],
       degradedRequirementIds: ['R005', 'R019'],
       failedRequirementIds: ['R004', 'R006', 'R007', 'R017'],
@@ -427,10 +467,12 @@ describe('m004 compatibility contract', () => {
       },
       protocols: createProtocolObservations({
         http: {
-          observedCapabilitySummary: 'HTTP has no truthful exit-selection mechanism once the bind IP collapses to a single shared entry.',
+          observedCapabilitySummary:
+            'HTTP has no truthful exit-selection mechanism once the bind IP collapses to a single shared entry.',
         },
         https: {
-          observedCapabilitySummary: 'HTTPS has no truthful exit-selection mechanism once the bind IP collapses to a single shared entry.',
+          observedCapabilitySummary:
+            'HTTPS has no truthful exit-selection mechanism once the bind IP collapses to a single shared entry.',
         },
       }),
       operator: {
@@ -444,8 +486,10 @@ describe('m004 compatibility contract', () => {
       protocol: 'http',
       outcome: 'blocked',
       reason: 'hostname-routing-not-truthful',
-      summary: 'HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.',
-      observedCapabilitySummary: 'HTTP has no truthful exit-selection mechanism once the bind IP collapses to a single shared entry.',
+      summary:
+        'HTTP cannot truthfully preserve hostname-selected routing under the shared-entry topology.',
+      observedCapabilitySummary:
+        'HTTP has no truthful exit-selection mechanism once the bind IP collapses to a single shared entry.',
       probeSucceeded: true,
       canSelectExitByHostname: false,
       canSelectExitWithExplicitRelaySelection: false,
@@ -454,8 +498,10 @@ describe('m004 compatibility contract', () => {
       protocol: 'https',
       outcome: 'blocked',
       reason: 'hostname-routing-not-truthful',
-      summary: 'HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.',
-      observedCapabilitySummary: 'HTTPS has no truthful exit-selection mechanism once the bind IP collapses to a single shared entry.',
+      summary:
+        'HTTPS cannot truthfully preserve hostname-selected routing under the shared-entry topology.',
+      observedCapabilitySummary:
+        'HTTPS has no truthful exit-selection mechanism once the bind IP collapses to a single shared entry.',
       probeSucceeded: true,
       canSelectExitByHostname: false,
       canSelectExitWithExplicitRelaySelection: false,
@@ -464,7 +510,8 @@ describe('m004 compatibility contract', () => {
       requirementId: 'R019',
       title: 'Easy location naming and discovery',
       status: 'failed',
-      summary: 'Route naming and exit discovery are no longer understandable enough to preserve the current product contract.',
+      summary:
+        'Route naming and exit discovery are no longer understandable enough to preserve the current product contract.',
       evidence: [
         'Hostname-selected routing is not truthful under one bind IP because SOCKS5 does not preserve the requested proxy hostname for the current destination-bind-IP selector.',
         'No truthful location-selection surface remains for operators to inspect.',
@@ -520,12 +567,16 @@ describe('m004 compatibility contract', () => {
     expect(result.bundle.overallVerdict).toBe('fail');
     expect(result.bundle.artifact.recommendation.posture).toBe('blocked');
     expect(result.bundle.artifact.hostnameRouting.status).toBe('not-truthful');
-    expect(result.bundle.artifact.protocols.find((protocol) => protocol.protocol === 'socks5')).toEqual({
+    expect(
+      result.bundle.artifact.protocols.find((protocol) => protocol.protocol === 'socks5'),
+    ).toEqual({
       protocol: 'socks5',
       outcome: 'degraded',
       reason: 'explicit-relay-selection-required',
-      summary: 'SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.',
-      observedCapabilitySummary: 'SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop.',
+      summary:
+        'SOCKS5 only works if operators or clients explicitly choose the Mullvad relay, so the product contract would need to change.',
+      observedCapabilitySummary:
+        'SOCKS5 chaining reaches distinct Mullvad exits only when the client explicitly chooses a relay hostname for the second hop.',
       probeSucceeded: true,
       canSelectExitByHostname: false,
       canSelectExitWithExplicitRelaySelection: true,
@@ -543,12 +594,22 @@ describe('m004 compatibility contract', () => {
     expect(summaryJson).toContain('"operatorImpact"');
     expect(summaryJson).toContain('"artifactLinks"');
     expect(summaryJson).toContain('"summaryJson"');
-    expect(summaryJson).toContain('"explicitFailure": "Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection."');
-    expect(summaryText).toContain('headline: SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate’s current truthful contract');
-    expect(summaryText).toContain('hostname-selected routing: not-truthful (one-bind-ip-plus-socks5-hostname-loss)');
-    expect(summaryText).toContain('hostname-selected routing failure: Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.');
+    expect(summaryJson).toContain(
+      '"explicitFailure": "Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection."',
+    );
+    expect(summaryText).toContain(
+      'headline: SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate’s current truthful contract',
+    );
+    expect(summaryText).toContain(
+      'hostname-selected routing: not-truthful (one-bind-ip-plus-socks5-hostname-loss)',
+    );
+    expect(summaryText).toContain(
+      'hostname-selected routing failure: Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection.',
+    );
     expect(summaryText).toContain('protocol matrix:');
-    expect(summaryText).toContain('- socks5: degraded / contract-change (explicit-relay-selection-required)');
+    expect(summaryText).toContain(
+      '- socks5: degraded / contract-change (explicit-relay-selection-required)',
+    );
     expect(summaryText).toContain('- http: blocked / failed (hostname-routing-not-truthful)');
     expect(summaryText).toContain('- https: blocked / failed (hostname-routing-not-truthful)');
     expect(summaryText).toContain('artifact links:');

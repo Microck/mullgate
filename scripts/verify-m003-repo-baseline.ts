@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 
+import { spawn } from 'node:child_process';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
-const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
+const _tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
 
 type RepoBaselineOptions = {
   readonly checkOnly: boolean;
@@ -32,28 +32,34 @@ async function main(): Promise<void> {
     const results = [
       await runShellCommand('pnpm build'),
       await runShellCommand('pnpm typecheck'),
-      await runShellCommand('pnpm test -- --run test/cli/help-command.test.ts test/cli/verify-s06-release-help.test.ts test/cli/verify-m002-final-help.test.ts'),
+      await runShellCommand(
+        'pnpm test -- --run test/cli/help-command.test.ts test/cli/verify-s06-release-help.test.ts test/cli/verify-m002-final-help.test.ts',
+      ),
     ];
 
     for (const result of results) {
       if (result.exitCode !== 0) {
-        throw new Error([
-          `Repo baseline check failed: ${result.command}`,
-          `exit code: ${result.exitCode}`,
-          `stdout:\n${result.stdout || '<empty>'}`,
-          `stderr:\n${result.stderr || '<empty>'}`,
-        ].join('\n'));
+        throw new Error(
+          [
+            `Repo baseline check failed: ${result.command}`,
+            `exit code: ${result.exitCode}`,
+            `stdout:\n${result.stdout || '<empty>'}`,
+            `stderr:\n${result.stderr || '<empty>'}`,
+          ].join('\n'),
+        );
       }
     }
 
-    process.stdout.write([
-      'M003 repo baseline verification passed.',
-      '- required public-repo surfaces present: .github/workflows/ci.yml, .env.example',
-      '- build: ok',
-      '- typecheck: ok',
-      '- help contracts: ok',
-      ...(options.checkOnly ? ['- mode: check-only'] : []),
-    ].join('\n') + '\n');
+    process.stdout.write(
+      `${[
+        'M003 repo baseline verification passed.',
+        '- required public-repo surfaces present: .github/workflows/ci.yml, .env.example',
+        '- build: ok',
+        '- typecheck: ok',
+        '- help contracts: ok',
+        ...(options.checkOnly ? ['- mode: check-only'] : []),
+      ].join('\n')}\n`,
+    );
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

@@ -83,5 +83,8 @@ function redactProvisioning(provisioning: MullgateConfig['mullvad']): MullgateCo
 }
 
 function redactPrivateKeyMaterial(value: string): string {
-  return value.replace(/-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/g, REDACTED);
+  return value.replace(
+    /-----BEGIN[\s\S]*?PRIVATE KEY-----[\s\S]*?-----END[\s\S]*?PRIVATE KEY-----/g,
+    REDACTED,
+  );
 }

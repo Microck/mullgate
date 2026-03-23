@@ -1,11 +1,13 @@
-import { chmod, mkdir, open, rename, rm } from 'node:fs/promises';
+import { chmod, type FileHandle, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
-
-import { REDACTED } from '../config/redact.js';
 import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
-import { resolveRouteWireproxyPaths, type MullgatePaths } from '../config/paths.js';
+import { type MullgatePaths, resolveRouteWireproxyPaths } from '../config/paths.js';
+import { REDACTED } from '../config/redact.js';
 import type { MullgateConfig, RoutedLocation } from '../config/schema.js';
-import { buildPlatformSupportContract, type PlatformSupportContract } from '../platform/support-contract.js';
+import {
+  buildPlatformSupportContract,
+  type PlatformSupportContract,
+} from '../platform/support-contract.js';
 
 const CONTAINER_BIND_HOST = '0.0.0.0';
 const WIREPROXY_IMAGE = 'backplane/wireproxy:20260320';
@@ -151,7 +153,13 @@ export function planRuntimeBundle(options: RenderRuntimeBundleOptions): RenderRu
   const publishedEndpoints = buildPublishedEndpoints(options.config, https);
   const compose = buildDockerCompose(options.config, options.paths, https);
   const httpsSidecarConfig = buildHttpsSidecarConfig(options.config, https);
-  const manifest = buildRuntimeBundleManifest(options.config, options.paths, checkedAt, https, publishedEndpoints);
+  const manifest = buildRuntimeBundleManifest(
+    options.config,
+    options.paths,
+    checkedAt,
+    https,
+    publishedEndpoints,
+  );
 
   return {
     ok: true,
@@ -170,7 +178,9 @@ export function planRuntimeBundle(options: RenderRuntimeBundleOptions): RenderRu
   };
 }
 
-export async function renderRuntimeBundle(options: RenderRuntimeBundleOptions): Promise<RenderRuntimeBundleResult> {
+export async function renderRuntimeBundle(
+  options: RenderRuntimeBundleOptions,
+): Promise<RenderRuntimeBundleResult> {
   const planned = planRuntimeBundle(options);
 
   if (!planned.ok) {
@@ -180,8 +190,16 @@ export async function renderRuntimeBundle(options: RenderRuntimeBundleOptions): 
   try {
     await ensureDirectory(options.paths.runtimeBundleDir);
     await writeFileAtomic(planned.artifactPaths.dockerComposePath, planned.compose, 0o600);
-    await writeFileAtomic(planned.artifactPaths.httpsSidecarConfigPath, planned.httpsSidecarConfig, 0o600);
-    await writeFileAtomic(planned.artifactPaths.manifestPath, `${JSON.stringify(planned.manifest, null, 2)}\n`, 0o600);
+    await writeFileAtomic(
+      planned.artifactPaths.httpsSidecarConfigPath,
+      planned.httpsSidecarConfig,
+      0o600,
+    );
+    await writeFileAtomic(
+      planned.artifactPaths.manifestPath,
+      `${JSON.stringify(planned.manifest, null, 2)}\n`,
+      0o600,
+    );
   } catch (error) {
     return {
       ok: false,
@@ -189,7 +207,8 @@ export async function renderRuntimeBundle(options: RenderRuntimeBundleOptions): 
       source: 'filesystem',
       checkedAt: planned.checkedAt,
       code: 'WRITE_FAILED',
-      message: 'Failed to persist the rendered runtime bundle under the Mullgate state runtime directory.',
+      message:
+        'Failed to persist the rendered runtime bundle under the Mullgate state runtime directory.',
       cause: error instanceof Error ? error.message : String(error),
       artifactPath: options.paths.runtimeBundleDir,
     };
@@ -218,7 +237,10 @@ type ResolvedHttpsRuntime =
 
 function resolveHttpsRuntime(config: MullgateConfig): ResolvedHttpsRuntime {
   const requested = Boolean(
-    config.setup.bind.httpsPort !== null || config.setup.https.enabled || config.setup.https.certPath || config.setup.https.keyPath,
+    config.setup.bind.httpsPort !== null ||
+      config.setup.https.enabled ||
+      config.setup.https.certPath ||
+      config.setup.https.keyPath,
   );
 
   if (!requested) {
@@ -236,8 +258,12 @@ function resolveHttpsRuntime(config: MullgateConfig): ResolvedHttpsRuntime {
   if (!config.setup.https.certPath || !config.setup.https.keyPath) {
     return {
       ok: false,
-      message: 'HTTPS runtime bundle rendering requires both certificate and key paths in the canonical config.',
-      artifactPath: config.setup.https.certPath ?? config.setup.https.keyPath ?? config.runtime.runtimeBundle.httpsSidecarConfigPath,
+      message:
+        'HTTPS runtime bundle rendering requires both certificate and key paths in the canonical config.',
+      artifactPath:
+        config.setup.https.certPath ??
+        config.setup.https.keyPath ??
+        config.runtime.runtimeBundle.httpsSidecarConfigPath,
     };
   }
 
@@ -268,7 +294,11 @@ function buildPublishedEndpoints(
   });
 }
 
-function createEndpoint(route: RoutedLocation, protocol: RuntimeEndpoint['protocol'], port: number): RuntimeEndpoint {
+function createEndpoint(
+  route: RoutedLocation,
+  protocol: RuntimeEndpoint['protocol'],
+  port: number,
+): RuntimeEndpoint {
   return {
     routeId: route.runtime.routeId,
     hostname: route.hostname,
@@ -298,7 +328,9 @@ function buildRuntimeBundleManifest(
 ): RuntimeBundleManifest {
   const routeManifests = config.routing.locations.map((route) => {
     const artifactPaths = resolveRouteWireproxyPaths(paths, route.runtime);
-    const routeEndpoints = publishedEndpoints.filter((endpoint) => endpoint.routeId === route.runtime.routeId);
+    const routeEndpoints = publishedEndpoints.filter(
+      (endpoint) => endpoint.routeId === route.runtime.routeId,
+    );
 
     return {
       routeId: route.runtime.routeId,
@@ -427,7 +459,7 @@ function buildDockerCompose(
   return `${lines.join('\n')}\n`;
 }
 
-function buildPublishedPorts(
+function _buildPublishedPorts(
   config: MullgateConfig,
   https: Extract<ResolvedHttpsRuntime, { ok: true }>,
 ): string[] {
@@ -487,7 +519,10 @@ function buildHttpsSidecarConfig(
   return `${lines.join('\n')}\n`;
 }
 
-function buildRouteSelectionRules(routes: readonly RoutedLocation[], protocol: RuntimeProtocol): string[] {
+function buildRouteSelectionRules(
+  routes: readonly RoutedLocation[],
+  protocol: RuntimeProtocol,
+): string[] {
   // SOCKS5 does not preserve the requested proxy hostname end-to-end, so the front door must dispatch by the
   // published destination bind IP that the operator mapped from hostname -> bind IP during setup/config inspection.
   return routes.flatMap((route) => {
@@ -506,9 +541,12 @@ async function ensureDirectory(directoryPath: string): Promise<void> {
 
 async function writeFileAtomic(filePath: string, content: string, mode: number): Promise<void> {
   const directory = path.dirname(filePath);
-  const temporaryPath = path.join(directory, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
+  const temporaryPath = path.join(
+    directory,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
+  );
 
-  let fileHandle;
+  let fileHandle: FileHandle | undefined;
   try {
     fileHandle = await open(temporaryPath, 'w', mode);
     await fileHandle.writeFile(content, 'utf8');

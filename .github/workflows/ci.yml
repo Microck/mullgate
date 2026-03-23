@@ -7,11 +7,15 @@ on:
       - master
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
@@ -20,15 +24,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5.0.0
         with:
           version: 10.18.3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.3.0
         with:
           node-version: 22
           cache: pnpm
@@ -36,14 +40,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Build
         run: pnpm build
 
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Test with coverage
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: pnpm test:coverage
+
+      - name: Test
+        if: ${{ matrix.os != 'ubuntu-latest' }}
+        run: pnpm test -- --run
+
       - name: Verify CLI/help contracts
         run: pnpm test -- --run test/cli/help-command.test.ts test/cli/verify-s06-release-help.test.ts test/cli/verify-m002-final-help.test.ts
 
       - name: Verify install surface
         run: pnpm verify:install-smoke
+
+      - name: Upload coverage artifact
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: coverage-${{ matrix.os }}
+          path: coverage
+          if-no-files-found: error

@@ -1,8 +1,12 @@
-import { access, readFile } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+import { access, readFile } from 'node:fs/promises';
 import type { Command } from 'commander';
-
-import { formatRedactedConfig, redactConfig } from '../config/redact.js';
+import {
+  loadStoredRelayCatalog,
+  summarizeValidationSource,
+  verifyHttpsAssets,
+  withRuntimeStatus,
+} from '../app/setup-runner.js';
 import {
   buildExposureContract,
   deriveExposureHostname,
@@ -10,9 +14,9 @@ import {
   normalizeExposureBaseDomain,
   validateExposureSettings,
 } from '../config/exposure-contract.js';
-import { ConfigStore, syncLegacyMirrorsToRouting, type LoadConfigResult } from '../config/store.js';
+import { formatRedactedConfig, redactConfig } from '../config/redact.js';
 import type { ExposureMode, MullgateConfig } from '../config/schema.js';
-import { loadStoredRelayCatalog, summarizeValidationSource, verifyHttpsAssets, withRuntimeStatus } from '../app/setup-runner.js';
+import { ConfigStore, type LoadConfigResult, syncLegacyMirrorsToRouting } from '../config/store.js';
 import { buildPlatformSupportContract } from '../platform/support-contract.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
 import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
@@ -97,7 +101,9 @@ export type ExposureCommandOptions = {
 };
 
 export function registerConfigCommands(program: Command): void {
-  const config = program.command('config').description('Inspect or update saved Mullgate configuration and derived paths.');
+  const config = program
+    .command('config')
+    .description('Inspect or update saved Mullgate configuration and derived paths.');
 
   config
     .command('path')
@@ -131,7 +137,9 @@ export function registerConfigCommands(program: Command): void {
 
   config
     .command('locations')
-    .description('List routed location aliases, bind IPs, relay preferences, and runtime ids without secrets.')
+    .description(
+      'List routed location aliases, bind IPs, relay preferences, and runtime ids without secrets.',
+    )
     .action(async () => {
       const store = new ConfigStore();
       const result = await store.load();
@@ -152,7 +160,9 @@ export function registerConfigCommands(program: Command): void {
 
   config
     .command('hosts')
-    .description('List configured proxy hostnames and their route bind IP mappings without secrets.')
+    .description(
+      'List configured proxy hostnames and their route bind IP mappings without secrets.',
+    )
     .action(async () => {
       const store = new ConfigStore();
       const result = await store.load();
@@ -175,9 +185,19 @@ export function registerConfigCommands(program: Command): void {
     .command('exposure')
     .option('--mode <mode>', 'Set exposure mode to loopback, private-network, or public.')
     .option('--base-domain <domain>', 'Set the base domain used to derive per-route hostnames.')
-    .option('--clear-base-domain', 'Remove any configured base domain and fall back to alias/direct-IP hostnames.')
-    .option('--route-bind-ip <ip>', 'Set an ordered per-route bind IP. Repeat once per route.', collectRepeatedValues, [])
-    .description('Inspect or update remote exposure mode, bind IPs, DNS guidance, and restart status without raw JSON edits.')
+    .option(
+      '--clear-base-domain',
+      'Remove any configured base domain and fall back to alias/direct-IP hostnames.',
+    )
+    .option(
+      '--route-bind-ip <ip>',
+      'Set an ordered per-route bind IP. Repeat once per route.',
+      collectRepeatedValues,
+      [],
+    )
+    .description(
+      'Inspect or update remote exposure mode, bind IPs, DNS guidance, and restart status without raw JSON edits.',
+    )
     .action(async (options: ExposureCommandOptions) => {
       const store = new ConfigStore();
       const result = await store.load();
@@ -200,14 +220,16 @@ export function registerConfigCommands(program: Command): void {
       }
 
       if (options.baseDomain !== undefined && options.clearBaseDomain) {
-        process.stderr.write(`${renderExposureUpdateError({
-          ok: false,
-          phase: 'setup-validation',
-          source: 'input',
-          code: 'AMBIGUOUS_BASE_DOMAIN',
-          message: 'Pass --base-domain or --clear-base-domain, not both.',
-          artifactPath: store.paths.configFile,
-        })}\n`);
+        process.stderr.write(
+          `${renderExposureUpdateError({
+            ok: false,
+            phase: 'setup-validation',
+            source: 'input',
+            code: 'AMBIGUOUS_BASE_DOMAIN',
+            message: 'Pass --base-domain or --clear-base-domain, not both.',
+            artifactPath: store.paths.configFile,
+          })}\n`,
+        );
         process.exitCode = 1;
         return;
       }
@@ -238,7 +260,9 @@ export function registerConfigCommands(program: Command): void {
         ...(options.baseDomain !== undefined ? { baseDomain: options.baseDomain } : {}),
         baseDomainSpecified: Boolean(options.clearBaseDomain || options.baseDomain !== undefined),
         ...(options.clearBaseDomain ? { baseDomain: null } : {}),
-        ...(options.routeBindIp && options.routeBindIp.length > 0 ? { routeBindIps: options.routeBindIp } : {}),
+        ...(options.routeBindIp && options.routeBindIp.length > 0
+          ? { routeBindIps: options.routeBindIp }
+          : {}),
       });
 
       if (!updateResult.ok) {
@@ -264,7 +288,9 @@ export function registerConfigCommands(program: Command): void {
         return;
       }
 
-      process.stdout.write(`${renderExposureUpdateSuccess(updateResult.config, store.paths.configFile)}\n`);
+      process.stdout.write(
+        `${renderExposureUpdateSuccess(updateResult.config, store.paths.configFile)}\n`,
+      );
     });
 
   config
@@ -306,100 +332,119 @@ export function registerConfigCommands(program: Command): void {
     .option('--stdin', 'Read the replacement value from standard input.')
     .option('--json', 'Parse the provided value as JSON before saving.')
     .description('Update a saved config value without printing secrets back to the terminal.')
-    .action(async (keyPath: string, value: string | undefined, options: { stdin?: boolean; json?: boolean }) => {
-      const store = new ConfigStore();
-      const spec = EDITABLE_CONFIG_FIELDS.get(keyPath);
+    .action(
+      async (
+        keyPath: string,
+        value: string | undefined,
+        options: { stdin?: boolean; json?: boolean },
+      ) => {
+        const store = new ConfigStore();
+        const spec = EDITABLE_CONFIG_FIELDS.get(keyPath);
 
-      if (!spec) {
-        process.stderr.write(
-          `${renderConfigPathError('Only a safe subset of config fields is editable. Use `mullgate config show` to inspect the saved schema.', keyPath)}\n`,
+        if (!spec) {
+          process.stderr.write(
+            `${renderConfigPathError('Only a safe subset of config fields is editable. Use `mullgate config show` to inspect the saved schema.', keyPath)}\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        if (options.stdin && value !== undefined) {
+          process.stderr.write(
+            `${renderConfigPathError('Pass a value or --stdin, not both.', keyPath)}\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        const rawValue = options.stdin ? await readStdinValue() : value;
+
+        if (rawValue === undefined) {
+          process.stderr.write(
+            `${renderConfigPathError('A replacement value is required.', keyPath)}\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        const loadResult = await store.load();
+
+        if (!loadResult.ok) {
+          process.stderr.write(`${renderLoadError(loadResult)}\n`);
+          process.exitCode = 1;
+          return;
+        }
+
+        if (loadResult.source === 'empty') {
+          process.stderr.write(
+            `${renderMissingConfig(loadResult.message, store.paths.configFile)}\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        const updatedConfig = structuredClone(loadResult.config);
+
+        try {
+          const parsedValue = spec.parse(rawValue, { json: Boolean(options.json) });
+          setConfigValue(updatedConfig, keyPath, parsedValue);
+          applyPostSetNormalization(updatedConfig, keyPath);
+        } catch (error) {
+          process.stderr.write(
+            `${renderConfigPathError(error instanceof Error ? error.message : String(error), keyPath)}\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        const canonicalConfig = syncLegacyMirrorsToRouting(updatedConfig);
+        const staleConfig = withRuntimeStatus(
+          canonicalConfig,
+          'unvalidated',
+          null,
+          `Config changed at ${keyPath}; rerun \`mullgate config validate\` to refresh derived artifacts.`,
         );
-        process.exitCode = 1;
-        return;
-      }
 
-      if (options.stdin && value !== undefined) {
-        process.stderr.write(`${renderConfigPathError('Pass a value or --stdin, not both.', keyPath)}\n`);
-        process.exitCode = 1;
-        return;
-      }
+        try {
+          await store.save(staleConfig);
+        } catch (error) {
+          process.stderr.write(
+            `${renderValidationError({
+              ok: false,
+              phase: 'persist-config',
+              source: 'filesystem',
+              message: 'Failed to persist the updated canonical config.',
+              artifactPath: store.paths.configFile,
+              cause: error instanceof Error ? error.message : String(error),
+            })}\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
 
-      const rawValue = options.stdin ? await readStdinValue() : value;
-
-      if (rawValue === undefined) {
-        process.stderr.write(`${renderConfigPathError('A replacement value is required.', keyPath)}\n`);
-        process.exitCode = 1;
-        return;
-      }
-
-      const loadResult = await store.load();
-
-      if (!loadResult.ok) {
-        process.stderr.write(`${renderLoadError(loadResult)}\n`);
-        process.exitCode = 1;
-        return;
-      }
-
-      if (loadResult.source === 'empty') {
-        process.stderr.write(`${renderMissingConfig(loadResult.message, store.paths.configFile)}\n`);
-        process.exitCode = 1;
-        return;
-      }
-
-      const updatedConfig = structuredClone(loadResult.config);
-
-      try {
-        const parsedValue = spec.parse(rawValue, { json: Boolean(options.json) });
-        setConfigValue(updatedConfig, keyPath, parsedValue);
-        applyPostSetNormalization(updatedConfig, keyPath);
-      } catch (error) {
-        process.stderr.write(`${renderConfigPathError(error instanceof Error ? error.message : String(error), keyPath)}\n`);
-        process.exitCode = 1;
-        return;
-      }
-
-      const canonicalConfig = syncLegacyMirrorsToRouting(updatedConfig);
-      const staleConfig = withRuntimeStatus(
-        canonicalConfig,
-        'unvalidated',
-        null,
-        `Config changed at ${keyPath}; rerun \`mullgate config validate\` to refresh derived artifacts.`,
-      );
-
-      try {
-        await store.save(staleConfig);
-      } catch (error) {
-        process.stderr.write(
-          `${renderValidationError({
-            ok: false,
-            phase: 'persist-config',
-            source: 'filesystem',
-            message: 'Failed to persist the updated canonical config.',
-            artifactPath: store.paths.configFile,
-            cause: error instanceof Error ? error.message : String(error),
-          })}\n`,
+        process.stdout.write(
+          `${[
+            'Mullgate config updated.',
+            'phase: persist-config',
+            'source: input',
+            `key: ${keyPath}`,
+            `config: ${store.paths.configFile}`,
+            spec.secret ? 'value: [redacted]' : 'value: updated',
+            'runtime status: unvalidated',
+          ].join('\n')}\n`,
         );
-        process.exitCode = 1;
-        return;
-      }
-
-      process.stdout.write(
-        [
-          'Mullgate config updated.',
-          'phase: persist-config',
-          'source: input',
-          `key: ${keyPath}`,
-          `config: ${store.paths.configFile}`,
-          spec.secret ? 'value: [redacted]' : 'value: updated',
-          'runtime status: unvalidated',
-        ].join('\n') + '\n',
-      );
-    });
+      },
+    );
 
   config
     .command('validate')
-    .option('--refresh', 'Re-render derived artifacts from saved config and relay cache before validating.')
-    .description('Validate the saved or freshly rendered wireproxy config and persist the result metadata.')
+    .option(
+      '--refresh',
+      'Re-render derived artifacts from saved config and relay cache before validating.',
+    )
+    .description(
+      'Validate the saved or freshly rendered wireproxy config and persist the result metadata.',
+    )
     .action(async (options: { refresh?: boolean }) => {
       const store = new ConfigStore();
       const result = await validateSavedConfig({ store, refresh: Boolean(options.refresh) });
@@ -446,7 +491,9 @@ export function renderPathReport(report: Awaited<ReturnType<ConfigStore['inspect
     ...platform.guidance.map((line) => `- ${line}`),
     '',
     'platform warnings',
-    ...(platform.warnings.length > 0 ? platform.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`) : ['- none']),
+    ...(platform.warnings.length > 0
+      ? platform.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`)
+      : ['- none']),
   ].join('\n');
 }
 
@@ -481,7 +528,8 @@ export function renderHostsReport(config: MullgateConfig, configPath: string): s
     `routes: ${config.routing.locations.length}`,
     'hostname -> bind ip',
     ...config.routing.locations.map(
-      (location, index) => `${index + 1}. ${location.hostname} -> ${location.bindIp} (alias: ${location.alias}, route id: ${location.runtime.routeId})`,
+      (location, index) =>
+        `${index + 1}. ${location.hostname} -> ${location.bindIp} (alias: ${location.alias}, route id: ${location.runtime.routeId})`,
     ),
     '',
     'copy/paste hosts block',
@@ -506,7 +554,9 @@ export function renderExposureReport(config: MullgateConfig, configPath: string)
     `allow lan: ${exposure.allowLan ? 'yes' : 'no'}`,
     `runtime status: ${exposure.runtimeStatus.phase}`,
     `restart needed: ${exposure.runtimeStatus.restartRequired ? 'yes' : 'no'}`,
-    ...(exposure.runtimeStatus.message ? [`runtime message: ${exposure.runtimeStatus.message}`] : []),
+    ...(exposure.runtimeStatus.message
+      ? [`runtime message: ${exposure.runtimeStatus.message}`]
+      : []),
     '',
     'guidance',
     ...exposure.guidance.map((line) => `- ${line}`),
@@ -538,13 +588,23 @@ export function renderExposureReport(config: MullgateConfig, configPath: string)
   ].join('\n');
 }
 
-export function updateExposureConfig(config: MullgateConfig, artifactPath: string, input: ExposureUpdateInput): ExposureUpdateResult {
+export function updateExposureConfig(
+  config: MullgateConfig,
+  artifactPath: string,
+  input: ExposureUpdateInput,
+): ExposureUpdateResult {
   const nextMode = input.mode ?? config.setup.exposure.mode;
-  const nextBaseDomain = input.baseDomainSpecified ? input.baseDomain ?? null : config.setup.exposure.baseDomain;
+  const nextBaseDomain = input.baseDomainSpecified
+    ? (input.baseDomain ?? null)
+    : config.setup.exposure.baseDomain;
   const existingBindIps = config.routing.locations.map((location) => location.bindIp);
   const routeBindIps =
     input.routeBindIps ??
-    (nextMode === 'loopback' ? [] : config.setup.exposure.mode === 'loopback' && input.mode !== undefined ? [] : existingBindIps);
+    (nextMode === 'loopback'
+      ? []
+      : config.setup.exposure.mode === 'loopback' && input.mode !== undefined
+        ? []
+        : existingBindIps);
   const validated = validateExposureSettings({
     routeCount: config.routing.locations.length,
     exposureMode: nextMode,
@@ -561,7 +621,12 @@ export function updateExposureConfig(config: MullgateConfig, artifactPath: strin
   const updatedRoutingLocations = config.routing.locations.map((location, index) => ({
     ...location,
     bindIp: validated.routeBindIps[index]!,
-    hostname: deriveExposureHostname(location.alias, validated.routeBindIps[index]!, validated.baseDomain, validated.mode),
+    hostname: deriveExposureHostname(
+      location.alias,
+      validated.routeBindIps[index]!,
+      validated.baseDomain,
+      validated.mode,
+    ),
   }));
   const canonicalConfig = syncLegacyMirrorsToRouting({
     ...config,
@@ -622,7 +687,10 @@ function renderHostsBlock(config: MullgateConfig): string[] {
   return config.routing.locations.map((location) => `${location.bindIp} ${location.hostname}`);
 }
 
-async function validateSavedConfig(input: { store: ConfigStore; refresh: boolean }): Promise<ConfigValidationResult> {
+async function validateSavedConfig(input: {
+  store: ConfigStore;
+  refresh: boolean;
+}): Promise<ConfigValidationResult> {
   const loadResult = await input.store.load();
 
   if (!loadResult.ok) {
@@ -652,7 +720,12 @@ async function validateSavedConfig(input: { store: ConfigStore; refresh: boolean
   });
 
   if (!httpsCheck.ok) {
-    const errored = withRuntimeStatus(loadResult.config, 'error', new Date().toISOString(), httpsCheck.message);
+    const errored = withRuntimeStatus(
+      loadResult.config,
+      'error',
+      new Date().toISOString(),
+      httpsCheck.message,
+    );
     await saveRuntimeStatus(input.store, errored);
 
     return {
@@ -666,7 +739,10 @@ async function validateSavedConfig(input: { store: ConfigStore; refresh: boolean
   }
 
   const hasExistingWireproxyConfig = await fileExists(input.store.paths.wireproxyConfigFile);
-  const shouldRefresh = input.refresh || loadResult.config.runtime.status.phase === 'unvalidated' || !hasExistingWireproxyConfig;
+  const shouldRefresh =
+    input.refresh ||
+    loadResult.config.runtime.status.phase === 'unvalidated' ||
+    !hasExistingWireproxyConfig;
 
   let configToValidatePath = input.store.paths.wireproxyConfigFile;
   let configToValidateText: string | undefined;
@@ -676,7 +752,12 @@ async function validateSavedConfig(input: { store: ConfigStore; refresh: boolean
     const relayCatalog = await loadStoredRelayCatalog(input.store.paths.provisioningCacheFile);
 
     if (!relayCatalog.ok) {
-      const errored = withRuntimeStatus(loadResult.config, 'error', new Date().toISOString(), relayCatalog.message);
+      const errored = withRuntimeStatus(
+        loadResult.config,
+        'error',
+        new Date().toISOString(),
+        relayCatalog.message,
+      );
       await saveRuntimeStatus(input.store, errored);
 
       return {
@@ -696,7 +777,12 @@ async function validateSavedConfig(input: { store: ConfigStore; refresh: boolean
     });
 
     if (!renderResult.ok) {
-      const errored = withRuntimeStatus(loadResult.config, 'error', renderResult.checkedAt, renderResult.message);
+      const errored = withRuntimeStatus(
+        loadResult.config,
+        'error',
+        renderResult.checkedAt,
+        renderResult.message,
+      );
       await saveRuntimeStatus(input.store, errored);
 
       return {
@@ -760,7 +846,10 @@ async function validateSavedConfig(input: { store: ConfigStore; refresh: boolean
   };
 }
 
-async function saveRuntimeStatus(store: ConfigStore, config: MullgateConfig): Promise<{ ok: true } | ConfigValidationFailure> {
+async function saveRuntimeStatus(
+  store: ConfigStore,
+  config: MullgateConfig,
+): Promise<{ ok: true } | ConfigValidationFailure> {
   try {
     await store.save(config);
     return { ok: true };
@@ -838,7 +927,10 @@ function formatOutputValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function getConfigValue(config: MullgateConfig, keyPath: string): { found: true; value: unknown } | { found: false } {
+function getConfigValue(
+  config: MullgateConfig,
+  keyPath: string,
+): { found: true; value: unknown } | { found: false } {
   let current: unknown = config;
 
   for (const segment of keyPath.split('.')) {
@@ -918,7 +1010,12 @@ function applyPostSetNormalization(config: MullgateConfig, changedPath: string):
 }
 
 function hasExposureUpdate(options: ExposureCommandOptions): boolean {
-  return Boolean(options.mode || options.baseDomain !== undefined || options.clearBaseDomain || options.routeBindIp?.length);
+  return Boolean(
+    options.mode ||
+      options.baseDomain !== undefined ||
+      options.clearBaseDomain ||
+      options.routeBindIp?.length,
+  );
 }
 
 function parseExposureModeOption(raw: string): ExposureMode {
@@ -1061,7 +1158,13 @@ async function readStdinValue(): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     process.stdin.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-    process.stdin.on('end', () => resolve(Buffer.concat(chunks).toString('utf8').replace(/\r?\n$/, '')));
+    process.stdin.on('end', () =>
+      resolve(
+        Buffer.concat(chunks)
+          .toString('utf8')
+          .replace(/\r?\n$/, ''),
+      ),
+    );
     process.stdin.on('error', reject);
   });
 }

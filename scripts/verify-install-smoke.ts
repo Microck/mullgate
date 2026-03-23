@@ -22,15 +22,23 @@ async function main(): Promise<void> {
     const installDir = path.join(tempRoot, 'install-root');
 
     assertSuccess(await runShellCommand({ command: 'pnpm build' }));
-    assertSuccess(await runShellCommand({ command: `pnpm pack --pack-destination ${shellEscape(packDir)}` }));
+    assertSuccess(
+      await runShellCommand({ command: `pnpm pack --pack-destination ${shellEscape(packDir)}` }),
+    );
 
     const packFiles = await readdir(packDir);
     if (packFiles.length !== 1) {
-      throw new Error(`Expected exactly one packed tarball in ${packDir}, found ${packFiles.length}.`);
+      throw new Error(
+        `Expected exactly one packed tarball in ${packDir}, found ${packFiles.length}.`,
+      );
     }
 
     const tarballPath = path.join(packDir, packFiles[0]!);
-    assertSuccess(await runShellCommand({ command: `npm install --prefix ${shellEscape(installDir)} ${shellEscape(tarballPath)}` }));
+    assertSuccess(
+      await runShellCommand({
+        command: `npm install --prefix ${shellEscape(installDir)} ${shellEscape(tarballPath)}`,
+      }),
+    );
 
     const installedCliPath = path.join(
       installDir,
@@ -39,7 +47,9 @@ async function main(): Promise<void> {
       process.platform === 'win32' ? 'mullgate.cmd' : 'mullgate',
     );
 
-    const helpResult = await runShellCommand({ command: `${shellEscape(installedCliPath)} --help` });
+    const helpResult = await runShellCommand({
+      command: `${shellEscape(installedCliPath)} --help`,
+    });
     assertSuccess(helpResult);
     assertContains({
       text: helpResult.stdout,
@@ -47,22 +57,27 @@ async function main(): Promise<void> {
       message: 'Installed CLI help output drifted away from the expected top-level usage contract.',
     });
 
-    const configPathResult = await runShellCommand({ command: `${shellEscape(installedCliPath)} config path` });
+    const configPathResult = await runShellCommand({
+      command: `${shellEscape(installedCliPath)} config path`,
+    });
     assertSuccess(configPathResult);
     assertContains({
       text: configPathResult.stdout,
       expected: 'Mullgate path report',
-      message: 'Installed CLI config-path output drifted away from the expected top-level report contract.',
+      message:
+        'Installed CLI config-path output drifted away from the expected top-level report contract.',
     });
 
-    process.stdout.write([
-      'Install smoke verification passed.',
-      `- platform: ${process.platform}`,
-      `- tarball: ${tarballPath}`,
-      `- installed cli: ${installedCliPath}`,
-      '- installed mullgate help: ok',
-      '- installed mullgate config path: ok',
-    ].join('\n') + '\n');
+    process.stdout.write(
+      `${[
+        'Install smoke verification passed.',
+        `- platform: ${process.platform}`,
+        `- tarball: ${tarballPath}`,
+        `- installed cli: ${installedCliPath}`,
+        '- installed mullgate help: ok',
+        '- installed mullgate config path: ok',
+      ].join('\n')}\n`,
+    );
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -73,11 +88,13 @@ function assertContains(input: { text: string; expected: string; message: string
     return;
   }
 
-  throw new Error([
-    input.message,
-    `expected substring: ${input.expected}`,
-    `output:\n${input.text || '<empty>'}`,
-  ].join('\n'));
+  throw new Error(
+    [
+      input.message,
+      `expected substring: ${input.expected}`,
+      `output:\n${input.text || '<empty>'}`,
+    ].join('\n'),
+  );
 }
 
 function assertSuccess(result: CommandResult): void {
@@ -85,12 +102,14 @@ function assertSuccess(result: CommandResult): void {
     return;
   }
 
-  throw new Error([
-    `Install smoke failed: ${result.command}`,
-    `exit code: ${result.exitCode}`,
-    `stdout:\n${result.stdout || '<empty>'}`,
-    `stderr:\n${result.stderr || '<empty>'}`,
-  ].join('\n'));
+  throw new Error(
+    [
+      `Install smoke failed: ${result.command}`,
+      `exit code: ${result.exitCode}`,
+      `stdout:\n${result.stdout || '<empty>'}`,
+      `stderr:\n${result.stderr || '<empty>'}`,
+    ].join('\n'),
+  );
 }
 
 async function runShellCommand(input: { command: string }): Promise<CommandResult> {

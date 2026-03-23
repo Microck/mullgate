@@ -1,5 +1,5 @@
-import path from 'node:path';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -52,7 +52,7 @@ describe('verify-m002-final help contract', () => {
       stderr: '',
     });
 
-    expect('\n' + result.stdout.trimEnd()).toMatchInlineSnapshot(`
+    expect(`\n${result.stdout.trimEnd()}`).toMatchInlineSnapshot(`
       "
       Usage: pnpm exec tsx scripts/verify-m002-final.ts [options]
 

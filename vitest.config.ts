@@ -5,5 +5,10 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.test.ts'],
     reporters: 'default',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary', 'lcov'],
+      reportsDirectory: 'coverage',
+    },
   },
 });

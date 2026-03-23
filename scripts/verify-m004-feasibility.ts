@@ -1,6 +1,10 @@
 #!/usr/bin/env tsx
 
-import { parseFeasibilityArgs, renderFeasibilityHelp, runFeasibilityVerifier } from '../src/m004/feasibility-runner.js';
+import {
+  parseFeasibilityArgs,
+  renderFeasibilityHelp,
+  runFeasibilityVerifier,
+} from '../src/m004/feasibility-runner.js';
 
 async function main(): Promise<void> {
   try {

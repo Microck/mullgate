@@ -1,11 +1,11 @@
 #!/usr/bin/env tsx
 
+import { spawn } from 'node:child_process';
 import { chmodSync, mkdtempSync } from 'node:fs';
-import { createServer } from 'node:http';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 
 const repoRoot = process.cwd();
 const fixturesDir = path.join(repoRoot, 'test/fixtures/mullvad');
@@ -72,43 +72,90 @@ async function main(): Promise<void> {
         );
 
         assert(setupResult.status === 0, `setup failed:\n${setupResult.stderr}`);
-        assert(setupResult.stdout.includes('Mullgate setup completed.'), 'setup output did not report success');
+        assert(
+          setupResult.stdout.includes('Mullgate setup completed.'),
+          'setup output did not report success',
+        );
 
         const showResult = await runCli(['config', 'show'], { env });
         assert(showResult.status === 0, `config show failed:\n${showResult.stderr}`);
-        assert(!showResult.stdout.includes('123456789012'), 'config show leaked the Mullvad account number');
-        assert(!showResult.stdout.includes('verify-secret'), 'config show leaked the proxy password');
+        assert(
+          !showResult.stdout.includes('123456789012'),
+          'config show leaked the Mullvad account number',
+        );
+        assert(
+          !showResult.stdout.includes('verify-secret'),
+          'config show leaked the proxy password',
+        );
         assert(showResult.stdout.includes('[redacted]'), 'config show did not redact secrets');
 
         const getResult = await runCli(['config', 'get', 'setup.location.requested'], { env });
         assert(getResult.status === 0, `config get failed:\n${getResult.stderr}`);
-        assert(getResult.stdout.trim() === 'sweden-gothenburg', 'config get returned the wrong location');
+        assert(
+          getResult.stdout.trim() === 'sweden-gothenburg',
+          'config get returned the wrong location',
+        );
 
-        const setPasswordResult = await runCli(['config', 'set', 'setup.auth.password', '--stdin'], {
+        const setPasswordResult = await runCli(
+          ['config', 'set', 'setup.auth.password', '--stdin'],
+          {
+            env,
+            input: 'rotated-verify-secret\n',
+          },
+        );
+        assert(
+          setPasswordResult.status === 0,
+          `config set password failed:\n${setPasswordResult.stderr}`,
+        );
+        assert(
+          !setPasswordResult.stdout.includes('rotated-verify-secret'),
+          'config set echoed a secret value',
+        );
+
+        const setPortResult = await runCli(['config', 'set', 'setup.bind.httpPort', '9091'], {
           env,
-          input: 'rotated-verify-secret\n',
         });
-        assert(setPasswordResult.status === 0, `config set password failed:\n${setPasswordResult.stderr}`);
-        assert(!setPasswordResult.stdout.includes('rotated-verify-secret'), 'config set echoed a secret value');
-
-        const setPortResult = await runCli(['config', 'set', 'setup.bind.httpPort', '9091'], { env });
         assert(setPortResult.status === 0, `config set port failed:\n${setPortResult.stderr}`);
 
         const validateRefreshResult = await runCli(['config', 'validate'], { env });
-        assert(validateRefreshResult.status === 0, `config validate failed:\n${validateRefreshResult.stderr}`);
-        assert(validateRefreshResult.stdout.includes('artifacts refreshed: yes'), 'config validate did not refresh stale artifacts');
+        assert(
+          validateRefreshResult.status === 0,
+          `config validate failed:\n${validateRefreshResult.stderr}`,
+        );
+        assert(
+          validateRefreshResult.stdout.includes('artifacts refreshed: yes'),
+          'config validate did not refresh stale artifacts',
+        );
 
         const wireproxyPath = path.join(env.XDG_STATE_HOME!, 'mullgate/runtime/wireproxy.conf');
         const renderedWireproxy = await readFile(wireproxyPath, 'utf8');
-        assert(renderedWireproxy.includes('BindAddress = 0.0.0.0:9091'), 'wireproxy config did not pick up the updated HTTP port');
-        assert(renderedWireproxy.includes('Password = rotated-verify-secret'), 'wireproxy config did not pick up the rotated password');
+        assert(
+          renderedWireproxy.includes('BindAddress = 0.0.0.0:9091'),
+          'wireproxy config did not pick up the updated HTTP port',
+        );
+        assert(
+          renderedWireproxy.includes('Password = rotated-verify-secret'),
+          'wireproxy config did not pick up the rotated password',
+        );
 
         await writeFile(wireproxyPath, '[Interface]\nPrivateKey = broken\n', 'utf8');
         const validateFailureResult = await runCli(['config', 'validate'], { env });
-        assert(validateFailureResult.status === 1, 'corrupted wireproxy config unexpectedly validated');
-        assert(validateFailureResult.stderr.includes('phase: validation'), 'failure output did not report the validation phase');
-        assert(validateFailureResult.stderr.includes('source: wireproxy-binary'), 'failure output did not report the validator source');
-        assert(!validateFailureResult.stderr.includes('rotated-verify-secret'), 'failure output leaked the rotated password');
+        assert(
+          validateFailureResult.status === 1,
+          'corrupted wireproxy config unexpectedly validated',
+        );
+        assert(
+          validateFailureResult.stderr.includes('phase: validation'),
+          'failure output did not report the validation phase',
+        );
+        assert(
+          validateFailureResult.stderr.includes('source: wireproxy-binary'),
+          'failure output did not report the validator source',
+        );
+        assert(
+          !validateFailureResult.stderr.includes('rotated-verify-secret'),
+          'failure output leaked the rotated password',
+        );
       },
     );
 
@@ -127,7 +174,7 @@ async function readTextFixture(name: string): Promise<string> {
 }
 
 async function createFakeWireproxyBinary(env: NodeJS.ProcessEnv): Promise<void> {
-  const binDir = env.PATH!.split(path.delimiter)[0]!;
+  const binDir = env.PATH?.split(path.delimiter)[0]!;
   await mkdir(binDir, { recursive: true });
   await writeFile(
     path.join(binDir, 'wireproxy'),
@@ -151,7 +198,10 @@ async function createFakeWireproxyBinary(env: NodeJS.ProcessEnv): Promise<void> 
 }
 
 async function withJsonServer(
-  routes: Record<string, (request: { body: unknown }) => { status?: number; body: string; contentType?: string }>,
+  routes: Record<
+    string,
+    (request: { body: unknown }) => { status?: number; body: string; contentType?: string }
+  >,
   run: (baseUrl: URL) => Promise<void>,
 ): Promise<void> {
   const server = createServer(async (request, response) => {
@@ -187,11 +237,16 @@ async function withJsonServer(
   try {
     await run(new URL(`http://127.0.0.1:${address.port}`));
   } finally {
-    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
   }
 }
 
-async function runCli(args: string[], options: { env: NodeJS.ProcessEnv; input?: string }): Promise<CliResult> {
+async function runCli(
+  args: string[],
+  options: { env: NodeJS.ProcessEnv; input?: string },
+): Promise<CliResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [tsxCliPath, 'src/cli.ts', ...args], {
       cwd: repoRoot,
