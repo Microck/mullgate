@@ -43,7 +43,7 @@ Important subcommands referenced in the docs include:
 - `mullgate config validate --refresh`
 - `mullgate config path`
 
-`mullgate config export` is the proxy-list generation surface. It supports ordered repeated selectors such as `--country se --count 3 --region europe --count 2`, guided `proxies.txt` creation via `--guided`, preview mode via `--dry-run`, stdout delivery via `--stdout`, and safe file overwrite behavior with `--force`.
+`mullgate config export` is the proxy-list generation surface. It supports ordered repeated selector batches such as `--country se --city got --count 1 --region europe --provider m247 --count 2`, guided `proxies.txt` creation via `--guided` with country and region pick-lists, preview mode via `--dry-run`, stdout delivery via `--stdout`, and safe file overwrite behavior with `--force`.
 
 `mullgate config regions` prints the curated export region groups that `config export --region ...` accepts.
 

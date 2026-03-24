@@ -16,6 +16,7 @@ import {
 import { resolveMullgatePaths } from '../../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
 import { ConfigStore } from '../../src/config/store.js';
+import type { MullvadRelayCatalog } from '../../src/mullvad/fetch-relays.js';
 
 function createFixtureConfig(): MullgateConfig {
   const env = {
@@ -183,6 +184,79 @@ function createFixtureConfig(): MullgateConfig {
       lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
     },
+  };
+}
+
+function createFixtureRelayCatalog(): MullvadRelayCatalog {
+  return {
+    source: 'www-relays-all',
+    fetchedAt: '2026-03-21T04:10:00.000Z',
+    endpoint: 'https://api.mullvad.net/public/relays/wireguard/v1/',
+    relayCount: 3,
+    countries: [
+      {
+        code: 'at',
+        name: 'Austria',
+        cities: [{ code: 'vie', name: 'Vienna', relayCount: 1 }],
+      },
+      {
+        code: 'se',
+        name: 'Sweden',
+        cities: [{ code: 'got', name: 'Gothenburg', relayCount: 1 }],
+      },
+      {
+        code: 'us',
+        name: 'United States',
+        cities: [{ code: 'nyc', name: 'New York', relayCount: 1 }],
+      },
+    ],
+    relays: [
+      {
+        hostname: 'at-vie-wg-001',
+        fqdn: 'at-vie-wg-001.relays.mullvad.net',
+        source: 'www-relays-all',
+        active: true,
+        owned: true,
+        publicKey: 'relay-public-key-at-vie-001',
+        endpointIpv4: '185.213.154.1',
+        location: {
+          countryCode: 'at',
+          countryName: 'Austria',
+          cityCode: 'vie',
+          cityName: 'Vienna',
+        },
+      },
+      {
+        hostname: 'se-got-wg-101',
+        fqdn: 'se-got-wg-101.relays.mullvad.net',
+        source: 'www-relays-all',
+        active: true,
+        owned: true,
+        publicKey: 'relay-public-key-se-got-101',
+        endpointIpv4: '185.213.154.2',
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'got',
+          cityName: 'Gothenburg',
+        },
+      },
+      {
+        hostname: 'us-nyc-wg-001',
+        fqdn: 'us-nyc-wg-001.relays.mullvad.net',
+        source: 'www-relays-all',
+        active: true,
+        owned: true,
+        publicKey: 'relay-public-key-us-nyc-001',
+        endpointIpv4: '185.213.154.3',
+        location: {
+          countryCode: 'us',
+          countryName: 'United States',
+          cityCode: 'nyc',
+          cityName: 'New York',
+        },
+      },
+    ],
   };
 }
 
@@ -509,11 +583,13 @@ copy/paste hosts block
         {
           kind: 'country',
           value: 'se',
+          providers: [],
           requestedCount: 1,
         },
         {
           kind: 'region',
           value: 'europe',
+          providers: [],
           requestedCount: 2,
         },
       ],
@@ -528,6 +604,59 @@ copy/paste hosts block
       phase: 'export-proxies',
       source: 'input',
       message: 'Pass --count after a --country or --region selector.',
+    });
+  });
+
+  it('parses city, server, and provider refinements on selector batches', () => {
+    const result = parseProxyExportSelectors([
+      '--country',
+      'Sweden',
+      '--city',
+      'Gothenburg',
+      '--provider',
+      'm247',
+      '--provider',
+      'xtom',
+      '--count',
+      '2',
+      '--country',
+      'Austria',
+      '--server',
+      'at-vie-wg-001',
+      '--count',
+      '1',
+      '--region',
+      'europe',
+      '--provider',
+      'datawagon',
+      '--count',
+      '3',
+    ]);
+
+    expect(result).toEqual({
+      ok: true,
+      selectors: [
+        {
+          kind: 'country',
+          value: 'sweden',
+          city: 'gothenburg',
+          providers: ['m247', 'xtom'],
+          requestedCount: 2,
+        },
+        {
+          kind: 'country',
+          value: 'austria',
+          server: 'at-vie-wg-001',
+          providers: [],
+          requestedCount: 1,
+        },
+        {
+          kind: 'region',
+          value: 'europe',
+          providers: ['datawagon'],
+          requestedCount: 3,
+        },
+      ],
     });
   });
 
@@ -571,9 +700,10 @@ copy/paste hosts block
       config,
       protocol: 'http',
       selectors: [
-        { kind: 'country', value: 'se', requestedCount: 1 },
-        { kind: 'region', value: 'europe', requestedCount: 2 },
+        { kind: 'country', value: 'se', providers: [], requestedCount: 1 },
+        { kind: 'region', value: 'europe', providers: [], requestedCount: 2 },
       ],
+      relayCatalog: createFixtureRelayCatalog(),
       configPath: '/tmp/mullgate-home/config/mullgate/config.json',
     });
 
@@ -636,8 +766,8 @@ copy/paste hosts block
       output: ./proxy-http-country-se-1--region-europe-2.txt
 
       preview
-      1. http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080 (alias: sweden-gothenburg, country: se)
-      2. http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080 (alias: austria-vienna, country: at)"
+      1. http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080 (alias: sweden-gothenburg, country: se, city: got, relay: se-got-wg-101)
+      2. http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080 (alias: austria-vienna, country: at, city: vie, relay: at-vie-wg-001)"
     `);
   });
 
@@ -646,7 +776,8 @@ copy/paste hosts block
     const result = buildProxyExportPlan({
       config,
       protocol: 'socks5',
-      selectors: [{ kind: 'region', value: 'antarctica', requestedCount: 1 }],
+      selectors: [{ kind: 'region', value: 'antarctica', providers: [], requestedCount: 1 }],
+      relayCatalog: createFixtureRelayCatalog(),
       configPath: '/tmp/mullgate-home/config/mullgate/config.json',
     });
 

@@ -1,11 +1,26 @@
 import { constants as fsConstants } from 'node:fs';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { cancel as clackCancel, confirm, intro, isCancel, outro, text } from '@clack/prompts';
+import {
+  autocomplete,
+  autocompleteMultiselect,
+  cancel as clackCancel,
+  confirm,
+  intro,
+  isCancel,
+  outro,
+  select,
+  text,
+} from '@clack/prompts';
 import type { Command } from 'commander';
 import {
+  defaultDeviceName,
+  deriveRouteDeviceName,
   loadStoredRelayCatalog,
+  planSetupRoutes,
+  provisionRouteWithRetries,
   summarizeValidationSource,
+  type PlannedSetupRoute,
   verifyHttpsAssets,
   withRuntimeStatus,
 } from '../app/setup-runner.js';
@@ -19,11 +34,13 @@ import {
 import { formatRedactedConfig, REDACTED, redactConfig } from '../config/redact.js';
 import type { ExposureMode, MullgateConfig } from '../config/schema.js';
 import { ConfigStore, type LoadConfigResult, syncLegacyMirrorsToRouting } from '../config/store.js';
+import { createLocationAliasCatalog, normalizeLocationToken } from '../domain/location-aliases.js';
 import {
   listRegionGroupNames,
   listRegionGroups,
   resolveRegionCountryCodes,
 } from '../domain/region-groups.js';
+import { fetchRelays, type MullvadRelay, type MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
 import { buildPlatformSupportContract } from '../platform/support-contract.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
 import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
@@ -112,6 +129,9 @@ type ProxyExportProtocol = 'socks5' | 'http' | 'https';
 type ProxyExportSelector = {
   readonly kind: 'country' | 'region';
   readonly value: string;
+  readonly city?: string;
+  readonly server?: string;
+  readonly providers: readonly string[];
   readonly requestedCount: number | null;
 };
 
@@ -125,8 +145,22 @@ type ProxyExportEntry = {
   readonly alias: string;
   readonly hostname: string;
   readonly countryCode: string | null;
+  readonly cityCode: string | null;
+  readonly relayHostname: string | null;
+  readonly provider: string | null;
   readonly url: string;
   readonly redactedUrl: string;
+};
+
+type ProxyExportRouteDescriptor = {
+  readonly routeIndex: number;
+  readonly routeId: string;
+  readonly routeAlias: string;
+  readonly routeHostname: string;
+  readonly countryCode: string | null;
+  readonly cityCode: string | null;
+  readonly relayHostname: string | null;
+  readonly provider: string | null;
 };
 
 type ProxyExportPlanSuccess = {
@@ -175,15 +209,44 @@ export type ProxyExportCommandOptions = {
   readonly dryRun?: boolean;
   readonly stdout?: boolean;
   readonly force?: boolean;
+  readonly country?: string[];
+  readonly region?: string[];
+  readonly city?: string[];
+  readonly server?: string[];
+  readonly provider?: string[];
 };
 
 const GUIDED_PROMPT_CANCELLED = Symbol('guided-prompt-cancelled');
+const PROVISIONING_URL_ENV = 'MULLGATE_MULLVAD_WG_URL';
+const RELAYS_URL_ENV = 'MULLGATE_MULLVAD_RELAYS_URL';
 
 type PromptTextOptions = {
   readonly message: string;
   readonly initialValue?: string;
   readonly placeholder?: string;
   readonly validate?: (value: string | undefined) => string | undefined;
+};
+
+type PromptSelectOption = {
+  readonly value: string;
+  readonly label: string;
+  readonly hint?: string;
+  readonly disabled?: boolean;
+};
+
+type PromptSelectOptions = {
+  readonly message: string;
+  readonly options: readonly PromptSelectOption[];
+  readonly initialValue?: string;
+  readonly placeholder?: string;
+};
+
+type PromptMultiSelectOptions = {
+  readonly message: string;
+  readonly options: readonly PromptSelectOption[];
+  readonly initialValues?: readonly string[];
+  readonly required?: boolean;
+  readonly placeholder?: string;
 };
 
 type PromptConfirmOptions = {
@@ -193,11 +256,22 @@ type PromptConfirmOptions = {
   readonly inactive?: string;
 };
 
+type GuidedProxyExportSelectorSeed = {
+  readonly kind: ProxyExportSelector['kind'];
+  readonly value: string;
+};
+
 type GuidedPromptClient = {
   readonly intro: (message: string) => void;
   readonly outro: (message: string) => void;
   readonly cancel: (message: string) => void;
   readonly text: (options: PromptTextOptions) => Promise<string | typeof GUIDED_PROMPT_CANCELLED>;
+  readonly select: (
+    options: PromptSelectOptions,
+  ) => Promise<string | typeof GUIDED_PROMPT_CANCELLED>;
+  readonly multiselect: (
+    options: PromptMultiSelectOptions,
+  ) => Promise<readonly string[] | typeof GUIDED_PROMPT_CANCELLED>;
   readonly confirm: (
     options: PromptConfirmOptions,
   ) => Promise<boolean | typeof GUIDED_PROMPT_CANCELLED>;
@@ -408,16 +482,28 @@ export function registerConfigCommands(program: Command): void {
     .command('export')
     .option('--protocol <protocol>', 'Export proxy URLs for socks5, http, or https.')
     .option(
-      '--country <code>',
-      'Add a country selector. Pair it with a following --count to cap that selector.',
+      '--country <code-or-name>',
+      'Add a country selector. Pair it with optional --city, --server, --provider, and a following --count.',
     )
     .option(
       '--region <name>',
-      `Add a curated region selector (${listRegionGroupNames().join(', ')}). Pair it with a following --count to cap that selector.`,
+      `Add a curated region selector (${listRegionGroupNames().join(', ')}). Pair it with optional --provider and a following --count.`,
+    )
+    .option(
+      '--city <code-or-name>',
+      'Refine the immediately preceding --country selector to one city.',
+    )
+    .option(
+      '--server <hostname>',
+      'Refine the immediately preceding --country selector to one exact Mullvad relay hostname.',
+    )
+    .option(
+      '--provider <name>',
+      'Filter the immediately preceding --country or --region selector by provider. Repeat as needed.',
     )
     .option(
       '--count <number>',
-      'Apply a per-selector export cap to the immediately preceding --country or --region.',
+      'Apply a per-selector export cap to the immediately preceding --country or --region batch.',
     )
     .option('--guided', 'Launch a guided export flow, like setup, for creating proxy lists.')
     .option('--dry-run', 'Preview a secret-safe export summary without writing a file.')
@@ -425,7 +511,7 @@ export function registerConfigCommands(program: Command): void {
     .option('--force', 'Overwrite an existing output file.')
     .option('--output <path>', 'Write the export to this path instead of using an auto filename.')
     .description(
-      'Export proxy URLs to a text file with ordered country/region selectors and deterministic dedupe.',
+      'Export proxy URLs to a text file with ordered country/region selector batches, optional city/server/provider filters, and deterministic dedupe.',
     )
     .action(async (options: ProxyExportCommandOptions) => {
       const store = new ConfigStore();
@@ -473,9 +559,19 @@ export function registerConfigCommands(program: Command): void {
           return;
         }
 
+        const relayCatalogResult = await loadRelayCatalogForProxyExport({ store });
+
+        if (!relayCatalogResult.ok) {
+          process.stderr.write(`${renderProxyExportError(relayCatalogResult)}\n`);
+          process.exitCode = 1;
+          return;
+        }
+
         const resolvedInput = await resolveProxyExportInput({
           options,
+          config: result.config,
           selectors: selectorResult.selectors,
+          relayCatalog: relayCatalogResult.relayCatalog,
           configPath: store.paths.configFile,
         });
 
@@ -486,11 +582,24 @@ export function registerConfigCommands(program: Command): void {
         }
 
         const exportInput = resolvedInput.value;
+        const ensuredRoutes = await ensureProxyExportRoutes({
+          store,
+          config: result.config,
+          relayCatalog: relayCatalogResult.relayCatalog,
+          exportInput,
+        });
+
+        if (!ensuredRoutes.ok) {
+          process.stderr.write(`${renderProxyExportError(ensuredRoutes)}\n`);
+          process.exitCode = 1;
+          return;
+        }
 
         const exportPlan = buildProxyExportPlan({
-          config: result.config,
+          config: ensuredRoutes.config,
           protocol: exportInput.protocol,
           selectors: exportInput.selectors,
+          relayCatalog: ensuredRoutes.relayCatalog,
           configPath: store.paths.configFile,
         });
 
@@ -959,6 +1068,7 @@ export function parseProxyExportSelectors(
       selectors.push({
         kind: 'country',
         value: normalizeProxyExportSelectorValue(countryOption.value, 'country'),
+        providers: [],
         requestedCount: null,
       });
       index += countryOption.consumedNextToken ? 1 : 0;
@@ -975,9 +1085,115 @@ export function parseProxyExportSelectors(
       selectors.push({
         kind: 'region',
         value: normalizeProxyExportSelectorValue(regionOption.value, 'region'),
+        providers: [],
         requestedCount: null,
       });
       index += regionOption.consumedNextToken ? 1 : 0;
+      continue;
+    }
+
+    const cityOption = readCliOptionValue({
+      flag: '--city',
+      token,
+      nextToken: tokens[index + 1],
+    });
+
+    if (cityOption.matched) {
+      const previousSelector = selectors.at(-1);
+
+      if (!previousSelector || previousSelector.kind !== 'country') {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: 'Pass --city after a --country selector.',
+        };
+      }
+
+      if (previousSelector.city) {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: `Selector country=${previousSelector.value} already has a --city.`,
+        };
+      }
+
+      if (previousSelector.server) {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: `Selector country=${previousSelector.value} already has a --server, so --city is redundant.`,
+        };
+      }
+
+      selectors[selectors.length - 1] = {
+        ...previousSelector,
+        city: normalizeProxyExportSelectorValue(cityOption.value, 'country'),
+      };
+      index += cityOption.consumedNextToken ? 1 : 0;
+      continue;
+    }
+
+    const serverOption = readCliOptionValue({
+      flag: '--server',
+      token,
+      nextToken: tokens[index + 1],
+    });
+
+    if (serverOption.matched) {
+      const previousSelector = selectors.at(-1);
+
+      if (!previousSelector || previousSelector.kind !== 'country') {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: 'Pass --server after a --country selector.',
+        };
+      }
+
+      if (previousSelector.server) {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: `Selector country=${previousSelector.value} already has a --server.`,
+        };
+      }
+
+      selectors[selectors.length - 1] = {
+        ...previousSelector,
+        server: normalizeProxyExportSelectorValue(serverOption.value, 'country'),
+      };
+      index += serverOption.consumedNextToken ? 1 : 0;
+      continue;
+    }
+
+    const providerOption = readCliOptionValue({
+      flag: '--provider',
+      token,
+      nextToken: tokens[index + 1],
+    });
+
+    if (providerOption.matched) {
+      const previousSelector = selectors.at(-1);
+
+      if (!previousSelector) {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: 'Pass --provider after a --country or --region selector.',
+        };
+      }
+
+      selectors[selectors.length - 1] = {
+        ...previousSelector,
+        providers: [...previousSelector.providers, providerOption.value.trim()],
+      };
+      index += providerOption.consumedNextToken ? 1 : 0;
       continue;
     }
 
@@ -1053,10 +1269,289 @@ export function parseProxyExportSelectors(
   };
 }
 
+function buildCountryPromptOptions(relayCatalog: MullvadRelayCatalog): readonly PromptSelectOption[] {
+  return relayCatalog.countries.map((country) => ({
+    value: country.code,
+    label: `${country.name} (${country.code})`,
+    hint: `${country.cities.length} cities`,
+  }));
+}
+
+function buildCityPromptOptions(input: {
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly countryCode: string;
+}): readonly PromptSelectOption[] {
+  const country = input.relayCatalog.countries.find((entry) => entry.code === input.countryCode);
+
+  if (!country) {
+    return [];
+  }
+
+  return country.cities.map((city) => ({
+    value: city.code,
+    label: `${city.name} (${city.code})`,
+    hint: `${city.relayCount} servers`,
+  }));
+}
+
+function buildServerPromptOptions(input: {
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly countryCode: string;
+  readonly cityCode?: string;
+  readonly providers: readonly string[];
+}): readonly PromptSelectOption[] {
+  return listMatchingRelays({
+    relayCatalog: input.relayCatalog,
+    countryCode: input.countryCode,
+    ...(input.cityCode ? { cityCode: input.cityCode } : {}),
+    providers: input.providers,
+  }).map((relay) => ({
+    value: relay.hostname,
+    label: relay.hostname,
+    hint: `${relay.location.countryName} / ${relay.location.cityName}${relay.provider ? ` / ${relay.provider}` : ''}`,
+  }));
+}
+
+function buildProviderPromptOptions(input: {
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly countryCode?: string;
+  readonly cityCode?: string;
+}): readonly PromptSelectOption[] {
+  const providers = new Set<string>();
+
+  listMatchingRelays({
+    relayCatalog: input.relayCatalog,
+    ...(input.countryCode ? { countryCode: input.countryCode } : {}),
+    ...(input.cityCode ? { cityCode: input.cityCode } : {}),
+    providers: [],
+  }).forEach((relay) => {
+    if (relay.provider?.trim()) {
+      providers.add(relay.provider);
+    }
+  });
+
+  return [...providers].sort((left, right) => left.localeCompare(right)).map((provider) => ({
+    value: provider,
+    label: provider,
+  }));
+}
+
+function renderProxyExportSelectorLabel(selector: ProxyExportSelector): string {
+  const parts =
+    selector.kind === 'region'
+      ? [`region=${selector.value}`]
+      : [
+          `country=${selector.value}`,
+          ...(selector.city ? [`city=${selector.city}`] : []),
+          ...(selector.server ? [`server=${selector.server}`] : []),
+        ];
+
+  return [
+    ...parts,
+    ...(selector.providers.length > 0 ? [`providers=${selector.providers.join(',')}`] : []),
+  ].join(' ');
+}
+
+function resolveProxyExportProviderNames(input: {
+  readonly providers: readonly string[];
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly configPath: string;
+}):
+  | { readonly ok: true; readonly providers: readonly string[] }
+  | ProxyExportFailure {
+  const available = new Map<string, string>();
+
+  input.relayCatalog.relays.forEach((relay) => {
+    if (relay.provider?.trim()) {
+      available.set(normalizeLocationToken(relay.provider), relay.provider);
+    }
+  });
+
+  const providers = input.providers.map((provider) => {
+    const normalized = normalizeLocationToken(provider);
+    return available.get(normalized) ?? provider.trim();
+  });
+
+  const unknown = providers.filter((provider) => !available.has(normalizeLocationToken(provider)));
+
+  if (unknown.length > 0) {
+    return {
+      ok: false,
+      phase: 'export-proxies',
+      source: 'input',
+      message: `Unknown provider ${unknown[0]}.`,
+      configPath: input.configPath,
+    };
+  }
+
+  return {
+    ok: true,
+    providers: [...new Set(providers)].sort((left, right) => left.localeCompare(right)),
+  };
+}
+
+function resolveCountryCode(input: {
+  readonly value: string;
+  readonly config: MullgateConfig;
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly configPath: string;
+}):
+  | { readonly ok: true; readonly countryCode: string }
+  | ProxyExportFailure {
+  const normalized = normalizeLocationToken(input.value);
+  const match = input.relayCatalog.countries.find(
+    (country) =>
+      country.code.toLowerCase() === normalized ||
+      normalizeLocationToken(country.name) === normalized,
+  );
+
+  if (match) {
+    return {
+      ok: true,
+      countryCode: match.code,
+    };
+  }
+
+  const configuredCountryCode = input.config.routing.locations
+    .map((location) => location.relayPreference.country?.toLowerCase() ?? null)
+    .filter(isDefined)
+    .find((countryCode) => countryCode === normalized);
+
+  if (configuredCountryCode) {
+    return {
+      ok: true,
+      countryCode: configuredCountryCode,
+    };
+  }
+
+  return {
+    ok: false,
+    phase: 'export-proxies',
+    source: 'input',
+    message: `Unknown country ${input.value}.`,
+    configPath: input.configPath,
+  };
+}
+
+function resolveCityCode(input: {
+  readonly countryCode: string;
+  readonly value: string;
+  readonly config: MullgateConfig;
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly configPath: string;
+}):
+  | { readonly ok: true; readonly cityCode: string }
+  | ProxyExportFailure {
+  const country = input.relayCatalog.countries.find((entry) => entry.code === input.countryCode);
+  const normalized = normalizeLocationToken(input.value);
+  const match = country?.cities.find(
+    (city) => city.code.toLowerCase() === normalized || normalizeLocationToken(city.name) === normalized,
+  );
+
+  if (match) {
+    return {
+      ok: true,
+      cityCode: match.code,
+    };
+  }
+
+  const configuredCityCode = input.config.routing.locations
+    .filter((location) => location.relayPreference.country === input.countryCode)
+    .map((location) => location.relayPreference.city?.toLowerCase() ?? null)
+    .filter(isDefined)
+    .find((cityCode) => cityCode === normalized);
+
+  if (configuredCityCode) {
+    return {
+      ok: true,
+      cityCode: configuredCityCode,
+    };
+  }
+
+  return {
+    ok: false,
+    phase: 'export-proxies',
+    source: 'input',
+    message: `Unknown city ${input.value} for country ${input.countryCode}.`,
+    configPath: input.configPath,
+  };
+}
+
+function resolveServerHostname(input: {
+  readonly countryCode: string;
+  readonly cityCode?: string;
+  readonly providers: readonly string[];
+  readonly value: string;
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly configPath: string;
+}):
+  | { readonly ok: true; readonly hostname: string }
+  | ProxyExportFailure {
+  const normalized = normalizeLocationToken(input.value);
+  const relay = listMatchingRelays({
+    relayCatalog: input.relayCatalog,
+    countryCode: input.countryCode,
+    ...(input.cityCode ? { cityCode: input.cityCode } : {}),
+    providers: input.providers,
+  }).find(
+    (entry) =>
+      entry.hostname.toLowerCase() === normalized || entry.fqdn.toLowerCase() === normalized,
+  );
+
+  if (relay) {
+    return {
+      ok: true,
+      hostname: relay.hostname,
+    };
+  }
+
+  return {
+    ok: false,
+    phase: 'export-proxies',
+    source: 'input',
+    message: `Unknown server ${input.value} for the selected country/city/provider filters.`,
+    configPath: input.configPath,
+  };
+}
+
+function listMatchingRelays(input: {
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly countryCode?: string;
+  readonly cityCode?: string;
+  readonly providers: readonly string[];
+}): MullvadRelay[] {
+  const providers = new Set(input.providers.map((provider) => provider.toLowerCase()));
+
+  return [...input.relayCatalog.relays]
+    .filter((relay) => {
+      if (input.countryCode && relay.location.countryCode !== input.countryCode) {
+        return false;
+      }
+
+      if (input.cityCode && relay.location.cityCode !== input.cityCode) {
+        return false;
+      }
+
+      if (providers.size > 0 && (!relay.provider || !providers.has(relay.provider.toLowerCase()))) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort(
+      (left, right) =>
+        Number(right.active) - Number(left.active) ||
+        left.location.countryCode.localeCompare(right.location.countryCode) ||
+        left.location.cityCode.localeCompare(right.location.cityCode) ||
+        left.hostname.localeCompare(right.hostname),
+    );
+}
+
 export function buildProxyExportPlan(input: {
   readonly config: MullgateConfig;
   readonly protocol: ProxyExportProtocol;
   readonly selectors: readonly ProxyExportSelector[];
+  readonly relayCatalog: MullvadRelayCatalog;
   readonly configPath: string;
 }): ProxyExportPlanResult {
   for (const selector of input.selectors) {
@@ -1072,6 +1567,10 @@ export function buildProxyExportPlan(input: {
   }
 
   const exposure = buildExposureContract(input.config);
+  const routeDescriptors = describeConfiguredProxyExportRoutes({
+    config: input.config,
+    relayCatalog: input.relayCatalog,
+  });
 
   if (!exposure.ports.some((port) => port.protocol === input.protocol)) {
     return {
@@ -1095,9 +1594,10 @@ export function buildProxyExportPlan(input: {
         routeIndex,
         alias: route.alias,
         hostname: route.hostname,
-        countryCode:
-          input.config.routing.locations[routeIndex]?.relayPreference.country?.toLowerCase() ??
-          null,
+        countryCode: routeDescriptors[routeIndex]?.countryCode ?? null,
+        cityCode: routeDescriptors[routeIndex]?.cityCode ?? null,
+        relayHostname: routeDescriptors[routeIndex]?.relayHostname ?? null,
+        provider: routeDescriptors[routeIndex]?.provider ?? null,
         url: createProxyExportUrl({
           protocol: input.protocol,
           hostname: route.hostname,
@@ -1145,7 +1645,7 @@ export function buildProxyExportPlan(input: {
         return false;
       }
 
-      return matchesProxyExportSelector({ selector, countryCode: entry.countryCode });
+      return matchesProxyExportSelector({ selector, entry });
     });
     const exportedEntries =
       selector.requestedCount === null
@@ -1221,7 +1721,7 @@ export function renderProxyExportPreview(input: {
     'preview',
     ...input.result.entries.map(
       (entry, index) =>
-        `${index + 1}. ${entry.redactedUrl} (alias: ${entry.alias}, country: ${entry.countryCode ?? 'n/a'})`,
+        `${index + 1}. ${entry.redactedUrl} (alias: ${entry.alias}, country: ${entry.countryCode ?? 'n/a'}, city: ${entry.cityCode ?? 'n/a'}, relay: ${entry.relayHostname ?? 'n/a'})`,
     ),
   ].join('\n');
 }
@@ -1270,7 +1770,7 @@ function renderProxyExportSummaryLines(input: {
           `selectors: ${input.result.selectors.length}`,
           ...input.result.selectors.map(
             (selector, index) =>
-              `${index + 1}. ${selector.kind}=${selector.value} requested=${selector.requestedCount ?? 'all'} matched=${selector.matchedCount} exported=${selector.exportedCount}`,
+              `${index + 1}. ${renderProxyExportSelectorLabel(selector)} requested=${selector.requestedCount ?? 'all'} matched=${selector.matchedCount} exported=${selector.exportedCount}`,
           ),
         ]),
     `exported count: ${input.result.entries.length}`,
@@ -1279,7 +1779,9 @@ function renderProxyExportSummaryLines(input: {
 
 async function resolveProxyExportInput(input: {
   readonly options: ProxyExportCommandOptions;
+  readonly config: MullgateConfig;
   readonly selectors: readonly ProxyExportSelector[];
+  readonly relayCatalog: MullvadRelayCatalog;
   readonly configPath: string;
 }): Promise<{ readonly ok: true; readonly value: ProxyExportResolvedInput } | ProxyExportFailure> {
   const outputPath = readOptionalString(input.options.output);
@@ -1296,11 +1798,22 @@ async function resolveProxyExportInput(input: {
   }
 
   if (!input.options.guided) {
+    const resolvedSelectors = resolveProxyExportSelectorsWithCatalog({
+      config: input.config,
+      selectors: input.selectors,
+      relayCatalog: input.relayCatalog,
+      configPath: input.configPath,
+    });
+
+    if (!resolvedSelectors.ok) {
+      return resolvedSelectors;
+    }
+
     return {
       ok: true,
       value: {
         protocol: parseProxyExportProtocol(input.options.protocol),
-        selectors: input.selectors,
+        selectors: resolvedSelectors.selectors,
         writeMode: modeResult.writeMode,
         ...(outputPath ? { outputPath } : {}),
         force: Boolean(input.options.force),
@@ -1315,6 +1828,7 @@ async function resolveProxyExportInput(input: {
     initialOutputPath: outputPath,
     force: Boolean(input.options.force),
     configPath: input.configPath,
+    relayCatalog: input.relayCatalog,
   });
 
   if (!guidedInput.ok) {
@@ -1334,6 +1848,7 @@ async function collectGuidedProxyExportInput(input: {
   readonly initialOutputPath?: string;
   readonly force: boolean;
   readonly configPath: string;
+  readonly relayCatalog: MullvadRelayCatalog;
 }): Promise<{ readonly ok: true; readonly value: ProxyExportResolvedInput } | ProxyExportFailure> {
   const prompts = createGuidedPromptClient();
 
@@ -1342,10 +1857,14 @@ async function collectGuidedProxyExportInput(input: {
 
     const protocol =
       input.initialProtocol ??
-      (await prompts.text({
-        message: 'Proxy protocol (socks5, http, https)',
+      (await prompts.select({
+        message: 'Proxy protocol',
         initialValue: 'socks5',
-        validate: validateProxyExportProtocolInput,
+        options: [
+          { value: 'socks5', label: 'SOCKS5' },
+          { value: 'http', label: 'HTTP' },
+          { value: 'https', label: 'HTTPS' },
+        ],
       }));
 
     if (protocol === GUIDED_PROMPT_CANCELLED) {
@@ -1362,7 +1881,7 @@ async function collectGuidedProxyExportInput(input: {
     const selectors =
       input.initialSelectors.length > 0
         ? input.initialSelectors
-        : await collectGuidedProxyExportSelectors(prompts);
+        : await collectGuidedProxyExportSelectors(prompts, input.relayCatalog);
 
     if (selectors === GUIDED_PROMPT_CANCELLED) {
       prompts.cancel('Guided export cancelled.');
@@ -1378,10 +1897,14 @@ async function collectGuidedProxyExportInput(input: {
     const resolvedWriteMode =
       input.initialWriteMode !== 'file' || input.initialOutputPath !== undefined
         ? input.initialWriteMode
-        : await prompts.text({
-            message: 'Output mode (file, stdout, dry-run)',
+        : await prompts.select({
+            message: 'Output mode',
             initialValue: 'file',
-            validate: validateProxyExportWriteModeInput,
+            options: [
+              { value: 'file', label: 'Write file' },
+              { value: 'stdout', label: 'Print to stdout' },
+              { value: 'dry-run', label: 'Preview only' },
+            ],
           });
 
     if (resolvedWriteMode === GUIDED_PROMPT_CANCELLED) {
@@ -1444,6 +1967,7 @@ async function collectGuidedProxyExportInput(input: {
 
 async function collectGuidedProxyExportSelectors(
   prompts: GuidedPromptClient,
+  relayCatalog: MullvadRelayCatalog,
 ): Promise<readonly ProxyExportSelector[] | typeof GUIDED_PROMPT_CANCELLED> {
   const filterExport = await prompts.confirm({
     message: 'Filter the export to specific countries or regions?',
@@ -1460,50 +1984,46 @@ async function collectGuidedProxyExportSelectors(
     return [];
   }
 
+  const countryOptions = buildCountryPromptOptions(relayCatalog);
+  const regionOptions = listRegionGroupNames().map((region) => ({
+    value: region,
+    label: region,
+    hint: `${resolveRegionCountryCodes(region)?.length ?? 0} countries`,
+  }));
+
+  const selectedSeeds = await collectGuidedProxyExportSelectorSeeds({
+    prompts,
+    countryOptions,
+    regionOptions,
+  });
+
+  if (selectedSeeds === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
   const selectors: ProxyExportSelector[] = [];
 
+  for (const seed of selectedSeeds) {
+    const selector = await collectGuidedProxyExportSelectorFromSeed({
+      prompts,
+      relayCatalog,
+      countryOptions,
+      regionOptions,
+      seed,
+    });
+
+    if (selector === GUIDED_PROMPT_CANCELLED) {
+      return GUIDED_PROMPT_CANCELLED;
+    }
+
+    selectors.push(selector);
+  }
+
   while (true) {
-    const selectorType = await prompts.text({
-      message: 'Selector type (country or region)',
-      initialValue: 'country',
-      validate: validateProxyExportSelectorTypeInput,
-    });
-
-    if (selectorType === GUIDED_PROMPT_CANCELLED) {
-      return GUIDED_PROMPT_CANCELLED;
-    }
-
-    const kind = parseProxyExportSelectorType(selectorType);
-    const selectorValue = await prompts.text({
-      message:
-        kind === 'country' ? 'Country code' : `Region name (${listRegionGroupNames().join(', ')})`,
-      placeholder: kind === 'country' ? 'se' : 'europe',
-      validate: (value) => validateGuidedProxyExportSelectorValue({ kind, value }),
-    });
-
-    if (selectorValue === GUIDED_PROMPT_CANCELLED) {
-      return GUIDED_PROMPT_CANCELLED;
-    }
-
-    const selectorCount = await prompts.text({
-      message: 'Count for this selector (number or all)',
-      initialValue: 'all',
-      validate: validateProxyExportSelectorCountInput,
-    });
-
-    if (selectorCount === GUIDED_PROMPT_CANCELLED) {
-      return GUIDED_PROMPT_CANCELLED;
-    }
-
-    selectors.push({
-      kind,
-      value: normalizeProxyExportSelectorValue(selectorValue, kind),
-      requestedCount: parseGuidedProxyExportCount(selectorCount),
-    });
-
     const addAnother = await prompts.confirm({
-      message: 'Add another selector batch?',
-      initialValue: false,
+      message:
+        selectors.length === 0 ? 'Add a selector batch?' : 'Add another selector batch?',
+      initialValue: selectors.length === 0,
       active: 'Yes',
       inactive: 'No',
     });
@@ -1515,7 +2035,1090 @@ async function collectGuidedProxyExportSelectors(
     if (!addAnother) {
       return selectors;
     }
+
+    const selector = await collectGuidedProxyExportSelectorFromSeed({
+      prompts,
+      relayCatalog,
+      countryOptions,
+      regionOptions,
+    });
+
+    if (selector === GUIDED_PROMPT_CANCELLED) {
+      return GUIDED_PROMPT_CANCELLED;
+    }
+
+    selectors.push(selector);
   }
+}
+
+async function collectGuidedProxyExportSelectorSeeds(input: {
+  readonly prompts: GuidedPromptClient;
+  readonly countryOptions: readonly PromptSelectOption[];
+  readonly regionOptions: readonly PromptSelectOption[];
+}): Promise<readonly GuidedProxyExportSelectorSeed[] | typeof GUIDED_PROMPT_CANCELLED> {
+  while (true) {
+    const selectedCountries = await input.prompts.multiselect({
+      message: 'Country batches',
+      options: input.countryOptions,
+      placeholder: 'Select one or more countries',
+    });
+
+    if (selectedCountries === GUIDED_PROMPT_CANCELLED) {
+      return GUIDED_PROMPT_CANCELLED;
+    }
+
+    const selectedRegions = await input.prompts.multiselect({
+      message: 'Region batches',
+      options: input.regionOptions,
+      placeholder: 'Select one or more region groups',
+    });
+
+    if (selectedRegions === GUIDED_PROMPT_CANCELLED) {
+      return GUIDED_PROMPT_CANCELLED;
+    }
+
+    if (selectedCountries.length > 0 || selectedRegions.length > 0) {
+      return [
+        ...selectedCountries.map((value) => ({ kind: 'country' as const, value })),
+        ...selectedRegions.map((value) => ({ kind: 'region' as const, value })),
+      ];
+    }
+
+    const manualOnly = await input.prompts.confirm({
+      message: 'No countries or regions selected. Build batches one at a time instead?',
+      initialValue: true,
+      active: 'Yes',
+      inactive: 'Select from lists',
+    });
+
+    if (manualOnly === GUIDED_PROMPT_CANCELLED) {
+      return GUIDED_PROMPT_CANCELLED;
+    }
+
+    if (manualOnly) {
+      return [];
+    }
+  }
+}
+
+async function collectGuidedProxyExportSelectorFromSeed(input: {
+  readonly prompts: GuidedPromptClient;
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly countryOptions: readonly PromptSelectOption[];
+  readonly regionOptions: readonly PromptSelectOption[];
+  readonly seed?: GuidedProxyExportSelectorSeed;
+}): Promise<ProxyExportSelector | typeof GUIDED_PROMPT_CANCELLED> {
+  const seed =
+    input.seed ??
+    (await collectManualGuidedProxyExportSelectorSeed({
+      prompts: input.prompts,
+      countryOptions: input.countryOptions,
+      regionOptions: input.regionOptions,
+    }));
+
+  if (seed === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  if (seed.kind === 'region') {
+    return collectGuidedRegionSelector({
+      prompts: input.prompts,
+      relayCatalog: input.relayCatalog,
+      region: seed.value,
+    });
+  }
+
+  return collectGuidedCountrySelector({
+    prompts: input.prompts,
+    relayCatalog: input.relayCatalog,
+    countryCode: seed.value,
+  });
+}
+
+async function collectManualGuidedProxyExportSelectorSeed(input: {
+  readonly prompts: GuidedPromptClient;
+  readonly countryOptions: readonly PromptSelectOption[];
+  readonly regionOptions: readonly PromptSelectOption[];
+}): Promise<GuidedProxyExportSelectorSeed | typeof GUIDED_PROMPT_CANCELLED> {
+  const selectorType = await input.prompts.select({
+    message: 'Selector type',
+    initialValue: 'country',
+    options: [
+      { value: 'country', label: 'Country' },
+      { value: 'region', label: 'Region' },
+    ],
+  });
+
+  if (selectorType === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  const kind = parseProxyExportSelectorType(selectorType);
+
+  if (kind === 'region') {
+    const region = await input.prompts.select({
+      message: 'Region',
+      options: input.regionOptions,
+      placeholder: 'Europe, Americas, Asia-Pacific',
+    });
+
+    if (region === GUIDED_PROMPT_CANCELLED) {
+      return GUIDED_PROMPT_CANCELLED;
+    }
+
+    return {
+      kind: 'region',
+      value: region,
+    };
+  }
+
+  const countryCode = await input.prompts.select({
+    message: 'Country',
+    options: input.countryOptions,
+    placeholder: 'Sweden, Austria, United States',
+  });
+
+  if (countryCode === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  return {
+    kind: 'country',
+    value: countryCode,
+  };
+}
+
+async function collectGuidedRegionSelector(input: {
+  readonly prompts: GuidedPromptClient;
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly region: string;
+}): Promise<ProxyExportSelector | typeof GUIDED_PROMPT_CANCELLED> {
+  const providerOptions = buildProviderPromptOptions({ relayCatalog: input.relayCatalog });
+  const providerFilter =
+    providerOptions.length > 0
+      ? await input.prompts.confirm({
+          message: `Filter ${input.region} by provider?`,
+          initialValue: false,
+          active: 'Yes',
+          inactive: 'No',
+        })
+      : false;
+
+  if (providerFilter === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  const providers =
+    providerFilter && providerOptions.length > 0
+      ? await input.prompts.multiselect({
+          message: `Providers for ${input.region}`,
+          options: providerOptions,
+          placeholder: 'm247, xtom, datawagon',
+        })
+      : [];
+
+  if (providers === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  const selectorCount = await input.prompts.text({
+    message: `Count for ${input.region} (number or all)`,
+    initialValue: '1',
+    validate: validateProxyExportSelectorCountInput,
+  });
+
+  if (selectorCount === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  return {
+    kind: 'region',
+    value: input.region,
+    providers,
+    requestedCount: parseGuidedProxyExportCount(selectorCount),
+  };
+}
+
+async function collectGuidedCountrySelector(input: {
+  readonly prompts: GuidedPromptClient;
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly countryCode: string;
+}): Promise<ProxyExportSelector | typeof GUIDED_PROMPT_CANCELLED> {
+  const countryLabel = describeGuidedCountrySelector(input.relayCatalog, input.countryCode);
+  const cityOptions = buildCityPromptOptions({
+    relayCatalog: input.relayCatalog,
+    countryCode: input.countryCode,
+  });
+  const cityFilter =
+    cityOptions.length > 0
+      ? await input.prompts.confirm({
+          message: `Pin ${countryLabel} to a city?`,
+          initialValue: false,
+          active: 'Yes',
+          inactive: 'No',
+        })
+      : false;
+
+  if (cityFilter === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  const city =
+    cityFilter && cityOptions.length > 0
+      ? await input.prompts.select({
+          message: `${countryLabel} city`,
+          options: cityOptions,
+          placeholder: 'Gothenburg, Vienna, New York',
+        })
+      : undefined;
+
+  if (city === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  const providerOptions = buildProviderPromptOptions({
+    relayCatalog: input.relayCatalog,
+    countryCode: input.countryCode,
+    ...(typeof city === 'string' ? { cityCode: city } : {}),
+  });
+  const providerFilter =
+    providerOptions.length > 0
+      ? await input.prompts.confirm({
+          message: `Filter ${countryLabel} by provider?`,
+          initialValue: false,
+          active: 'Yes',
+          inactive: 'No',
+        })
+      : false;
+
+  if (providerFilter === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  const providers =
+    providerFilter && providerOptions.length > 0
+      ? await input.prompts.multiselect({
+          message: `${countryLabel} providers`,
+          options: providerOptions,
+          placeholder: 'm247, xtom, datawagon',
+        })
+      : [];
+
+  if (providers === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  const serverOptions = buildServerPromptOptions({
+    relayCatalog: input.relayCatalog,
+    countryCode: input.countryCode,
+    ...(typeof city === 'string' ? { cityCode: city } : {}),
+    providers,
+  });
+  const serverFilter =
+    serverOptions.length > 0
+      ? await input.prompts.confirm({
+          message: `Pin ${countryLabel} to one exact server?`,
+          initialValue: false,
+          active: 'Yes',
+          inactive: 'No',
+        })
+      : false;
+
+  if (serverFilter === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  const server =
+    serverFilter && serverOptions.length > 0
+      ? await input.prompts.select({
+          message: `${countryLabel} server`,
+          options: serverOptions,
+          placeholder: 'se-got-wg-101, at-vie-wg-001',
+        })
+      : undefined;
+
+  if (server === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  const selectorCount =
+    typeof server === 'string'
+      ? '1'
+      : await input.prompts.text({
+          message: `Count for ${countryLabel} (number or all)`,
+          initialValue: '1',
+          validate: validateProxyExportSelectorCountInput,
+        });
+
+  if (selectorCount === GUIDED_PROMPT_CANCELLED) {
+    return GUIDED_PROMPT_CANCELLED;
+  }
+
+  return {
+    kind: 'country',
+    value: input.countryCode,
+    ...(typeof city === 'string' ? { city } : {}),
+    ...(typeof server === 'string' ? { server } : {}),
+    providers,
+    requestedCount: parseGuidedProxyExportCount(selectorCount),
+  };
+}
+
+function describeGuidedCountrySelector(
+  relayCatalog: MullvadRelayCatalog,
+  countryCode: string,
+): string {
+  const country = relayCatalog.countries.find((entry) => entry.code === countryCode);
+  return country ? `${country.name} (${country.code})` : countryCode;
+}
+
+function resolveProxyExportSelectorsWithCatalog(input: {
+  readonly config: MullgateConfig;
+  readonly selectors: readonly ProxyExportSelector[];
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly configPath: string;
+}):
+  | { readonly ok: true; readonly selectors: readonly ProxyExportSelector[] }
+  | ProxyExportFailure {
+  const selectors: ProxyExportSelector[] = [];
+
+  for (const selector of input.selectors) {
+    const providersResult = resolveProxyExportProviderNames({
+      providers: selector.providers,
+      relayCatalog: input.relayCatalog,
+      configPath: input.configPath,
+    });
+
+    if (!providersResult.ok) {
+      return providersResult;
+    }
+
+    if (selector.kind === 'region') {
+      const region = normalizeProxyExportSelectorValue(selector.value, 'region');
+
+      if (!resolveRegionCountryCodes(region)) {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: `Unknown region ${region}. Supported regions: ${listRegionGroupNames().join(', ')}.`,
+          configPath: input.configPath,
+        };
+      }
+
+      selectors.push({
+        kind: 'region',
+        value: region,
+        providers: providersResult.providers,
+        requestedCount: selector.requestedCount,
+      });
+      continue;
+    }
+
+    const countryResult = resolveCountryCode({
+      value: selector.value,
+      config: input.config,
+      relayCatalog: input.relayCatalog,
+      configPath: input.configPath,
+    });
+
+    if (!countryResult.ok) {
+      return countryResult;
+    }
+
+    const cityResult =
+      selector.city === undefined
+        ? { ok: true as const, cityCode: undefined }
+        : resolveCityCode({
+            countryCode: countryResult.countryCode,
+            value: selector.city,
+            config: input.config,
+            relayCatalog: input.relayCatalog,
+            configPath: input.configPath,
+          });
+
+    if (!cityResult.ok) {
+      return cityResult;
+    }
+
+    const serverResult =
+      selector.server === undefined
+        ? { ok: true as const, hostname: undefined }
+        : resolveServerHostname({
+            countryCode: countryResult.countryCode,
+            ...(cityResult.cityCode ? { cityCode: cityResult.cityCode } : {}),
+            providers: providersResult.providers,
+            value: selector.server,
+            relayCatalog: input.relayCatalog,
+            configPath: input.configPath,
+          });
+
+    if (!serverResult.ok) {
+      return serverResult;
+    }
+
+    if (serverResult.hostname && selector.requestedCount !== null && selector.requestedCount > 1) {
+      return {
+        ok: false,
+        phase: 'export-proxies',
+        source: 'input',
+        message: `Selector ${renderProxyExportSelectorLabel({
+          ...selector,
+          value: countryResult.countryCode,
+          ...(cityResult.cityCode ? { city: cityResult.cityCode } : {}),
+          ...(serverResult.hostname ? { server: serverResult.hostname } : {}),
+          providers: providersResult.providers,
+        })} targets one exact server, so --count cannot exceed 1.`,
+        configPath: input.configPath,
+      };
+    }
+
+    selectors.push({
+      kind: 'country',
+      value: countryResult.countryCode,
+      ...(cityResult.cityCode ? { city: cityResult.cityCode } : {}),
+      ...(serverResult.hostname ? { server: serverResult.hostname } : {}),
+      providers: providersResult.providers,
+      requestedCount: selector.requestedCount,
+    });
+  }
+
+  return {
+    ok: true,
+    selectors,
+  };
+}
+
+function describeConfiguredProxyExportRoutes(input: {
+  readonly config: MullgateConfig;
+  readonly relayCatalog: MullvadRelayCatalog;
+}): readonly ProxyExportRouteDescriptor[] {
+  const relayByHostname = new Map(
+    input.relayCatalog.relays.flatMap((relay) => [
+      [relay.hostname, relay],
+      [relay.fqdn, relay],
+    ]),
+  );
+
+  return input.config.routing.locations.map((location, routeIndex) => {
+    const matchedRelay =
+      relayByHostname.get(location.relayPreference.hostnameLabel ?? '') ?? null;
+
+    return {
+      routeIndex,
+      routeId: location.runtime.routeId,
+      routeAlias: location.alias,
+      routeHostname: location.hostname,
+      countryCode: matchedRelay?.location.countryCode ?? location.relayPreference.country ?? null,
+      cityCode: matchedRelay?.location.cityCode ?? location.relayPreference.city ?? null,
+      relayHostname: matchedRelay?.hostname ?? location.relayPreference.hostnameLabel ?? null,
+      provider:
+        matchedRelay?.provider ?? location.mullvad.relayConstraints.providers[0] ?? null,
+    };
+  });
+}
+
+async function loadRelayCatalogForProxyExport(input: {
+  readonly store: ConfigStore;
+}): Promise<{ readonly ok: true; readonly relayCatalog: MullvadRelayCatalog } | ProxyExportFailure> {
+  const cached = await loadStoredRelayCatalog(input.store.paths.provisioningCacheFile);
+
+  if (cached.ok) {
+    return {
+      ok: true,
+      relayCatalog: cached.value,
+    };
+  }
+
+  const envRelayUrl = readOptionalString(process.env[RELAYS_URL_ENV]);
+  const fetched = await fetchRelays({
+    ...(envRelayUrl ? { url: envRelayUrl } : {}),
+  });
+
+  if (fetched.ok) {
+    return {
+      ok: true,
+      relayCatalog: fetched.value,
+    };
+  }
+
+  return {
+    ok: false,
+    phase: fetched.phase,
+    source: fetched.source,
+    message: fetched.message,
+    configPath: input.store.paths.configFile,
+    cause: cached.cause ?? fetched.cause ?? cached.message,
+  };
+}
+
+async function ensureProxyExportRoutes(input: {
+  readonly store: ConfigStore;
+  readonly config: MullgateConfig;
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly exportInput: ProxyExportResolvedInput;
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly config: MullgateConfig;
+      readonly relayCatalog: MullvadRelayCatalog;
+      readonly createdAliases: readonly string[];
+    }
+  | ProxyExportFailure
+> {
+  if (input.exportInput.selectors.length === 0) {
+    return {
+      ok: true,
+      config: input.config,
+      relayCatalog: input.relayCatalog,
+      createdAliases: [],
+    };
+  }
+
+  const plannedTargets = planProxyExportRelayTargets({
+    config: input.config,
+    relayCatalog: input.relayCatalog,
+    selectors: input.exportInput.selectors,
+    configuredRoutes: describeConfiguredProxyExportRoutes({
+      config: input.config,
+      relayCatalog: input.relayCatalog,
+    }),
+    configPath: input.store.paths.configFile,
+  });
+
+  if (!plannedTargets.ok) {
+    return plannedTargets;
+  }
+
+  if (plannedTargets.targets.length === 0) {
+    return {
+      ok: true,
+      config: input.config,
+      relayCatalog: input.relayCatalog,
+      createdAliases: [],
+    };
+  }
+
+  const newRouteCount = input.config.routing.locations.length + plannedTargets.targets.length;
+  const routeBindIpsResult = deriveAddedRouteBindIps({
+    config: input.config,
+    count: plannedTargets.targets.length,
+    configPath: input.store.paths.configFile,
+  });
+
+  if (!routeBindIpsResult.ok) {
+    return routeBindIpsResult;
+  }
+
+  const aliasCatalog = createLocationAliasCatalog(input.relayCatalog.relays);
+
+  if (!aliasCatalog.ok) {
+    return {
+      ok: false,
+      phase: aliasCatalog.phase,
+      source: aliasCatalog.source,
+      message: aliasCatalog.message,
+      configPath: input.store.paths.configFile,
+      ...(aliasCatalog.alias ? { artifactPath: aliasCatalog.alias } : {}),
+    };
+  }
+
+  const baseDeviceName = deriveExportBaseDeviceName(input.config);
+  const plannedRoutesResult = planSetupRoutes({
+    requestedLocations: plannedTargets.targets.map((target) => target.relay.hostname),
+    routeBindIps: routeBindIpsResult.routeBindIps,
+    exposureMode: input.config.setup.exposure.mode,
+    exposureBaseDomain: input.config.setup.exposure.baseDomain,
+    aliasCatalog: aliasCatalog.value,
+    baseDeviceName,
+  });
+
+  if (!plannedRoutesResult.ok) {
+    return {
+      ok: false,
+      phase: plannedRoutesResult.phase,
+      source: plannedRoutesResult.source,
+      message: plannedRoutesResult.message,
+      configPath: input.store.paths.configFile,
+      ...(plannedRoutesResult.code ? { cause: plannedRoutesResult.code } : {}),
+      ...(plannedRoutesResult.artifactPath ? { artifactPath: plannedRoutesResult.artifactPath } : {}),
+    };
+  }
+
+  const plannedRoutes = plannedRoutesResult.value.map((route) => ({
+    ...route,
+    deviceName: deriveRouteDeviceName(baseDeviceName, route.alias, newRouteCount),
+  }));
+
+  if (input.exportInput.writeMode === 'dry-run') {
+    const dryRunConfig = syncLegacyMirrorsToRouting({
+      ...input.config,
+      updatedAt: new Date().toISOString(),
+      routing: {
+        locations: [
+          ...input.config.routing.locations,
+          ...plannedRoutes.map((route, index) =>
+            createProvisionedRouteConfig({
+              route,
+              accountNumber: input.config.mullvad.accountNumber,
+              providers: plannedTargets.targets[index]?.selector.providers ?? [],
+            }),
+          ),
+        ],
+      },
+    });
+
+    return {
+      ok: true,
+      config: dryRunConfig,
+      relayCatalog: input.relayCatalog,
+      createdAliases: plannedRoutes.map((route) => route.alias),
+    };
+  }
+
+  const provisionedRoutes = [];
+
+  for (let index = 0; index < plannedRoutes.length; index += 1) {
+    const route = plannedRoutes[index]!;
+    const provisionResult = await provisionRouteWithRetries({
+      accountNumber: input.config.mullvad.accountNumber,
+      route,
+      ...(readOptionalString(process.env[PROVISIONING_URL_ENV])
+        ? { provisioningBaseUrl: readOptionalString(process.env[PROVISIONING_URL_ENV]) }
+        : {}),
+    });
+
+    if (!provisionResult.ok) {
+      return {
+        ok: false,
+        phase: provisionResult.phase,
+        source: provisionResult.source,
+        message: `Provisioning failed for routed location ${route.alias} (${route.hostname} -> ${route.bindIp}).`,
+        configPath: input.store.paths.configFile,
+        cause: provisionResult.cause ?? provisionResult.message,
+      };
+    }
+
+    provisionedRoutes.push({
+      route,
+      provisioning: provisionResult,
+      selector: plannedTargets.targets[index]!.selector,
+    });
+  }
+
+  const updatedConfig = syncLegacyMirrorsToRouting({
+    ...input.config,
+    updatedAt: new Date().toISOString(),
+    routing: {
+      locations: [
+        ...input.config.routing.locations,
+        ...provisionedRoutes.map(({ route, provisioning, selector }, index) =>
+          createProvisionedRouteConfig({
+            route,
+            accountNumber: input.config.mullvad.accountNumber,
+            provisioning,
+            providers: selector.providers,
+          }),
+        ),
+      ],
+    },
+  });
+
+  const pendingConfig = withRuntimeStatus(
+    updatedConfig,
+    'unvalidated',
+    null,
+    'Export added routed locations; runtime artifacts were refreshed for the new routes.',
+  );
+
+  try {
+    await input.store.save(pendingConfig);
+  } catch (error) {
+    return {
+      ok: false,
+      phase: 'persist-config',
+      source: 'filesystem',
+      message: 'Failed to persist config after adding export routes.',
+      configPath: input.store.paths.configFile,
+      cause: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const renderResult = await renderWireproxyArtifacts({
+    config: pendingConfig,
+    relayCatalog: input.relayCatalog,
+    paths: input.store.paths,
+  });
+
+  if (!renderResult.ok) {
+    return {
+      ok: false,
+      phase: renderResult.phase,
+      source: renderResult.source,
+      message: renderResult.message,
+      configPath: input.store.paths.configFile,
+      ...(renderResult.cause ? { cause: renderResult.cause } : {}),
+      ...(renderResult.artifactPath ? { artifactPath: renderResult.artifactPath } : {}),
+    };
+  }
+
+  const validationResult = await validateWireproxyConfig({
+    configPath: renderResult.artifactPaths.wireproxyConfigPath,
+    configText: renderResult.wireproxyConfig,
+    reportPath: input.store.paths.wireproxyConfigTestReportFile,
+  });
+
+  const finalConfig = withRuntimeStatus(
+    pendingConfig,
+    validationResult.ok ? 'validated' : 'error',
+    validationResult.checkedAt,
+    validationResult.ok
+      ? `Validated via ${summarizeValidationSource(validationResult)}.`
+      : `Validation failed via ${summarizeValidationSource(validationResult)}: ${validationResult.cause}`,
+  );
+
+  try {
+    await input.store.save(finalConfig);
+  } catch (error) {
+    return {
+      ok: false,
+      phase: 'persist-config',
+      source: 'filesystem',
+      message: 'Failed to persist validated config after adding export routes.',
+      configPath: input.store.paths.configFile,
+      cause: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  if (!validationResult.ok) {
+    return {
+      ok: false,
+      phase: validationResult.phase,
+      source: validationResult.source,
+      message: validationResult.cause,
+      configPath: input.store.paths.configFile,
+      artifactPath: validationResult.target,
+      cause: validationResult.issues.map((issue) => issue.message).join('; '),
+    };
+  }
+
+  return {
+    ok: true,
+    config: finalConfig,
+    relayCatalog: input.relayCatalog,
+    createdAliases: plannedRoutes.map((route) => route.alias),
+  };
+}
+
+function planProxyExportRelayTargets(input: {
+  readonly config: MullgateConfig;
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly selectors: readonly ProxyExportSelector[];
+  readonly configuredRoutes: readonly ProxyExportRouteDescriptor[];
+  readonly configPath: string;
+}):
+  | {
+      readonly ok: true;
+      readonly targets: readonly {
+        readonly relay: MullvadRelay;
+        readonly selector: ProxyExportSelector;
+      }[];
+    }
+  | ProxyExportFailure {
+  const reservedRelayHostnames = new Set<string>();
+  const plannedTargets: { relay: MullvadRelay; selector: ProxyExportSelector }[] = [];
+
+  for (const selector of input.selectors) {
+    const matchingConfiguredRoutes = input.configuredRoutes.filter((route) => {
+      if (route.relayHostname && reservedRelayHostnames.has(route.relayHostname)) {
+        return false;
+      }
+
+      return matchesProxyExportSelector({
+        selector,
+        entry: {
+          routeIndex: route.routeIndex,
+          alias: route.routeAlias,
+          hostname: route.routeHostname,
+          countryCode: route.countryCode,
+          cityCode: route.cityCode,
+          relayHostname: route.relayHostname,
+          provider: route.provider,
+          url: '',
+          redactedUrl: '',
+        },
+      });
+    });
+    const desiredCount = selector.requestedCount ?? Math.max(1, matchingConfiguredRoutes.length);
+    const exportedExistingRoutes = matchingConfiguredRoutes.slice(0, desiredCount);
+
+    exportedExistingRoutes.forEach((route) => {
+      if (route.relayHostname) {
+        reservedRelayHostnames.add(route.relayHostname);
+      }
+    });
+
+    const remainingCount = desiredCount - exportedExistingRoutes.length;
+
+    if (remainingCount <= 0) {
+      continue;
+    }
+
+    const selectedRelays = chooseRelaysForProxyExportSelector({
+      selector,
+      relayCatalog: input.relayCatalog,
+      count: remainingCount,
+      excludedRelayHostnames: reservedRelayHostnames,
+    });
+
+    selectedRelays.forEach((relay) => {
+      reservedRelayHostnames.add(relay.hostname);
+      plannedTargets.push({ relay, selector });
+    });
+  }
+
+  return {
+    ok: true,
+    targets: plannedTargets,
+  };
+}
+
+function chooseRelaysForProxyExportSelector(input: {
+  readonly selector: ProxyExportSelector;
+  readonly relayCatalog: MullvadRelayCatalog;
+  readonly count: number;
+  readonly excludedRelayHostnames: ReadonlySet<string>;
+}): MullvadRelay[] {
+  if (input.selector.kind === 'region') {
+    const countryCodes = resolveRegionCountryCodes(input.selector.value) ?? [];
+
+    return chooseSpreadRelays({
+      candidates: listMatchingRelays({
+        relayCatalog: input.relayCatalog,
+        providers: input.selector.providers,
+      }).filter(
+        (relay) =>
+          countryCodes.includes(relay.location.countryCode) &&
+          !input.excludedRelayHostnames.has(relay.hostname),
+      ),
+      count: input.count,
+      spreadKey: (relay) => relay.location.countryCode,
+    });
+  }
+
+  if (input.selector.server) {
+    const relay = listMatchingRelays({
+      relayCatalog: input.relayCatalog,
+      countryCode: input.selector.value,
+      ...(input.selector.city ? { cityCode: input.selector.city } : {}),
+      providers: input.selector.providers,
+    }).find(
+      (candidate) =>
+        candidate.hostname === input.selector.server &&
+        !input.excludedRelayHostnames.has(candidate.hostname),
+    );
+
+    return relay ? [relay] : [];
+  }
+
+  const candidates = listMatchingRelays({
+    relayCatalog: input.relayCatalog,
+    countryCode: input.selector.value,
+    ...(input.selector.city ? { cityCode: input.selector.city } : {}),
+    providers: input.selector.providers,
+  }).filter((relay) => !input.excludedRelayHostnames.has(relay.hostname));
+
+  return chooseSpreadRelays({
+    candidates,
+    count: input.count,
+    spreadKey: input.selector.city ? (relay) => relay.hostname : (relay) => relay.location.cityCode,
+  });
+}
+
+function chooseSpreadRelays(input: {
+  readonly candidates: readonly MullvadRelay[];
+  readonly count: number;
+  readonly spreadKey: (relay: MullvadRelay) => string;
+}): MullvadRelay[] {
+  const grouped = new Map<string, MullvadRelay[]>();
+
+  input.candidates.forEach((relay) => {
+    const key = input.spreadKey(relay);
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.push(relay);
+      return;
+    }
+
+    grouped.set(key, [relay]);
+  });
+
+  const groupKeys = [...grouped.keys()].sort((left, right) => left.localeCompare(right));
+  const selected: MullvadRelay[] = [];
+
+  while (selected.length < input.count) {
+    let pickedAny = false;
+
+    groupKeys.forEach((key) => {
+      if (selected.length >= input.count) {
+        return;
+      }
+
+      const relays = grouped.get(key);
+      const nextRelay = relays?.shift();
+
+      if (!nextRelay) {
+        return;
+      }
+
+      selected.push(nextRelay);
+      pickedAny = true;
+    });
+
+    if (!pickedAny) {
+      return selected;
+    }
+  }
+
+  return selected;
+}
+
+function deriveExportBaseDeviceName(config: MullgateConfig): string {
+  return readOptionalString(config.mullvad.deviceName) ?? defaultDeviceName();
+}
+
+function deriveAddedRouteBindIps(input: {
+  readonly config: MullgateConfig;
+  readonly count: number;
+  readonly configPath: string;
+}):
+  | { readonly ok: true; readonly routeBindIps: readonly string[] }
+  | ProxyExportFailure {
+  if (input.count === 0) {
+    return {
+      ok: true,
+      routeBindIps: [],
+    };
+  }
+
+  if (input.config.setup.exposure.mode === 'loopback') {
+    const exposure = validateExposureSettings({
+      routeCount: input.config.routing.locations.length + input.count,
+      exposureMode: 'loopback',
+      exposureBaseDomain: input.config.setup.exposure.baseDomain,
+      routeBindIps: [],
+      artifactPath: input.configPath,
+    });
+
+    if (!exposure.ok) {
+      return {
+        ok: false,
+        phase: exposure.phase,
+        source: exposure.source,
+        message: exposure.message,
+        configPath: input.configPath,
+        ...(exposure.cause ? { cause: exposure.cause } : {}),
+      };
+    }
+
+    return {
+      ok: true,
+      routeBindIps: exposure.routeBindIps.slice(input.config.routing.locations.length),
+    };
+  }
+
+  const nextRouteBindIps: string[] = [];
+  let previousBindIp =
+    input.config.routing.locations.at(-1)?.bindIp ?? input.config.setup.bind.host;
+
+  for (let index = 0; index < input.count; index += 1) {
+    previousBindIp = incrementIpv4Address(previousBindIp);
+    nextRouteBindIps.push(previousBindIp);
+  }
+  const validated = validateExposureSettings({
+    routeCount: input.config.routing.locations.length + input.count,
+    exposureMode: input.config.setup.exposure.mode,
+    exposureBaseDomain: input.config.setup.exposure.baseDomain,
+    routeBindIps: [...input.config.routing.locations.map((location) => location.bindIp), ...nextRouteBindIps],
+    artifactPath: input.configPath,
+  });
+
+  if (!validated.ok) {
+    return {
+      ok: false,
+      phase: validated.phase,
+      source: validated.source,
+      message: validated.message,
+      configPath: input.configPath,
+      ...(validated.cause ? { cause: validated.cause } : {}),
+    };
+  }
+
+  return {
+    ok: true,
+    routeBindIps: validated.routeBindIps.slice(input.config.routing.locations.length),
+  };
+}
+
+function incrementIpv4Address(value: string): string {
+  const segments = value.split('.').map((segment) => Number(segment));
+
+  if (segments.length !== 4 || segments.some((segment) => !Number.isInteger(segment) || segment < 0 || segment > 255)) {
+    throw new Error(`Cannot derive the next bind IP from ${value}.`);
+  }
+
+  let numericValue = 0;
+  segments.forEach((segment) => {
+    numericValue = (numericValue << 8) + segment;
+  });
+
+  if (numericValue >= 0xffffffff) {
+    throw new Error(`Cannot derive the next bind IP from ${value}.`);
+  }
+
+  const nextValue = numericValue + 1;
+  return [24, 16, 8, 0].map((shift) => String((nextValue >> shift) & 255)).join('.');
+}
+
+function createProvisionedRouteConfig(input: {
+  readonly route: PlannedSetupRoute;
+  readonly accountNumber: string;
+  readonly providers: readonly string[];
+  readonly provisioning?: Extract<Awaited<ReturnType<typeof provisionRouteWithRetries>>, { ok: true }>;
+}): MullgateConfig['routing']['locations'][number] {
+  return {
+    alias: input.route.alias,
+    hostname: input.route.hostname,
+    bindIp: input.route.bindIp,
+    relayPreference: structuredClone(input.route.relayPreference),
+    mullvad: {
+      accountNumber: input.accountNumber,
+      deviceName: input.route.deviceName,
+      lastProvisionedAt: input.provisioning?.checkedAt ?? null,
+      relayConstraints: {
+        providers: [...input.providers],
+      },
+      wireguard:
+        input.provisioning?.value.toConfigValue() ?? {
+          publicKey: null,
+          privateKey: null,
+          ipv4Address: null,
+          ipv6Address: null,
+          gatewayIpv4: null,
+          gatewayIpv6: null,
+          dnsServers: [],
+          peerPublicKey: null,
+          peerEndpoint: null,
+        },
+    },
+    runtime: {
+      routeId: input.route.routeId,
+      wireproxyServiceName: `wireproxy-${input.route.routeId}`,
+      haproxyBackendName: `route-${input.route.routeId}`,
+      wireproxyConfigFile: `wireproxy-${input.route.routeId}.conf`,
+    },
+  };
 }
 
 async function deliverProxyExport(input: {
@@ -1776,6 +3379,44 @@ function createGuidedPromptClient(): GuidedPromptClient {
 
         return isCancel(result) ? GUIDED_PROMPT_CANCELLED : result;
       },
+      select: async (options) => {
+        const result =
+          options.options.length > 15
+            ? await autocomplete({
+                message: options.message,
+                options: [...options.options],
+                ...(options.initialValue !== undefined
+                  ? { initialValue: options.initialValue }
+                  : {}),
+                ...(options.placeholder ? { placeholder: options.placeholder } : {}),
+                input: process.stdin,
+                output: process.stderr,
+              })
+            : await select({
+                message: options.message,
+                options: [...options.options],
+                ...(options.initialValue !== undefined
+                  ? { initialValue: options.initialValue }
+                  : {}),
+                input: process.stdin,
+                output: process.stderr,
+              });
+
+        return isCancel(result) ? GUIDED_PROMPT_CANCELLED : result;
+      },
+      multiselect: async (options) => {
+        const result = await autocompleteMultiselect({
+          message: options.message,
+          options: [...options.options],
+          ...(options.initialValues ? { initialValues: [...options.initialValues] } : {}),
+          ...(options.required !== undefined ? { required: options.required } : {}),
+          ...(options.placeholder ? { placeholder: options.placeholder } : {}),
+          input: process.stdin,
+          output: process.stderr,
+        });
+
+        return isCancel(result) ? GUIDED_PROMPT_CANCELLED : result;
+      },
       confirm: async (options) => {
         const result = await confirm({
           message: options.message,
@@ -1833,6 +3474,81 @@ function createGuidedPromptClient(): GuidedPromptClient {
         }
 
         process.stderr.write(`\n${validationError}\n`);
+      }
+    },
+    select: async (options) => {
+      const optionLookup = new Map(
+        options.options.flatMap((option, index) => [
+          [option.value.toLowerCase(), option.value],
+          [String(index + 1), option.value],
+          [option.label.toLowerCase(), option.value],
+        ]),
+      );
+
+      while (true) {
+        process.stderr.write(`${options.message}\n`);
+        options.options.forEach((option, index) => {
+          process.stderr.write(`  ${index + 1}. ${option.label}${option.hint ? ` - ${option.hint}` : ''}\n`);
+        });
+        process.stderr.write('Select one option: ');
+        const answer = await nextBufferedLine();
+
+        if (answer === null) {
+          process.stderr.write('\n');
+          return GUIDED_PROMPT_CANCELLED;
+        }
+
+        const resolved = optionLookup.get(answer.trim().toLowerCase());
+
+        if (resolved) {
+          process.stderr.write('\n');
+          return resolved;
+        }
+
+        process.stderr.write('\nEnter an option number or value from the list.\n');
+      }
+    },
+    multiselect: async (options) => {
+      const optionLookup = new Map(
+        options.options.flatMap((option, index) => [
+          [option.value.toLowerCase(), option.value],
+          [String(index + 1), option.value],
+          [option.label.toLowerCase(), option.value],
+        ]),
+      );
+
+      while (true) {
+        process.stderr.write(`${options.message}\n`);
+        options.options.forEach((option, index) => {
+          process.stderr.write(`  ${index + 1}. ${option.label}${option.hint ? ` - ${option.hint}` : ''}\n`);
+        });
+        process.stderr.write('Select one or more options (comma-separated, blank for none): ');
+        const answer = await nextBufferedLine();
+
+        if (answer === null) {
+          process.stderr.write('\n');
+          return GUIDED_PROMPT_CANCELLED;
+        }
+
+        const selections = answer
+          .split(',')
+          .map((entry) => entry.trim().toLowerCase())
+          .filter((entry) => entry.length > 0)
+          .map((entry) => optionLookup.get(entry))
+          .filter(isDefined);
+
+        if (selections.length === 0 && options.required) {
+          process.stderr.write('\nSelect at least one option.\n');
+          continue;
+        }
+
+        if (answer.trim().length > 0 && selections.length === 0) {
+          process.stderr.write('\nEnter option numbers or values from the list.\n');
+          continue;
+        }
+
+        process.stderr.write('\n');
+        return [...new Set(selections)];
       }
     },
     confirm: async (options) => {
@@ -2315,7 +4031,16 @@ function buildProxyExportFilename(input: {
   }
 
   const selectorSlug = input.selectors
-    .map((selector) => `${selector.kind}-${selector.value}-${selector.requestedCount ?? 'all'}`)
+    .map((selector) =>
+      [
+        selector.kind,
+        selector.value,
+        ...(selector.city ? [selector.city] : []),
+        ...(selector.server ? [selector.server] : []),
+        ...(selector.providers.length > 0 ? [selector.providers.join('-')] : []),
+        selector.requestedCount ?? 'all',
+      ].join('-'),
+    )
     .join('--');
 
   return `proxy-${input.protocol}-${selectorSlug}.txt`;
@@ -2323,18 +4048,40 @@ function buildProxyExportFilename(input: {
 
 function matchesProxyExportSelector(input: {
   readonly selector: ProxyExportSelector;
-  readonly countryCode: string | null;
+  readonly entry: ProxyExportEntry;
 }): boolean {
-  if (!input.countryCode) {
+  if (!input.entry.countryCode) {
+    return false;
+  }
+
+  if (
+    input.selector.providers.length > 0 &&
+    (!input.entry.provider ||
+      !input.selector.providers.some(
+        (provider) => provider.toLowerCase() === input.entry.provider?.toLowerCase(),
+      ))
+  ) {
     return false;
   }
 
   if (input.selector.kind === 'country') {
-    return input.countryCode === input.selector.value;
+    if (input.entry.countryCode !== input.selector.value) {
+      return false;
+    }
+
+    if (input.selector.city && input.entry.cityCode !== input.selector.city) {
+      return false;
+    }
+
+    if (input.selector.server && input.entry.relayHostname !== input.selector.server) {
+      return false;
+    }
+
+    return true;
   }
 
   const regionCountryCodes = resolveRegionCountryCodes(input.selector.value);
-  return regionCountryCodes ? regionCountryCodes.includes(input.countryCode) : false;
+  return regionCountryCodes ? regionCountryCodes.includes(input.entry.countryCode) : false;
 }
 
 function createProxyExportUrl(input: {

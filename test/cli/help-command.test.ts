@@ -208,8 +208,9 @@ describe('mullgate help command contract', () => {
                                          IPs, DNS guidance, and restart status without
                                          raw JSON edits.
         export [options]                 Export proxy URLs to a text file with ordered
-                                         country/region selectors and deterministic
-                                         dedupe.
+                                         country/region selector batches, optional
+                                         city/server/provider filters, and
+                                         deterministic dedupe.
         get <keyPath>                    Read one saved config value with secret-safe
                                          redaction.
         set [options] <keyPath> [value]  Update a saved config value without printing
@@ -232,28 +233,35 @@ describe('mullgate help command contract', () => {
       "
       Usage: mullgate config export [options]
 
-      Export proxy URLs to a text file with ordered country/region selectors and
-      deterministic dedupe.
+      Export proxy URLs to a text file with ordered country/region selector batches,
+      optional city/server/provider filters, and deterministic dedupe.
 
       Options:
-        --protocol <protocol>  Export proxy URLs for socks5, http, or https.
-        --country <code>       Add a country selector. Pair it with a following
-                               --count to cap that selector.
-        --region <name>        Add a curated region selector (americas, asia-pacific,
-                               europe, middle-east-africa). Pair it with a following
-                               --count to cap that selector.
-        --count <number>       Apply a per-selector export cap to the immediately
-                               preceding --country or --region.
-        --guided               Launch a guided export flow, like setup, for creating
-                               proxy lists.
-        --dry-run              Preview a secret-safe export summary without writing a
-                               file.
-        --stdout               Write the exported proxy URLs to stdout instead of a
-                               file.
-        --force                Overwrite an existing output file.
-        --output <path>        Write the export to this path instead of using an auto
-                               filename.
-        -h, --help             display help for command"
+        --protocol <protocol>     Export proxy URLs for socks5, http, or https.
+        --country <code-or-name>  Add a country selector. Pair it with optional
+                                  --city, --server, --provider, and a following
+                                  --count.
+        --region <name>           Add a curated region selector (americas,
+                                  asia-pacific, europe, middle-east-africa). Pair it
+                                  with optional --provider and a following --count.
+        --city <code-or-name>     Refine the immediately preceding --country selector
+                                  to one city.
+        --server <hostname>       Refine the immediately preceding --country selector
+                                  to one exact Mullvad relay hostname.
+        --provider <name>         Filter the immediately preceding --country or
+                                  --region selector by provider. Repeat as needed.
+        --count <number>          Apply a per-selector export cap to the immediately
+                                  preceding --country or --region batch.
+        --guided                  Launch a guided export flow, like setup, for
+                                  creating proxy lists.
+        --dry-run                 Preview a secret-safe export summary without writing
+                                  a file.
+        --stdout                  Write the exported proxy URLs to stdout instead of a
+                                  file.
+        --force                   Overwrite an existing output file.
+        --output <path>           Write the export to this path instead of using an
+                                  auto filename.
+        -h, --help                display help for command"
     `);
     expect(`\n${configHostsHelp}`).toMatchInlineSnapshot(`
       "
