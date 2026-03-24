@@ -177,13 +177,13 @@ export type RunSetupFlowOptions = {
   readonly checkedAt?: string;
 };
 
-type PlannedSetupRoute = SetupRouteMetadata & {
+export type PlannedSetupRoute = SetupRouteMetadata & {
   readonly resolvedLocation: LocationAliasTarget;
   readonly relayPreference: MullgateConfig['setup']['location'];
   readonly routeId: string;
 };
 
-type ProvisionedSetupRoute = PlannedSetupRoute & {
+export type ProvisionedSetupRoute = PlannedSetupRoute & {
   readonly provisioning: Extract<ProvisionWireguardResult, { ok: true }>;
 };
 
@@ -472,7 +472,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
   };
 }
 
-function planSetupRoutes(input: {
+export function planSetupRoutes(input: {
   requestedLocations: readonly string[];
   routeBindIps: readonly string[];
   exposureMode: ExposureMode;
@@ -567,7 +567,7 @@ function summarizeSetupRoute(route: SetupRouteMetadata): SetupRouteMetadata {
   };
 }
 
-async function provisionRouteWithRetries(input: {
+export async function provisionRouteWithRetries(input: {
   accountNumber: string;
   route: PlannedSetupRoute;
   provisioningBaseUrl?: string | URL;
@@ -1330,7 +1330,7 @@ function chooseUniqueRouteLabel(candidate: string, usedRouteLabels: Set<string>)
   return resolvedCandidate;
 }
 
-function deriveCanonicalRouteLabel(target: LocationAliasTarget): string {
+export function deriveCanonicalRouteLabel(target: LocationAliasTarget): string {
   if (target.kind === 'country') {
     return normalizeLocationToken(target.countryName) || target.countryCode;
   }
@@ -1342,7 +1342,7 @@ function deriveCanonicalRouteLabel(target: LocationAliasTarget): string {
   return normalizeLocationToken(target.hostname);
 }
 
-function deriveRouteDeviceName(
+export function deriveRouteDeviceName(
   baseDeviceName: string,
   routeLabel: string,
   routeCount: number,
@@ -1350,7 +1350,7 @@ function deriveRouteDeviceName(
   return routeCount > 1 ? `${baseDeviceName}-${routeLabel}` : baseDeviceName;
 }
 
-function createRouteRelayPreference(
+export function createRouteRelayPreference(
   requestedAlias: string,
   canonicalAlias: string,
   target: LocationAliasTarget,
@@ -1444,7 +1444,7 @@ function validatePortInput(value: string | undefined): string | undefined {
     : 'Enter a port between 1 and 65535.';
 }
 
-function defaultDeviceName(): string {
+export function defaultDeviceName(): string {
   return `mullgate-${hostname().split('.')[0] || 'host'}`;
 }
 

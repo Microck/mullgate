@@ -158,13 +158,14 @@ mullgate config export --guided
 ```
 
 The guided flow defaults to writing `proxies.txt`, only prompts for values you did not already pass on the CLI, and works both on a real terminal and with piped stdin.
+It now starts from actual country and region pick-lists, then lets you refine each selected batch with optional city, server, and provider filters.
 
 ### Deterministic selector batches
 
 ```bash
 mullgate config export \
-  --country se --count 1 \
-  --region europe --count 2 \
+  --country se --city got --count 1 \
+  --region europe --provider m247 --count 2 \
   --output proxies.txt
 ```
 
@@ -172,13 +173,14 @@ Rules worth knowing:
 
 - selectors are consumed in CLI order
 - `--count` applies to the immediately preceding `--country` or `--region`
+- `--city`, `--server`, and repeated `--provider` values refine only the immediately preceding selector batch
 - each matched route is exported at most once, so later selectors only see routes that earlier selectors did not already consume
 - auto-generated filenames reflect the protocol plus selector batch order when you do not pass `--output`
 
 ### Preview or stream the export
 
 ```bash
-mullgate config export --dry-run --protocol http --country us --count 1
+mullgate config export --dry-run --protocol http --country us --server us-nyc-wg-001
 mullgate config export --stdout --protocol socks5 --region europe
 ```
 

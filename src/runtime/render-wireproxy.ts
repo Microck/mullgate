@@ -78,6 +78,11 @@ export type RenderWireproxyOptions = {
   generatedAt?: string;
 };
 
+export type ConfiguredRouteRelay = WireproxyRouteIdentity & {
+  readonly selectedRelay: MullvadRelay;
+  readonly selectedTarget: LocationAliasTarget | null;
+};
+
 export function planWireproxyArtifacts(options: RenderWireproxyOptions): RenderWireproxyResult {
   const checkedAt = options.generatedAt ?? new Date().toISOString();
   const routes: RenderedWireproxyRoute[] = [];
@@ -146,6 +151,57 @@ export function planWireproxyArtifacts(options: RenderWireproxyOptions): RenderW
       relayCachePath: options.paths.provisioningCacheFile,
       configTestReportPath: options.paths.wireproxyConfigTestReportFile,
     },
+  };
+}
+
+export function selectConfiguredRouteRelays(input: {
+  readonly config: MullgateConfig;
+  readonly relayCatalog: MullvadRelayCatalog;
+}):
+  | {
+      readonly ok: true;
+      readonly routes: readonly ConfiguredRouteRelay[];
+    }
+  | {
+      readonly ok: false;
+      readonly source: 'canonical-config' | 'relay-catalog' | 'user-input';
+      readonly message: string;
+      readonly cause?: string;
+      readonly artifactPath?: string;
+      readonly routeId: string;
+      readonly routeAlias: string;
+      readonly routeHostname: string;
+      readonly routeBindIp: string;
+      readonly serviceName: string;
+    } {
+  const routes: ConfiguredRouteRelay[] = [];
+
+  for (const route of input.config.routing.locations) {
+    const selectedTargetResult = resolveConfiguredLocation(route, input.relayCatalog.relays);
+
+    if (!selectedTargetResult.ok) {
+      return {
+        ok: false,
+        source: selectedTargetResult.source,
+        message: 'No relay from the cached Mullvad catalog matched the saved route preference.',
+        ...(selectedTargetResult.cause ? { cause: selectedTargetResult.cause } : {}),
+        ...(selectedTargetResult.artifactPath
+          ? { artifactPath: selectedTargetResult.artifactPath }
+          : {}),
+        ...describeRoute(route),
+      };
+    }
+
+    routes.push({
+      ...describeRoute(route),
+      selectedRelay: selectedTargetResult.value.relay,
+      selectedTarget: selectedTargetResult.value.target,
+    });
+  }
+
+  return {
+    ok: true,
+    routes,
   };
 }
 
