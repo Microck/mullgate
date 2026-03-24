@@ -7,6 +7,8 @@ type DemoDefinition = {
   readonly name: string;
   readonly runnerPath: string;
   readonly assetPath: string;
+  readonly cols: number;
+  readonly rows: number;
 };
 
 const repoRoot = getRepoRoot();
@@ -14,21 +16,29 @@ const tsxCliPath = path.join(repoRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs')
 const castDir = path.join(repoRoot, '.tmp', 'demo-casts');
 const imageDir = path.join(repoRoot, 'images', 'demos');
 const docsImageDir = path.join(repoRoot, 'docs', 'mullgate-docs', 'public', 'images', 'demos');
+const mullvadTheme =
+  '0b1020,ffffff,0b1020,ffffff,ffd524,7aa2f7,4dd0e1,b8d27a,ff8a80,c4b5fd,13203a,dbe7ff,ffd524,9cc7ff,7fe7f2,d7ef9a,ffb4a8,ddd0ff';
 const demos: readonly DemoDefinition[] = [
   {
     name: 'setup-guided',
     runnerPath: path.join(repoRoot, 'scripts', 'demo-setup-guided.ts'),
     assetPath: path.join(imageDir, 'setup-guided.gif'),
+    cols: 96,
+    rows: 26,
   },
   {
     name: 'exposure-private-network',
     runnerPath: path.join(repoRoot, 'scripts', 'demo-exposure-private-network.ts'),
     assetPath: path.join(imageDir, 'exposure-private-network.gif'),
+    cols: 96,
+    rows: 32,
   },
   {
     name: 'status-doctor',
     runnerPath: path.join(repoRoot, 'scripts', 'demo-status-doctor.ts'),
     assetPath: path.join(imageDir, 'status-doctor.gif'),
+    cols: 96,
+    rows: 38,
   },
 ] as const;
 
@@ -48,9 +58,9 @@ async function main(): Promise<void> {
         '-i',
         '0.2',
         '--cols',
-        '92',
+        String(demo.cols),
         '--rows',
-        '22',
+        String(demo.rows),
         '-c',
         `${process.execPath} ${tsxCliPath} ${demo.runnerPath}`,
         castPath,
@@ -61,7 +71,7 @@ async function main(): Promise<void> {
       command: 'agg',
       args: [
         '--theme',
-        'asciinema',
+        mullvadTheme,
         '--font-size',
         '14',
         '--idle-time-limit',
