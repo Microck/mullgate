@@ -31,10 +31,11 @@ This documentation uses installed `mullgate ...` examples by default.
 A normal Mullgate workflow looks like this:
 
 1. run `mullgate setup`
-2. inspect generated configuration and exposure details
-3. start the runtime with `mullgate start`
-4. verify behavior with `mullgate status` and `mullgate doctor`
-5. access routes by hostname or direct bind IP
+2. inspect generated configuration, region groups, and exposure details
+3. export client-ready proxy lists when needed
+4. start the runtime with `mullgate start`
+5. verify behavior with `mullgate status` and `mullgate doctor`
+6. access routes by hostname or direct bind IP
 
 ## Recommended first run
 
@@ -46,6 +47,15 @@ For a low-friction Linux proof, start with a local loopback setup using two rout
 - a safe environment for verifying the CLI and runtime lifecycle
 
 ![Setup demo](/images/demos/setup-guided.gif)
+
+Once setup is saved, the next low-friction inspection path is usually:
+
+```bash
+mullgate config regions
+mullgate config export --guided
+```
+
+That gives you a guided `proxies.txt` flow without editing URLs by hand.
 
 See the full examples in [Usage](/docs/guides/usage) and [Setup and Exposure](/docs/guides/setup-and-exposure).
 

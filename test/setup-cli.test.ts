@@ -18,6 +18,7 @@ const repoRoot = path.resolve(import.meta.dirname, '..');
 const fixturesDir = path.join(repoRoot, 'test/fixtures/mullvad');
 const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
 const temporaryDirectories: string[] = [];
+const temporaryFiles: string[] = [];
 
 type JsonRequest = {
   url: string;
@@ -72,6 +73,88 @@ async function readTextFixture(name: string): Promise<string> {
 async function readSavedConfig(env: NodeJS.ProcessEnv): Promise<MullgateConfig> {
   const paths = resolveMullgatePaths(env);
   return JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
+}
+
+function createProxyExportFixtureConfig(config: MullgateConfig): MullgateConfig {
+  const templateRoute = structuredClone(config.routing.locations[0]!);
+  const createRoute = (input: {
+    alias: string;
+    hostname: string;
+    bindIp: string;
+    country: string;
+    city: string;
+    hostnameLabel: string;
+    deviceName: string;
+  }): MullgateConfig['routing']['locations'][number] => ({
+    ...structuredClone(templateRoute),
+    alias: input.alias,
+    hostname: input.hostname,
+    bindIp: input.bindIp,
+    relayPreference: {
+      requested: input.alias,
+      country: input.country,
+      city: input.city,
+      hostnameLabel: input.hostnameLabel,
+      resolvedAlias: input.alias,
+    },
+    mullvad: {
+      ...structuredClone(templateRoute.mullvad),
+      deviceName: input.deviceName,
+    },
+    runtime: {
+      routeId: input.alias,
+      wireproxyServiceName: `wireproxy-${input.alias}`,
+      haproxyBackendName: `route-${input.alias}`,
+      wireproxyConfigFile: `wireproxy-${input.alias}.conf`,
+    },
+  });
+
+  return {
+    ...config,
+    setup: {
+      ...config.setup,
+      bind: {
+        ...config.setup.bind,
+        host: '192.168.10.10',
+      },
+      exposure: {
+        mode: 'private-network',
+        allowLan: true,
+        baseDomain: 'proxy.example.com',
+      },
+    },
+    routing: {
+      locations: [
+        createRoute({
+          alias: 'sweden-gothenburg',
+          hostname: 'sweden-gothenburg.proxy.example.com',
+          bindIp: '192.168.10.10',
+          country: 'se',
+          city: 'got',
+          hostnameLabel: 'se-got-wg-101',
+          deviceName: 'mullgate-export-se',
+        }),
+        createRoute({
+          alias: 'austria-vienna',
+          hostname: 'austria-vienna.proxy.example.com',
+          bindIp: '192.168.10.11',
+          country: 'at',
+          city: 'vie',
+          hostnameLabel: 'at-vie-wg-001',
+          deviceName: 'mullgate-export-at',
+        }),
+        createRoute({
+          alias: 'usa-new-york',
+          hostname: 'usa-new-york.proxy.example.com',
+          bindIp: '192.168.10.12',
+          country: 'us',
+          city: 'nyc',
+          hostnameLabel: 'us-nyc-wg-001',
+          deviceName: 'mullgate-export-us',
+        }),
+      ],
+    },
+  };
 }
 
 async function withJsonServer(
@@ -196,12 +279,13 @@ afterEach(async () => {
       .splice(0)
       .map((directory) => rm(directory, { recursive: true, force: true })),
   );
+  await Promise.all(temporaryFiles.splice(0).map((file) => rm(file, { force: true })));
 });
 
 describe('mullgate setup CLI flow', () => {
   it(
     'completes setup from a clean XDG home and exposes redacted config inspection surfaces',
-    { timeout: 10000 },
+    { timeout: 20000 },
     async () => {
       const env = createTempEnvironment();
       await createFakeWireproxyBinary(env.HOME!);
@@ -706,6 +790,330 @@ validation: wireproxy-binary/configtest"
           copy/paste hosts block
           192.168.10.10 sweden-gothenburg.proxy.example.com
           192.168.10.11 austria-vienna.proxy.example.com"
+        `);
+        },
+      );
+    },
+  );
+
+  it(
+    'exports weighted proxy batches to generated and explicit files without leaking secrets',
+    { timeout: 15000 },
+    async () => {
+      const env = createTempEnvironment();
+      await createFakeWireproxyBinary(env.HOME!);
+
+      const provisionFixture = await readTextFixture('wg-provision-response.txt');
+      const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+      const paths = resolveMullgatePaths(env);
+
+      await withJsonServer(
+        {
+          '/wg': (request) => {
+            const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
+            return {
+              body: JSON.stringify({
+                ...JSON.parse(provisionFixture),
+                pubkey: payload.pubkey,
+                name: payload.name ?? 'mullgate-export-host',
+              }),
+            };
+          },
+          '/relays': () => ({ body: JSON.stringify(relayFixture) }),
+        },
+        async (baseUrl) => {
+          const setupResult = await runCli(
+            [
+              'setup',
+              '--non-interactive',
+              '--mullvad-wg-url',
+              new URL('/wg', baseUrl).toString(),
+              '--mullvad-relays-url',
+              new URL('/relays', baseUrl).toString(),
+            ],
+            {
+              env: {
+                ...env,
+                MULLGATE_ACCOUNT_NUMBER: '123456789012',
+                MULLGATE_PROXY_USERNAME: 'alice',
+                MULLGATE_PROXY_PASSWORD: 'export-secret',
+                MULLGATE_LOCATION: 'sweden-gothenburg',
+              },
+            },
+          );
+
+          expect(setupResult.status).toBe(0);
+
+          const exportFixtureConfig = createProxyExportFixtureConfig(await readSavedConfig(env));
+          await writeFile(paths.configFile, JSON.stringify(exportFixtureConfig, null, 2), 'utf8');
+
+          const autoFilename = path.join(
+            repoRoot,
+            'proxy-socks5-country-se-1--region-europe-2.txt',
+          );
+          temporaryFiles.push(autoFilename);
+          const explicitOutput = path.join(env.HOME!, 'exports', 'proxy.txt');
+          temporaryFiles.push(explicitOutput);
+          const overwriteOutput = path.join(env.HOME!, 'exports', 'overwrite.txt');
+          temporaryFiles.push(overwriteOutput);
+          const guidedOutput = path.join(repoRoot, 'proxies.txt');
+          temporaryFiles.push(guidedOutput);
+
+          await Promise.all([
+            rm(autoFilename, { force: true }),
+            rm(explicitOutput, { force: true }),
+            rm(overwriteOutput, { force: true }),
+            rm(guidedOutput, { force: true }),
+          ]);
+
+          const autoResult = await runCli(
+            [
+              'config',
+              'export',
+              '--country',
+              'se',
+              '--count',
+              '1',
+              '--region',
+              'europe',
+              '--count',
+              '2',
+            ],
+            { env },
+          );
+          const explicitResult = await runCli(
+            [
+              'config',
+              'export',
+              '--protocol',
+              'http',
+              '--country',
+              'us',
+              '--count',
+              '1',
+              '--output',
+              explicitOutput,
+            ],
+            { env },
+          );
+          await writeFile(overwriteOutput, 'stale\n', 'utf8');
+          const dryRunResult = await runCli(
+            [
+              'config',
+              'export',
+              '--dry-run',
+              '--country',
+              'se',
+              '--count',
+              '1',
+              '--region',
+              'europe',
+              '--count',
+              '2',
+            ],
+            { env },
+          );
+          const stdoutResult = await runCli(
+            [
+              'config',
+              'export',
+              '--stdout',
+              '--protocol',
+              'http',
+              '--country',
+              'us',
+              '--count',
+              '1',
+            ],
+            { env },
+          );
+          const overwriteFailResult = await runCli(
+            ['config', 'export', '--output', overwriteOutput, '--country', 'se', '--count', '1'],
+            { env },
+          );
+          const overwriteForceResult = await runCli(
+            [
+              'config',
+              'export',
+              '--force',
+              '--output',
+              overwriteOutput,
+              '--country',
+              'se',
+              '--count',
+              '1',
+            ],
+            { env },
+          );
+          const regionsResult = await runCli(['config', 'regions'], { env });
+          const guidedResult = await runCli(['config', 'export', '--guided'], {
+            env,
+            input:
+              '\n' +
+              'y\n' +
+              '\n' +
+              'se\n' +
+              '1\n' +
+              'y\n' +
+              'region\n' +
+              'europe\n' +
+              '2\n' +
+              'n\n' +
+              '\n' +
+              '\n',
+          });
+
+          expect(autoResult.status).toBe(0);
+          expect(explicitResult.status).toBe(0);
+          expect(dryRunResult.status).toBe(0);
+          expect(stdoutResult.status).toBe(0);
+          expect(overwriteFailResult.status).toBe(1);
+          expect(overwriteForceResult.status).toBe(0);
+          expect(regionsResult.status).toBe(0);
+          expect(guidedResult.status).toBe(0);
+          expect(autoResult.stdout).not.toContain('export-secret');
+          expect(explicitResult.stdout).not.toContain('export-secret');
+          expect(dryRunResult.stdout).not.toContain('export-secret');
+          expect(autoResult.stderr).toBe('');
+          expect(explicitResult.stderr).toBe('');
+          expect(guidedResult.stdout).not.toContain('export-secret');
+
+          const autoFileContents = await readFile(autoFilename, 'utf8');
+          const explicitFileContents = await readFile(explicitOutput, 'utf8');
+          const overwriteFileContents = await readFile(overwriteOutput, 'utf8');
+          const guidedFileContents = await readFile(guidedOutput, 'utf8');
+
+          expect(`\n${normalizeOutput(autoResult.stdout, env)}`).toMatchInlineSnapshot(`
+          "
+          Mullgate proxy export complete.
+          phase: export-proxies
+          source: canonical-config
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          protocol: socks5
+          write mode: file
+          selectors: 2
+          1. country=se requested=1 matched=1 exported=1
+          2. region=europe requested=2 matched=1 exported=1
+          exported count: 2
+          output: ./proxy-socks5-country-se-1--region-europe-2.txt"
+        `);
+          expect(`\n${autoFileContents}`).toMatchInlineSnapshot(`
+          "
+          socks5://alice:export-secret@sweden-gothenburg.proxy.example.com:1080
+          socks5://alice:export-secret@austria-vienna.proxy.example.com:1080
+          "
+        `);
+          expect(`\n${normalizeOutput(explicitResult.stdout, env)}`).toMatchInlineSnapshot(`
+          "
+          Mullgate proxy export complete.
+          phase: export-proxies
+          source: canonical-config
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          protocol: http
+          write mode: file
+          selectors: 1
+          1. country=us requested=1 matched=1 exported=1
+          exported count: 1
+          output: /tmp/mullgate-home/exports/proxy.txt"
+        `);
+          expect(`\n${explicitFileContents}`).toMatchInlineSnapshot(`
+          "
+          http://alice:export-secret@usa-new-york.proxy.example.com:8080
+          "
+        `);
+          expect(`\n${normalizeOutput(dryRunResult.stdout, env)}`).toMatchInlineSnapshot(`
+          "
+          Mullgate proxy export preview.
+          phase: export-proxies
+          source: canonical-config
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          protocol: socks5
+          write mode: dry-run
+          selectors: 2
+          1. country=se requested=1 matched=1 exported=1
+          2. region=europe requested=2 matched=1 exported=1
+          exported count: 2
+          output: ./proxy-socks5-country-se-1--region-europe-2.txt
+
+          preview
+          1. socks5://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080 (alias: sweden-gothenburg, country: se)
+          2. socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1080 (alias: austria-vienna, country: at)"
+        `);
+          expect(dryRunResult.stderr).toBe('');
+          expect(`\n${normalizeOutput(stdoutResult.stdout, env)}`).toMatchInlineSnapshot(`
+          "
+          http://alice:export-secret@usa-new-york.proxy.example.com:8080"
+        `);
+          expect(`\n${normalizeOutput(stdoutResult.stderr, env)}`).toMatchInlineSnapshot(`
+          "
+          Mullgate proxy export complete.
+          phase: export-proxies
+          source: canonical-config
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          protocol: http
+          write mode: stdout
+          selectors: 1
+          1. country=us requested=1 matched=1 exported=1
+          exported count: 1
+          output: stdout"
+        `);
+          expect(`\n${normalizeOutput(overwriteFailResult.stderr, env)}`).toMatchInlineSnapshot(`
+          "
+          Mullgate proxy export failed.
+          phase: persist-file
+          source: filesystem
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          artifact: /tmp/mullgate-home/exports/overwrite.txt
+          reason: Refusing to overwrite an existing proxy export file without --force."
+        `);
+          expect(`\n${overwriteFileContents}`).toMatchInlineSnapshot(`
+          "
+          socks5://alice:export-secret@sweden-gothenburg.proxy.example.com:1080
+          "
+        `);
+          expect(`\n${normalizeOutput(regionsResult.stdout, env)}`).toMatchInlineSnapshot(`
+          "
+          Mullgate region groups
+          phase: inspect-config
+          source: canonical-region-groups
+          regions: 4
+
+          1. americas
+             countries: ag, ai, ar, aw, bb, bl, bm, bo, br, bs, bz, ca, cl, co, cr, cu, dm, do, ec, fk, gd, gl, gp, gt, gy, hn, ht, jm, kn, ky, lc, mf, mq, ms, mx, ni, pa, pe, pm, pr, py, sr, sv, tc, tt, us, uy, vc, ve, vg, vi
+             example: mullgate config export --region americas --count 5
+
+          2. asia-pacific
+             countries: as, au, bd, bn, bt, cc, ck, cn, cx, fj, fm, gu, hk, id, in, jp, kh, ki, kp, kr, la, lk, mh, mm, mn, mo, mp, mv, my, nc, nf, np, nr, nu, nz, pg, ph, pk, pn, pw, sb, sg, th, tk, tl, to, tv, tw, vn, vu, wf, ws
+             example: mullgate config export --region asia-pacific --count 5
+
+          3. europe
+             countries: ad, al, at, ba, be, bg, by, ch, cy, cz, de, dk, ee, es, fi, fo, fr, gb, gg, gi, gr, hr, hu, ie, im, is, it, je, li, lt, lu, lv, mc, md, me, mk, mt, nl, no, pl, pt, ro, rs, se, si, sj, sk, sm, ua, va
+             example: mullgate config export --region europe --count 5
+
+          4. middle-east-africa
+             countries: ae, am, ao, az, bf, bi, bj, bw, cd, cf, cg, ci, cm, cv, dj, dz, eg, eh, er, et, ga, ge, gh, gm, gn, gq, gw, il, iq, ir, jo, ke, km, kw, lb, lr, ls, ly, ma, mg, ml, mr, mu, mw, mz, na, ne, ng, om, qa, re, rw, sa, sc, sd, sh, sl, sn, so, ss, st, sz, td, tg, tn, tr, tz, ug, ye, yt, za, zm, zw
+             example: mullgate config export --region middle-east-africa --count 5"
+        `);
+          expect(guidedResult.stderr).toContain('Mullgate proxy export');
+          expect(`\n${normalizeOutput(guidedResult.stdout, env)}`).toMatchInlineSnapshot(`
+          "
+          Mullgate proxy export complete.
+          phase: export-proxies
+          source: canonical-config
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          protocol: socks5
+          write mode: file
+          selectors: 2
+          1. country=se requested=1 matched=1 exported=1
+          2. region=europe requested=2 matched=1 exported=1
+          exported count: 2
+          output: proxies.txt"
+        `);
+          expect(`\n${guidedFileContents}`).toMatchInlineSnapshot(`
+          "
+          socks5://alice:export-secret@sweden-gothenburg.proxy.example.com:1080
+          socks5://alice:export-secret@austria-vienna.proxy.example.com:1080
+          "
         `);
         },
       );

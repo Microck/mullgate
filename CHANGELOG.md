@@ -13,6 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.2.0] - 2026-03-24
+
+### Added
+
+- `mullgate config export` for generating authenticated proxy lists from saved routes with ordered `--country` and `--region` selector batches
+- guided `proxies.txt` creation, `--dry-run` previews, `--stdout` delivery, and `--force` overwrite control for proxy export workflows
+- `mullgate config regions` for discovering the curated region groups accepted by `config export --region ...`
+
+### Changed
+
+- README and docs now show the proxy export workflow alongside setup, exposure, and runtime inspection
+- command reference and quickstart flow now include export and region discovery as part of the normal operator path
+- demo GIF recordings across the README and docs now use taller framing and a Mullvad-inspired palette
+
+### Fixed
+
+- guided proxy export now works correctly with piped stdin and other non-TTY input instead of exiting early without writing output
+
 ## [0.1.1] - 2026-03-23
 
 ### Added

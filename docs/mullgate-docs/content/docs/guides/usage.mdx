@@ -139,6 +139,53 @@ In that posture:
 - direct bind-IP entrypoints are the intended access path
 - `config hosts` is still useful for local-only hostname testing, but it is no longer required for remote clients
 
+## Exporting proxy lists for clients
+
+Use `mullgate config export` when you want a ready-to-paste inventory of authenticated route URLs instead of assembling client config by hand.
+
+### Discover the curated region groups
+
+```bash
+mullgate config regions
+```
+
+This prints the built-in groups accepted by `--region`, such as `europe` and `asia-pacific`.
+
+### Guided `proxies.txt` export
+
+```bash
+mullgate config export --guided
+```
+
+The guided flow defaults to writing `proxies.txt`, only prompts for values you did not already pass on the CLI, and works both on a real terminal and with piped stdin.
+
+### Deterministic selector batches
+
+```bash
+mullgate config export \
+  --country se --count 1 \
+  --region europe --count 2 \
+  --output proxies.txt
+```
+
+Rules worth knowing:
+
+- selectors are consumed in CLI order
+- `--count` applies to the immediately preceding `--country` or `--region`
+- each matched route is exported at most once, so later selectors only see routes that earlier selectors did not already consume
+- auto-generated filenames reflect the protocol plus selector batch order when you do not pass `--output`
+
+### Preview or stream the export
+
+```bash
+mullgate config export --dry-run --protocol http --country us --count 1
+mullgate config export --stdout --protocol socks5 --region europe
+```
+
+- `--dry-run` prints a secret-safe preview with credentials redacted and does not write a file
+- `--stdout` writes the real proxy URLs to stdout and prints the export summary on stderr
+- `--force` is required when you want to overwrite an existing export file
+
 ## Hostname and direct-IP access
 
 Mullgate exposes the same per-route listeners in two parallel forms:

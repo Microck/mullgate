@@ -19,6 +19,8 @@ the main setup path is `mullgate setup`. on a real terminal it opens a guided fl
 
 ![setup demo](images/demos/setup-guided.gif)
 
+once your routes are saved, `mullgate` can also generate ready-to-paste client inventories. use `mullgate config regions` to inspect the built-in region groups, then run `mullgate config export --guided` for a setup-style `proxies.txt` flow or compose deterministic batches such as `mullgate config export --country se --count 3 --region europe --count 2 --output proxies.txt`.
+
 ## why
 
 if you want Mullvad-backed proxy access without replacing your computer's normal network path, `mullgate` gives you a practical path.
@@ -79,6 +81,8 @@ for non-interactive setup, start from [`.env.example`](.env.example) and then ru
 ```bash
 mullgate setup --non-interactive
 mullgate config hosts
+mullgate config regions
+mullgate config export --guided
 mullgate start
 mullgate status
 mullgate doctor
@@ -106,6 +110,8 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 | `mullgate doctor` | run deterministic diagnostics for config, runtime, bind, DNS, and last-start failures |
 | `mullgate config path` | print active config/state/cache/runtime paths plus platform support posture |
 | `mullgate config hosts` | print hostname to bind-IP mappings and the copy/paste hosts block |
+| `mullgate config export` | generate authenticated proxy URL inventories with ordered country and region batches |
+| `mullgate config regions` | print the curated region groups accepted by `config export --region ...` |
 | `mullgate config exposure` | inspect or update loopback, private-network, and public exposure posture |
 | `mullgate config validate` | validate rendered wireproxy config and refresh runtime validation metadata |
 
@@ -138,6 +144,14 @@ curl \
   --proxy socks5h://sweden-gothenburg:1080 \
   --proxy-user "$MULLGATE_PROXY_USERNAME:$MULLGATE_PROXY_PASSWORD" \
   https://am.i.mullvad.net/json
+```
+
+generate a shareable proxy list from the saved route inventory:
+
+```bash
+mullgate config regions
+mullgate config export --country se --count 1 --region europe --count 2 --output proxies.txt
+mullgate config export --dry-run --protocol http --country us --count 1
 ```
 
 ## documentation

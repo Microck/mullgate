@@ -37,9 +37,15 @@ Used to inspect and modify configuration surfaces.
 Important subcommands referenced in the docs include:
 
 - `mullgate config exposure`
+- `mullgate config export`
+- `mullgate config regions`
 - `mullgate config hosts`
 - `mullgate config validate --refresh`
 - `mullgate config path`
+
+`mullgate config export` is the proxy-list generation surface. It supports ordered repeated selectors such as `--country se --count 3 --region europe --count 2`, guided `proxies.txt` creation via `--guided`, preview mode via `--dry-run`, stdout delivery via `--stdout`, and safe file overwrite behavior with `--force`.
+
+`mullgate config regions` prints the curated export region groups that `config export --region ...` accepts.
 
 ## Invocation forms
 
@@ -55,11 +61,13 @@ A practical workflow usually looks like this:
 
 1. `mullgate setup`
 2. `mullgate config exposure`
-3. `mullgate config hosts`
-4. `mullgate config validate --refresh`
-5. `mullgate start`
-6. `mullgate status`
-7. `mullgate doctor`
+3. `mullgate config export`
+4. `mullgate config regions`
+5. `mullgate config hosts`
+6. `mullgate config validate --refresh`
+7. `mullgate start`
+8. `mullgate status`
+9. `mullgate doctor`
 
 ## Reference practice
 

@@ -57,7 +57,7 @@ async function expectHelpOutput(args: readonly string[]): Promise<string> {
 }
 
 describe('mullgate help command contract', () => {
-  it('matches the Linux-first operator docs surface', async () => {
+  it('matches the Linux-first operator docs surface', { timeout: 15000 }, async () => {
     const [
       topLevelHelp,
       setupHelp,
@@ -65,6 +65,8 @@ describe('mullgate help command contract', () => {
       statusHelp,
       doctorHelp,
       configHelp,
+      configRegionsHelp,
+      configExportHelp,
       configHostsHelp,
       configExposureHelp,
       configValidateHelp,
@@ -75,6 +77,8 @@ describe('mullgate help command contract', () => {
       expectHelpOutput(['status', '--help']),
       expectHelpOutput(['doctor', '--help']),
       expectHelpOutput(['config', '--help']),
+      expectHelpOutput(['config', 'regions', '--help']),
+      expectHelpOutput(['config', 'export', '--help']),
       expectHelpOutput(['config', 'hosts', '--help']),
       expectHelpOutput(['config', 'exposure', '--help']),
       expectHelpOutput(['config', 'validate', '--help']),
@@ -198,9 +202,14 @@ describe('mullgate help command contract', () => {
                                          preferences, and runtime ids without secrets.
         hosts                            List configured proxy hostnames and their
                                          route bind IP mappings without secrets.
+        regions                          List the curated export region groups and
+                                         their member country codes.
         exposure [options]               Inspect or update remote exposure mode, bind
                                          IPs, DNS guidance, and restart status without
                                          raw JSON edits.
+        export [options]                 Export proxy URLs to a text file with ordered
+                                         country/region selectors and deterministic
+                                         dedupe.
         get <keyPath>                    Read one saved config value with secret-safe
                                          redaction.
         set [options] <keyPath> [value]  Update a saved config value without printing
@@ -209,6 +218,42 @@ describe('mullgate help command contract', () => {
                                          wireproxy config and persist the result
                                          metadata.
         help [command]                   display help for command"
+    `);
+    expect(`\n${configRegionsHelp}`).toMatchInlineSnapshot(`
+      "
+      Usage: mullgate config regions [options]
+
+      List the curated export region groups and their member country codes.
+
+      Options:
+        -h, --help  display help for command"
+    `);
+    expect(`\n${configExportHelp}`).toMatchInlineSnapshot(`
+      "
+      Usage: mullgate config export [options]
+
+      Export proxy URLs to a text file with ordered country/region selectors and
+      deterministic dedupe.
+
+      Options:
+        --protocol <protocol>  Export proxy URLs for socks5, http, or https.
+        --country <code>       Add a country selector. Pair it with a following
+                               --count to cap that selector.
+        --region <name>        Add a curated region selector (americas, asia-pacific,
+                               europe, middle-east-africa). Pair it with a following
+                               --count to cap that selector.
+        --count <number>       Apply a per-selector export cap to the immediately
+                               preceding --country or --region.
+        --guided               Launch a guided export flow, like setup, for creating
+                               proxy lists.
+        --dry-run              Preview a secret-safe export summary without writing a
+                               file.
+        --stdout               Write the exported proxy URLs to stdout instead of a
+                               file.
+        --force                Overwrite an existing output file.
+        --output <path>        Write the export to this path instead of using an auto
+                               filename.
+        -h, --help             display help for command"
     `);
     expect(`\n${configHostsHelp}`).toMatchInlineSnapshot(`
       "

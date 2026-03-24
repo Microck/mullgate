@@ -3,9 +3,14 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildProxyExportPlan,
+  parseProxyExportSelectors,
   renderExposureReport,
   renderHostsReport,
   renderPathReport,
+  renderProxyExportPreview,
+  renderProxyExportSuccess,
+  renderRegionGroupsReport,
   updateExposureConfig,
 } from '../../src/commands/config.js';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
@@ -482,5 +487,202 @@ copy/paste hosts block
         'S03 routing still dispatches by destination bind IP, so multiple remote routes cannot safely share one published IP.',
       artifactPath: '/tmp/mullgate-home/config/mullgate/config.json',
     });
+  });
+
+  it('parses interleaved proxy export selectors in CLI order', () => {
+    const result = parseProxyExportSelectors([
+      '--protocol',
+      'http',
+      '--country',
+      'se',
+      '--count',
+      '1',
+      '--region=europe',
+      '--count=2',
+      '--output',
+      './proxy.txt',
+    ]);
+
+    expect(result).toEqual({
+      ok: true,
+      selectors: [
+        {
+          kind: 'country',
+          value: 'se',
+          requestedCount: 1,
+        },
+        {
+          kind: 'region',
+          value: 'europe',
+          requestedCount: 2,
+        },
+      ],
+    });
+  });
+
+  it('rejects proxy export counts that are not attached to a selector', () => {
+    const result = parseProxyExportSelectors(['--count', '2']);
+
+    expect(result).toEqual({
+      ok: false,
+      phase: 'export-proxies',
+      source: 'input',
+      message: 'Pass --count after a --country or --region selector.',
+    });
+  });
+
+  it('plans proxy exports with ordered selector dedupe and stable filenames', () => {
+    const config = createFixtureConfig();
+    config.setup.exposure = {
+      mode: 'private-network',
+      allowLan: true,
+      baseDomain: 'proxy.example.com',
+    };
+    config.setup.bind.host = '192.168.10.10';
+    config.routing.locations[0]!.hostname = 'sweden-gothenburg.proxy.example.com';
+    config.routing.locations[0]!.bindIp = '192.168.10.10';
+    config.routing.locations[1]!.hostname = 'austria-vienna.proxy.example.com';
+    config.routing.locations[1]!.bindIp = '192.168.10.11';
+    config.routing.locations.push({
+      ...structuredClone(config.routing.locations[0]!),
+      alias: 'usa-new-york',
+      hostname: 'usa-new-york.proxy.example.com',
+      bindIp: '192.168.10.12',
+      relayPreference: {
+        requested: 'usa-new-york',
+        country: 'us',
+        city: 'nyc',
+        hostnameLabel: 'us-nyc-wg-001',
+        resolvedAlias: 'usa-new-york',
+      },
+      mullvad: {
+        ...structuredClone(config.routing.locations[0]!.mullvad),
+        deviceName: 'mullgate-runtime-test-3',
+      },
+      runtime: {
+        routeId: 'usa-new-york',
+        wireproxyServiceName: 'wireproxy-usa-new-york',
+        haproxyBackendName: 'route-usa-new-york',
+        wireproxyConfigFile: 'wireproxy-usa-new-york.conf',
+      },
+    });
+
+    const result = buildProxyExportPlan({
+      config,
+      protocol: 'http',
+      selectors: [
+        { kind: 'country', value: 'se', requestedCount: 1 },
+        { kind: 'region', value: 'europe', requestedCount: 2 },
+      ],
+      configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(
+      `\n${renderProxyExportSuccess({
+        result,
+        configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+        outputPath: './proxy-http-country-se-1--region-europe-2.txt',
+      })}`,
+    ).toMatchInlineSnapshot(`
+      "
+      Mullgate proxy export complete.
+      phase: export-proxies
+      source: canonical-config
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      protocol: http
+      write mode: file
+      selectors: 2
+      1. country=se requested=1 matched=1 exported=1
+      2. region=europe requested=2 matched=1 exported=1
+      exported count: 2
+      output: ./proxy-http-country-se-1--region-europe-2.txt"
+    `);
+    expect(`\n${result.outputText}`).toMatchInlineSnapshot(`
+      "
+      http://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:8080
+      http://alice:multi-route-secret@austria-vienna.proxy.example.com:8080
+      "
+    `);
+    expect(`\n${result.redactedOutputText}`).toMatchInlineSnapshot(`
+      "
+      http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080
+      http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080
+      "
+    `);
+    expect(
+      `\n${renderProxyExportPreview({
+        result,
+        configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+        outputPath: './proxy-http-country-se-1--region-europe-2.txt',
+      })}`,
+    ).toMatchInlineSnapshot(`
+      "
+      Mullgate proxy export preview.
+      phase: export-proxies
+      source: canonical-config
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      protocol: http
+      write mode: dry-run
+      selectors: 2
+      1. country=se requested=1 matched=1 exported=1
+      2. region=europe requested=2 matched=1 exported=1
+      exported count: 2
+      output: ./proxy-http-country-se-1--region-europe-2.txt
+
+      preview
+      1. http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080 (alias: sweden-gothenburg, country: se)
+      2. http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080 (alias: austria-vienna, country: at)"
+    `);
+  });
+
+  it('rejects unknown export regions with a documented error', () => {
+    const config = createFixtureConfig();
+    const result = buildProxyExportPlan({
+      config,
+      protocol: 'socks5',
+      selectors: [{ kind: 'region', value: 'antarctica', requestedCount: 1 }],
+      configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      phase: 'export-proxies',
+      source: 'input',
+      message:
+        'Unknown region antarctica. Supported regions: americas, asia-pacific, europe, middle-east-africa.',
+      configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
+  });
+
+  it('renders the curated region group report', () => {
+    expect(`\n${renderRegionGroupsReport()}`).toMatchInlineSnapshot(`
+      "
+      Mullgate region groups
+      phase: inspect-config
+      source: canonical-region-groups
+      regions: 4
+
+      1. americas
+         countries: ag, ai, ar, aw, bb, bl, bm, bo, br, bs, bz, ca, cl, co, cr, cu, dm, do, ec, fk, gd, gl, gp, gt, gy, hn, ht, jm, kn, ky, lc, mf, mq, ms, mx, ni, pa, pe, pm, pr, py, sr, sv, tc, tt, us, uy, vc, ve, vg, vi
+         example: mullgate config export --region americas --count 5
+
+      2. asia-pacific
+         countries: as, au, bd, bn, bt, cc, ck, cn, cx, fj, fm, gu, hk, id, in, jp, kh, ki, kp, kr, la, lk, mh, mm, mn, mo, mp, mv, my, nc, nf, np, nr, nu, nz, pg, ph, pk, pn, pw, sb, sg, th, tk, tl, to, tv, tw, vn, vu, wf, ws
+         example: mullgate config export --region asia-pacific --count 5
+
+      3. europe
+         countries: ad, al, at, ba, be, bg, by, ch, cy, cz, de, dk, ee, es, fi, fo, fr, gb, gg, gi, gr, hr, hu, ie, im, is, it, je, li, lt, lu, lv, mc, md, me, mk, mt, nl, no, pl, pt, ro, rs, se, si, sj, sk, sm, ua, va
+         example: mullgate config export --region europe --count 5
+
+      4. middle-east-africa
+         countries: ae, am, ao, az, bf, bi, bj, bw, cd, cf, cg, ci, cm, cv, dj, dz, eg, eh, er, et, ga, ge, gh, gm, gn, gq, gw, il, iq, ir, jo, ke, km, kw, lb, lr, ls, ly, ma, mg, ml, mr, mu, mw, mz, na, ne, ng, om, qa, re, rw, sa, sc, sd, sh, sl, sn, so, ss, st, sz, td, tg, tn, tr, tz, ug, ye, yt, za, zm, zw
+         example: mullgate config export --region middle-east-africa --count 5"
+    `);
   });
 });
