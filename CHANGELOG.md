@@ -13,6 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.3.0] - 2026-03-24
+
+### Added
+
+- guided `mullgate config export --guided` country and region pick-lists so operators can build proxy batches without typing country codes from memory
+- selector refinements for proxy export with `--city`, `--server`, and repeated `--provider` filters across both CLI and guided flows
+- integration coverage for guided export selection and selector-based proxy file generation
+
+### Changed
+
+- `mullgate config export` can now materialize missing routes that satisfy the requested selector batches before exporting proxy URLs
+- export previews and filenames now include richer route metadata such as city and relay hostname details
+- README and docs now describe the list-based guided export flow and the richer selector surface
+
+### Fixed
+
+- export/help snapshots and non-TTY guided export coverage now stay aligned with the current selector contract
+
 ## [0.2.0] - 2026-03-24
 
 ### Added
