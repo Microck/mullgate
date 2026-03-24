@@ -31,6 +31,7 @@ import {
   type ProvisionWireguardResult,
   provisionWireguard,
 } from '../mullvad/provision-wireguard.js';
+import { requireArrayValue, requireDefined } from '../required.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
 import {
   type ValidateWireproxyOptions,
@@ -493,17 +494,23 @@ export function planSetupRoutes(input: {
   const routeCount = input.requestedLocations.length;
   const provisionalRoutes = input.requestedLocations.map((requested, index) => {
     const provisionalAlias = normalizeLocationToken(requested) || `route-${index + 1}`;
+    const bindIp = requireArrayValue(
+      input.routeBindIps,
+      index,
+      `Missing bind IP for route ${index + 1}.`,
+    );
+
     return {
       index,
       requested,
       alias: provisionalAlias,
       hostname: deriveExposureHostname(
         provisionalAlias,
-        input.routeBindIps[index]!,
+        bindIp,
         input.exposureBaseDomain,
         input.exposureMode,
       ),
-      bindIp: input.routeBindIps[index]!,
+      bindIp,
       deviceName: deriveRouteDeviceName(input.baseDeviceName, provisionalAlias, routeCount),
     } satisfies SetupRouteMetadata;
   });
@@ -770,7 +777,10 @@ function createCanonicalConfig(input: {
   const httpsEnabled =
     input.inputs.httpsPort !== null ||
     Boolean(input.inputs.httpsCertPath || input.inputs.httpsKeyPath);
-  const primaryRoute = input.routes[0]!;
+  const primaryRoute = requireDefined(
+    input.routes[0],
+    'Expected at least one routed location when creating the canonical config.',
+  );
   const routingLocations = input.routes.map((route) => ({
     alias: route.alias,
     hostname: route.hostname,

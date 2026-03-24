@@ -9,10 +9,11 @@ import {
   verifyHttpsAssets,
   withRuntimeStatus,
 } from '../app/setup-runner.js';
+import { writeCliReport } from '../cli-output.js';
 import type { MullgatePaths } from '../config/paths.js';
-import { redactSensitiveText } from '../config/redact.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
 import { ConfigStore } from '../config/store.js';
+import { requireDefined } from '../required.js';
 import {
   type DockerRuntimeResult,
   type StartDockerRuntimeOptions,
@@ -336,7 +337,6 @@ export async function runStartFlow(
   }
 
   const report = createRuntimeStartDiagnostic({
-    config: startingConfig,
     attemptedAt,
     status: 'success',
     phase: runtimeResult.phase,
@@ -428,8 +428,8 @@ function renderExposureInventory(manifest: RuntimeBundleManifest): string[] {
       `   alias: ${route.alias}`,
       `   dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
       ...route.endpoints.flatMap((endpoint) => [
-        `   ${endpoint.protocol} hostname: ${endpoint.redactedHostnameUrl}`,
-        `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`,
+        `   ${endpoint.protocol} hostname: ${endpoint.hostnameUrl}`,
+        `   ${endpoint.protocol} direct ip: ${endpoint.bindUrl}`,
       ]),
     ]),
     'warnings:',
@@ -447,7 +447,7 @@ function writeStartResult(
   const stderr = dependencies.stderr ?? process.stderr;
 
   if (result.ok) {
-    stdout.write(`${result.summary}\n`);
+    writeCliReport({ sink: stdout, text: result.summary, tone: 'success' });
     return;
   }
 
@@ -472,7 +472,7 @@ function writeStartResult(
     ...(result.config ? [`runtime status: ${result.config.runtime.status.phase}`] : []),
   ];
 
-  stderr.write(`${lines.join('\n')}\n`);
+  writeCliReport({ sink: stderr, text: lines.join('\n'), tone: 'error' });
 }
 
 function synchronizeRuntimePaths(config: MullgateConfig, paths: MullgatePaths): MullgateConfig {
@@ -565,7 +565,10 @@ async function validateRenderedRoutes(
 
 function summarizeValidationSources(sources: readonly string[], routeCount: number): string {
   const uniqueSources = [...new Set(sources)];
-  const sourceSummary = uniqueSources.length === 1 ? uniqueSources[0]! : uniqueSources.join(', ');
+  const sourceSummary =
+    uniqueSources.length === 1
+      ? requireDefined(uniqueSources[0], 'Expected at least one validation source.')
+      : uniqueSources.join(', ');
   return routeCount === 1 ? sourceSummary : `${sourceSummary} (${routeCount} routes)`;
 }
 
@@ -635,7 +638,6 @@ async function persistFailureOutcome(input: {
   readonly serviceName?: string | null;
 }): Promise<StartFailure> {
   const report = createRuntimeStartDiagnostic({
-    config: input.config,
     attemptedAt: input.attemptedAt,
     status: 'failure',
     phase: input.phase,
@@ -709,7 +711,7 @@ async function persistStartOutcome(
       attemptedAt: report.attemptedAt,
       artifactPath: store.paths.runtimeStartDiagnosticsFile,
       message: 'Failed to persist the Mullgate runtime start diagnostics.',
-      cause: error instanceof Error ? redactSensitiveText(error.message, config) : String(error),
+      cause: error instanceof Error ? error.message : String(error),
       config,
       report,
       composeFilePath: report.composeFilePath,
@@ -738,7 +740,7 @@ async function persistConfigOnly(
       paths: store.paths,
       message: 'Failed to persist the updated Mullgate runtime status.',
       artifactPath: store.paths.configFile,
-      cause: error instanceof Error ? redactSensitiveText(error.message, config) : String(error),
+      cause: error instanceof Error ? error.message : String(error),
       config,
       ...(config.diagnostics.lastRuntimeStart
         ? { report: config.diagnostics.lastRuntimeStart }
@@ -756,7 +758,6 @@ async function persistStartReport(
 }
 
 function createRuntimeStartDiagnostic(input: {
-  readonly config: MullgateConfig;
   readonly attemptedAt: string;
   readonly status: RuntimeStartDiagnostic['status'];
   readonly phase: string;
@@ -779,8 +780,8 @@ function createRuntimeStartDiagnostic(input: {
     phase: input.phase,
     source: input.source,
     code: input.code ?? null,
-    message: redactSensitiveText(input.message, input.config),
-    cause: input.cause ? redactSensitiveText(input.cause, input.config) : null,
+    message: input.message,
+    cause: input.cause ?? null,
     artifactPath: input.artifactPath ?? null,
     composeFilePath: input.composeFilePath ?? null,
     validationSource: input.validationSource ?? null,
@@ -788,6 +789,6 @@ function createRuntimeStartDiagnostic(input: {
     routeHostname: input.routeHostname ?? null,
     routeBindIp: input.routeBindIp ?? null,
     serviceName: input.serviceName ?? null,
-    command: input.command ? redactSensitiveText(input.command, input.config) : null,
+    command: input.command ?? null,
   };
 }

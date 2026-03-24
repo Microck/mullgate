@@ -10,6 +10,7 @@ The documentation repeatedly anchors itself to the following CLI help contract:
 - `mullgate start --help`
 - `mullgate status --help`
 - `mullgate doctor --help`
+- `mullgate autostart --help`
 - `mullgate config --help`
 
 ## Core workflow commands
@@ -30,22 +31,26 @@ Used to inspect current runtime state.
 
 Used to diagnose runtime, routing, and hostname or exposure drift.
 
+### `mullgate autostart`
+
+Used on Linux to install, inspect, or remove the `systemd --user` service that starts `mullgate start` at login.
+
 ### `mullgate config`
 
 Used to inspect and modify configuration surfaces.
 
 Important subcommands referenced in the docs include:
 
-- `mullgate config exposure`
-- `mullgate config export`
-- `mullgate config regions`
-- `mullgate config hosts`
-- `mullgate config validate --refresh`
-- `mullgate config path`
+- `mullgate exposure`
+- `mullgate export`
+- `mullgate regions`
+- `mullgate hosts`
+- `mullgate validate --refresh`
+- `mullgate path`
 
-`mullgate config export` is the proxy-list generation surface. It supports ordered repeated selector batches such as `--country se --city got --count 1 --region europe --provider m247 --count 2`, guided `proxies.txt` creation via `--guided` with country and region pick-lists, preview mode via `--dry-run`, stdout delivery via `--stdout`, and safe file overwrite behavior with `--force`.
+`mullgate export` is the proxy-list generation surface. It supports ordered repeated selector batches such as `--country se --city got --count 1 --region europe --provider m247 --count 2`, guided `proxies.txt` creation via `--guided` with country and region pick-lists, preview mode via `--dry-run`, stdout delivery via `--stdout`, and safe file overwrite behavior with `--force`.
 
-`mullgate config regions` prints the curated export region groups that `config export --region ...` accepts.
+`mullgate regions` prints the curated export region groups that `export --region ...` accepts.
 
 ## Invocation forms
 
@@ -60,11 +65,11 @@ Mullgate can be invoked in three documented ways:
 A practical workflow usually looks like this:
 
 1. `mullgate setup`
-2. `mullgate config exposure`
-3. `mullgate config export`
-4. `mullgate config regions`
-5. `mullgate config hosts`
-6. `mullgate config validate --refresh`
+2. `mullgate exposure`
+3. `mullgate export`
+4. `mullgate regions`
+5. `mullgate hosts`
+6. `mullgate validate --refresh`
 7. `mullgate start`
 8. `mullgate status`
 9. `mullgate doctor`

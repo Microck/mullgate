@@ -5,6 +5,7 @@ import { isIP } from 'node:net';
 import type { Command } from 'commander';
 
 import { loadStoredRelayCatalog } from '../app/setup-runner.js';
+import { writeCliReport } from '../cli-output.js';
 import {
   buildExposureContract,
   deriveLoopbackBindIp,
@@ -12,7 +13,6 @@ import {
   validateExposureSettings,
 } from '../config/exposure-contract.js';
 import { resolveRouteWireproxyPaths } from '../config/paths.js';
-import { redactSensitiveText } from '../config/redact.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
 import { ConfigStore, type LoadConfigResult } from '../config/store.js';
 import {
@@ -196,18 +196,15 @@ export async function runDoctorFlow(
   ]);
 
   const overall = summarizeOverallOutcome(checks.map((check) => check.outcome));
-  const summary = redactSensitiveText(
-    renderDoctorSummary({
-      checkedAt,
-      overall,
-      store,
-      config,
-      manifestResult,
-      lastStartResult,
-      checks,
-    }),
+  const summary = renderDoctorSummary({
+    checkedAt,
+    overall,
+    store,
     config,
-  );
+    manifestResult,
+    lastStartResult,
+    checks,
+  });
 
   return {
     ok: overall !== 'fail',
@@ -380,7 +377,7 @@ function buildValidationCheck(
       summary: 'The primary wireproxy config artifact is missing from the runtime directory.',
       details,
       remediation:
-        'Run `mullgate config validate` or `mullgate start` to regenerate the derived runtime artifacts before trusting the saved runtime state.',
+        'Run `mullgate validate` or `mullgate start` to regenerate the derived runtime artifacts before trusting the saved runtime state.',
     };
   }
 
@@ -394,7 +391,7 @@ function buildValidationCheck(
           : 'Saved runtime status is `error`, so the current runtime artifacts should not be trusted.',
       details,
       remediation:
-        'Fix the reported wireproxy/config issue, then rerun `mullgate config validate` or `mullgate start` to refresh the runtime artifacts.',
+        'Fix the reported wireproxy/config issue, then rerun `mullgate validate` or `mullgate start` to refresh the runtime artifacts.',
     };
   }
 
@@ -406,7 +403,7 @@ function buildValidationCheck(
         'At least one persisted validation report could not be parsed back into the expected shape.',
       details,
       remediation:
-        'Delete the broken validation report and rerun `mullgate config validate` so doctor can trust the persisted validation surface again.',
+        'Delete the broken validation report and rerun `mullgate validate` so doctor can trust the persisted validation surface again.',
     };
   }
 
@@ -418,7 +415,7 @@ function buildValidationCheck(
         'Saved config is marked `unvalidated`, so runtime artifacts may lag behind recent config or exposure edits.',
       details,
       remediation:
-        'Run `mullgate config validate` or `mullgate start` to regenerate wireproxy artifacts and capture a fresh validation report.',
+        'Run `mullgate validate` or `mullgate start` to regenerate wireproxy artifacts and capture a fresh validation report.',
     };
   }
 
@@ -430,7 +427,7 @@ function buildValidationCheck(
         'One or more per-route validation reports are missing, so doctor cannot fully prove the rendered wireproxy configs are still in sync.',
       details,
       remediation:
-        'Rerun `mullgate config validate` to recreate the missing configtest reports before relying on the saved validation metadata.',
+        'Rerun `mullgate validate` to recreate the missing configtest reports before relying on the saved validation metadata.',
     };
   }
 
@@ -458,7 +455,7 @@ function buildRelayCacheCheck(
         ...(relayCacheResult.cause ? [`cause=${relayCacheResult.cause}`] : []),
       ],
       remediation:
-        'Refresh the saved relay catalog with a fresh `mullgate setup` run, then rerun `mullgate config validate` or `mullgate start` to rebuild derived artifacts.',
+        'Refresh the saved relay catalog with a fresh `mullgate setup` run, then rerun `mullgate validate` or `mullgate start` to rebuild derived artifacts.',
     };
   }
 
@@ -493,7 +490,7 @@ function buildRelayCacheCheck(
         'Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.',
       details,
       remediation:
-        'Refresh the saved relay catalog with `mullgate setup`, then rerun `mullgate config validate` or `mullgate start` so runtime artifacts use the fresh relay data.',
+        'Refresh the saved relay catalog with `mullgate setup`, then rerun `mullgate validate` or `mullgate start` so runtime artifacts use the fresh relay data.',
     };
   }
 
@@ -532,7 +529,7 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
       summary: 'Saved exposure flags disagree with the configured exposure mode.',
       details,
       remediation:
-        'Re-save the exposure contract with `mullgate config exposure ...` so allow-lan and the saved network-mode posture stay aligned.',
+        'Re-save the exposure contract with `mullgate exposure ...` so allow-lan and the saved network-mode posture stay aligned.',
     };
   }
 
@@ -607,8 +604,8 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
       details: [...details, ...issues],
       remediation:
         config.setup.exposure.mode === 'loopback'
-          ? 'Rerun `mullgate config exposure --mode loopback` so each route gets the expected loopback bind IPs, then revalidate the runtime artifacts.'
-          : 'Use `mullgate config exposure` to correct the route bind IPs for the current exposure mode, then rerun `mullgate config validate` or `mullgate start`.',
+          ? 'Rerun `mullgate exposure --mode loopback` so each route gets the expected loopback bind IPs, then revalidate the runtime artifacts.'
+          : 'Use `mullgate exposure` to correct the route bind IPs for the current exposure mode, then rerun `mullgate validate` or `mullgate start`.',
     };
   }
 
@@ -950,11 +947,11 @@ function writeDoctorResult(
   const stderr = dependencies.stderr ?? process.stderr;
 
   if (result.ok) {
-    stdout.write(`${result.summary}\n`);
+    writeCliReport({ sink: stdout, text: result.summary });
     return;
   }
 
-  stderr.write(`${result.summary}\n`);
+  writeCliReport({ sink: stderr, text: result.summary, tone: 'error' });
 }
 
 async function defaultResolveHostname(hostname: string): Promise<readonly string[]> {
@@ -1049,7 +1046,7 @@ function isValidateWireproxyResult(value: unknown): value is ValidateWireproxyRe
   );
 }
 
-function isObject(value: unknown): value is Record<string, any> {
+function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
@@ -1068,7 +1065,7 @@ function buildAuthFailureRemediation(lastStart: RuntimeStartDiagnostic): string 
     routeContext.length > 0
       ? `Check ${routeContext} for rejected proxy auth or stale rendered credentials.`
       : 'Check the failing route/service for rejected proxy auth or stale rendered credentials.',
-    'If credentials changed, update `setup.auth.username` / `setup.auth.password` with `mullgate config set`, then rerun `mullgate config validate` and `mullgate start`.',
+    'If credentials changed, update `setup.auth.username` / `setup.auth.password` with `mullgate config set`, then rerun `mullgate validate` and `mullgate start`.',
   ].join(' ');
 }
 
@@ -1088,7 +1085,7 @@ function buildHostnameRemediation(config: MullgateConfig, exposure: ExposureCont
   }
 
   if (exposure.routes.some((route) => route.hostname !== route.bindIp)) {
-    return 'Use `mullgate config hosts` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun `mullgate doctor`.';
+    return 'Use `mullgate hosts` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun `mullgate doctor`.';
   }
 
   return 'Use the direct bind-IP entrypoints from the saved exposure contract when hostnames are not available.';

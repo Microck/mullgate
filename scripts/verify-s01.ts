@@ -7,6 +7,8 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { requireArrayValue, requireDefined } from '../src/required.js';
+
 const repoRoot = process.cwd();
 const fixturesDir = path.join(repoRoot, 'test/fixtures/mullvad');
 const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
@@ -127,7 +129,10 @@ async function main(): Promise<void> {
           'config validate did not refresh stale artifacts',
         );
 
-        const wireproxyPath = path.join(env.XDG_STATE_HOME!, 'mullgate/runtime/wireproxy.conf');
+        const wireproxyPath = path.join(
+          requireDefined(env.XDG_STATE_HOME, 'Expected XDG_STATE_HOME in the verification env.'),
+          'mullgate/runtime/wireproxy.conf',
+        );
         const renderedWireproxy = await readFile(wireproxyPath, 'utf8');
         assert(
           renderedWireproxy.includes('BindAddress = 0.0.0.0:9091'),
@@ -174,7 +179,11 @@ async function readTextFixture(name: string): Promise<string> {
 }
 
 async function createFakeWireproxyBinary(env: NodeJS.ProcessEnv): Promise<void> {
-  const binDir = env.PATH?.split(path.delimiter)[0]!;
+  const binDir = requireArrayValue(
+    requireDefined(env.PATH, 'Expected PATH in the verification env.').split(path.delimiter),
+    0,
+    'Expected a writable bin directory at the front of PATH.',
+  );
   await mkdir(binDir, { recursive: true });
   await writeFile(
     path.join(binDir, 'wireproxy'),

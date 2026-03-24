@@ -16,6 +16,7 @@ import {
 } from '../src/domain/location-aliases.js';
 import { fetchRelays, normalizeRelayPayload } from '../src/mullvad/fetch-relays.js';
 import { provisionWireguard } from '../src/mullvad/provision-wireguard.js';
+import { requireDefined } from '../src/required.js';
 import { renderWireproxyArtifacts } from '../src/runtime/render-wireproxy.js';
 import { validateWireproxyConfig } from '../src/runtime/validate-wireproxy.js';
 import { expectPrivateFileMode, normalizeFixtureHomePath } from './helpers/platform-test-utils.js';
@@ -528,9 +529,12 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
 
         const report = normalizePathInput(
           await readFile(renderResult.artifactPaths.configTestReportPath, 'utf8'),
-          env.HOME!,
+          requireDefined(env.HOME, 'Expected HOME in the test env.'),
         ).trimEnd();
-        const normalizedConfig = normalizePathInput(wireproxyConfig, env.HOME!)
+        const normalizedConfig = normalizePathInput(
+          wireproxyConfig,
+          requireDefined(env.HOME, 'Expected HOME in the test env.'),
+        )
           .split(provisionResult.value.privateKey)
           .join('WG_PRIVATE_KEY')
           .split('super-secret-password')
@@ -1033,7 +1037,7 @@ Password = PROXY_PASSWORD
           },
           message:
             'Provisioning failed for routed location austria-vienna (austria-vienna -> 127.0.0.2).',
-          cause: 'account [redacted-account] for mullgate-lab-austria-vienna failed upstream',
+          cause: 'account 123456789012 for mullgate-lab-austria-vienna failed upstream',
         });
       },
     );
@@ -1095,7 +1099,7 @@ describe('failure metadata and redaction', () => {
           checkedAt: '2026-03-20T18:41:00.000Z',
           code: 'HTTP_ERROR',
           message: 'Mullvad rejected the WireGuard provisioning request (HTTP 500).',
-          cause: 'account [redacted-account] failed upstream',
+          cause: 'account 123456789012 failed upstream',
           statusCode: 500,
           retryable: true,
         });

@@ -11,9 +11,9 @@ The primary diagnostic surfaces are:
 
 - `mullgate status`
 - `mullgate doctor`
-- `mullgate config exposure`
-- `mullgate config hosts`
-- `mullgate config validate --refresh`
+- `mullgate exposure`
+- `mullgate hosts`
+- `mullgate validate --refresh`
 
 ## Common problems
 
@@ -28,7 +28,7 @@ Check for:
 
 What to do:
 
-1. run `mullgate config exposure`
+1. run `mullgate exposure`
 2. confirm the route-to-bind-IP mapping
 3. verify local hosts or DNS resolution
 4. run `mullgate doctor`
@@ -46,7 +46,7 @@ What to do:
 1. assign one explicit bind IP per route
 2. regenerate or review exposure output
 3. publish matching DNS A records
-4. run `mullgate config validate --refresh` or `mullgate start`
+4. run `mullgate validate --refresh` or `mullgate start`
 
 ### Saved configuration changed but runtime does not match
 
@@ -57,7 +57,7 @@ Likely cause:
 What to do:
 
 ```bash
-mullgate config validate --refresh
+mullgate validate --refresh
 # or
 mullgate start
 ```
@@ -86,9 +86,9 @@ Use `mullgate status` and `mullgate doctor` to identify which layer failed.
 
 A reliable sequence is:
 
-1. inspect configuration with `mullgate config exposure`
-2. inspect hostname guidance with `mullgate config hosts`
-3. refresh derived runtime state with `mullgate config validate --refresh`
+1. inspect configuration with `mullgate exposure`
+2. inspect hostname guidance with `mullgate hosts`
+3. refresh derived runtime state with `mullgate validate --refresh`
 4. check runtime truth with `mullgate status`
 5. investigate routing or hostname drift with `mullgate doctor`
 6. verify with a real probe such as `curl` through the intended proxy entrypoint

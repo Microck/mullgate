@@ -417,9 +417,6 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
 
     expect(process.exitCode).toBe(0);
     expect(stderr.value.current).toBe('');
-    expect(stdout.value.current).not.toContain('proxy-password');
-    expect(stdout.value.current).not.toContain('123456789012');
-    expect(stdout.value.current).not.toContain('private-key-value-1');
     expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate runtime status
@@ -458,20 +455,20 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
          service: wireproxy-se-got-wg-101
          live state: running (status=Up 10 seconds, health=healthy, exit=0)
          dns: not required; use direct bind IP entrypoints
-         socks5 hostname: socks5://[redacted]:[redacted]@se-got-wg-101:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
-         http hostname: http://[redacted]:[redacted]@se-got-wg-101:8080
-         http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
+         socks5 hostname: socks5://se-got-wg-101:1080
+         socks5 direct ip: socks5://127.0.0.1:1080
+         http hostname: http://se-got-wg-101:8080
+         http direct ip: http://127.0.0.1:8080
       2. at-vie-wg-001 -> 127.0.0.2
          alias: austria-vienna
          route id: at-vie-wg-001
          service: wireproxy-at-vie-wg-001
          live state: running (status=Up 10 seconds, health=healthy, exit=0)
          dns: not required; use direct bind IP entrypoints
-         socks5 hostname: socks5://[redacted]:[redacted]@at-vie-wg-001:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
-         http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
-         http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
+         socks5 hostname: socks5://at-vie-wg-001:1080
+         socks5 direct ip: socks5://127.0.0.2:1080
+         http hostname: http://at-vie-wg-001:8080
+         http direct ip: http://127.0.0.2:8080
 
       platform guidance
       - Linux is the reference runtime target for the current Mullgate topology and verification flow.
@@ -479,7 +476,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
 
       network-mode guidance
       - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
-      - Use \`mullgate config hosts\` if you want a copy/paste /etc/hosts block for this machine.
+      - Use \`mullgate hosts\` if you want a copy/paste /etc/hosts block for this machine.
 
       warnings
       - none
@@ -575,10 +572,6 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
 
     expect(process.exitCode).toBe(0);
     expect(stderr.value.current).toBe('');
-    expect(stdout.value.current).not.toContain('proxy-password');
-    expect(stdout.value.current).not.toContain('123456789012');
-    expect(stdout.value.current).not.toContain('private-key-value-2');
-    expect(stdout.value.current).not.toContain('BEGIN PRIVATE KEY');
     expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate runtime status
@@ -617,20 +610,20 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
          service: wireproxy-se-got-wg-101
          live state: running (status=Up 30 seconds, health=healthy, exit=0)
          dns: not required; use direct bind IP entrypoints
-         socks5 hostname: socks5://[redacted]:[redacted]@se-got-wg-101:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
-         http hostname: http://[redacted]:[redacted]@se-got-wg-101:8080
-         http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
+         socks5 hostname: socks5://se-got-wg-101:1080
+         socks5 direct ip: socks5://127.0.0.1:1080
+         http hostname: http://se-got-wg-101:8080
+         http direct ip: http://127.0.0.1:8080
       2. at-vie-wg-001 -> 127.0.0.2
          alias: austria-vienna
          route id: at-vie-wg-001
          service: wireproxy-at-vie-wg-001
          live state: exited (status=Exited (2) 3 seconds ago, exit=2)
          dns: not required; use direct bind IP entrypoints
-         socks5 hostname: socks5://[redacted]:[redacted]@at-vie-wg-001:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
-         http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
-         http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
+         socks5 hostname: socks5://at-vie-wg-001:1080
+         socks5 direct ip: socks5://127.0.0.2:1080
+         http hostname: http://at-vie-wg-001:8080
+         http direct ip: http://127.0.0.2:8080
 
       platform guidance
       - Linux is the reference runtime target for the current Mullgate topology and verification flow.
@@ -638,7 +631,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
 
       network-mode guidance
       - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
-      - Use \`mullgate config hosts\` if you want a copy/paste /etc/hosts block for this machine.
+      - Use \`mullgate hosts\` if you want a copy/paste /etc/hosts block for this machine.
 
       warnings
       - route at-vie-wg-001 is stopped: exited (status=Exited (2) 3 seconds ago, exit=2).
@@ -655,8 +648,10 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       route hostname: at-vie-wg-001
       route bind ip: 127.0.0.2
       service: wireproxy-at-vie-wg-001
-      reason: Docker Compose failed to start the Mullgate runtime bundle for [redacted] / [redacted] / [redacted].
-      cause: service wireproxy-at-vie-wg-001 crashed while reading [redacted] and account [redacted]"
+      reason: Docker Compose failed to start the Mullgate runtime bundle for proxy-password / 123456789012 / private-key-value-2.
+      cause: service wireproxy-at-vie-wg-001 crashed while reading -----BEGIN PRIVATE KEY-----
+      fixture
+      -----END PRIVATE KEY----- and account 123456789012"
     `);
   });
 
@@ -756,20 +751,20 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
          service: wireproxy-se-got-wg-101
          live state: not present in live compose status
          dns: not required; use direct bind IP entrypoints
-         socks5 hostname: socks5://[redacted]:[redacted]@se-got-wg-101:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
-         http hostname: http://[redacted]:[redacted]@se-got-wg-101:8080
-         http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
+         socks5 hostname: socks5://se-got-wg-101:1080
+         socks5 direct ip: socks5://127.0.0.1:1080
+         http hostname: http://se-got-wg-101:8080
+         http direct ip: http://127.0.0.1:8080
       2. at-vie-wg-001 -> 127.0.0.2
          alias: austria-vienna
          route id: at-vie-wg-001
          service: wireproxy-at-vie-wg-001
          live state: not present in live compose status
          dns: not required; use direct bind IP entrypoints
-         socks5 hostname: socks5://[redacted]:[redacted]@at-vie-wg-001:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
-         http hostname: http://[redacted]:[redacted]@at-vie-wg-001:8080
-         http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
+         socks5 hostname: socks5://at-vie-wg-001:1080
+         socks5 direct ip: socks5://127.0.0.2:1080
+         http hostname: http://at-vie-wg-001:8080
+         http direct ip: http://127.0.0.2:8080
 
       platform guidance
       - Linux is the reference runtime target for the current Mullgate topology and verification flow.
@@ -777,7 +772,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
 
       network-mode guidance
       - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
-      - Use \`mullgate config hosts\` if you want a copy/paste /etc/hosts block for this machine.
+      - Use \`mullgate hosts\` if you want a copy/paste /etc/hosts block for this machine.
 
       warnings
       - no persisted last-start report exists yet; run \`mullgate start\` to capture a fresh launch diagnostic.

@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { resolveMullgatePaths } from '../src/config/paths.js';
 import type { MullgateConfig } from '../src/config/schema.js';
 import type { MullvadRelayCatalog } from '../src/mullvad/fetch-relays.js';
+import { requireDefined } from '../src/required.js';
 import {
   createFakeWireproxyBinary,
   normalizeFixtureHomePath,
@@ -46,6 +47,10 @@ type CliResult = {
   stderr: string;
 };
 
+function requireHome(env: NodeJS.ProcessEnv): string {
+  return requireDefined(env.HOME, 'Expected HOME in the test env.');
+}
+
 function createTempEnvironment(): NodeJS.ProcessEnv {
   const root = mkdtempSync(path.join(tmpdir(), 'mullgate-setup-cli-'));
   const linuxRoot = root.replaceAll('\\', '/');
@@ -77,7 +82,9 @@ async function readSavedConfig(env: NodeJS.ProcessEnv): Promise<MullgateConfig> 
 }
 
 function createProxyExportFixtureConfig(config: MullgateConfig): MullgateConfig {
-  const templateRoute = structuredClone(config.routing.locations[0]!);
+  const templateRoute = structuredClone(
+    requireDefined(config.routing.locations[0], 'Expected at least one routed location in config.'),
+  );
   const createRoute = (input: {
     alias: string;
     hostname: string;
@@ -358,11 +365,11 @@ afterEach(async () => {
 
 describe('mullgate setup CLI flow', () => {
   it(
-    'completes setup from a clean XDG home and exposes redacted config inspection surfaces',
+    'completes setup from a clean XDG home and exposes direct config inspection surfaces',
     { timeout: 20000 },
     async () => {
       const env = createTempEnvironment();
-      await createFakeWireproxyBinary(env.HOME!);
+      await createFakeWireproxyBinary(requireHome(env));
 
       const provisionFixture = await readTextFixture('wg-provision-response.txt');
       const relayFixture = await readJsonFixture<unknown>('app-relays.json');
@@ -446,13 +453,13 @@ describe('mullgate setup CLI flow', () => {
             getLocationResult,
             validateResult,
           ] = await Promise.all([
-            runCli(['config', 'path'], { env }),
+            runCli(['path'], { env }),
             runCli(['config', 'show'], { env }),
-            runCli(['config', 'locations'], { env }),
-            runCli(['config', 'hosts'], { env }),
+            runCli(['locations'], { env }),
+            runCli(['hosts'], { env }),
             runCli(['config', 'get', 'setup.auth.password'], { env }),
             runCli(['config', 'get', 'setup.location.requested'], { env }),
-            runCli(['config', 'validate'], { env }),
+            runCli(['validate'], { env }),
           ]);
 
           expect(pathResult.status).toBe(0);
@@ -463,14 +470,13 @@ describe('mullgate setup CLI flow', () => {
           expect(getLocationResult.status).toBe(0);
           expect(validateResult.status).toBe(0);
 
-          expect(showResult.stdout).not.toContain('123456789012');
-          expect(showResult.stdout).not.toContain('top-secret-password');
-          expect(showResult.stdout).toContain('[redacted]');
+          expect(showResult.stdout).toContain('123456789012');
+          expect(showResult.stdout).toContain('top-secret-password');
           expect(locationsResult.stdout).not.toContain('123456789012');
           expect(locationsResult.stdout).not.toContain('top-secret-password');
           expect(hostsResult.stdout).not.toContain('123456789012');
           expect(hostsResult.stdout).not.toContain('top-secret-password');
-          expect(getPasswordResult.stdout.trim()).toBe('[redacted]');
+          expect(getPasswordResult.stdout.trim()).toBe('top-secret-password');
           expect(getLocationResult.stdout.trim()).toBe('sweden-gothenburg');
           expect(`\n${normalizeOutput(pathResult.stdout, env)}`).toMatchInlineSnapshot(`
             "
@@ -535,15 +541,16 @@ routes: 1
           127.0.0.1 sweden-gothenburg"
         `);
           expect(`\n${normalizeOutput(validateResult.stdout, env)}`).toMatchInlineSnapshot(`
-"\nMullgate config validated.
-phase: validation
-source: wireproxy-binary
-artifact: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
-artifacts refreshed: no
-runtime status: validated
-reason: Validated via wireproxy-binary/configtest."
-`);
+            "
+            Mullgate validate complete.
+            phase: validation
+            source: wireproxy-binary
+            artifact: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+            report: /tmp/mullgate-home/state/mullgate/runtime/wireproxy-configtest.json
+            artifacts refreshed: no
+            runtime status: validated
+            reason: Validated via wireproxy-binary/configtest."
+          `);
         },
       );
     },
@@ -554,7 +561,7 @@ reason: Validated via wireproxy-binary/configtest."
     { timeout: 10000 },
     async () => {
       const env = createTempEnvironment();
-      await createFakeWireproxyBinary(env.HOME!);
+      await createFakeWireproxyBinary(requireHome(env));
 
       const provisionFixture = JSON.parse(
         await readTextFixture('wg-provision-response.txt'),
@@ -645,8 +652,8 @@ validation: wireproxy-binary/configtest"
 
           const savedConfig = await readSavedConfig(env);
           const [locationsResult, hostsResult] = await Promise.all([
-            runCli(['config', 'locations'], { env }),
-            runCli(['config', 'hosts'], { env }),
+            runCli(['locations'], { env }),
+            runCli(['hosts'], { env }),
           ]);
 
           expect(savedConfig.routing.locations).toHaveLength(2);
@@ -686,47 +693,48 @@ validation: wireproxy-binary/configtest"
           expect(savedConfig.setup.location.requested).toBe('sweden-gothenburg');
           expect(savedConfig.setup.location.resolvedAlias).toBe('sweden-gothenburg');
           expect(`\n${normalizeOutput(locationsResult.stdout, env)}`).toMatchInlineSnapshot(`
-"\nMullgate routed locations
-phase: inspect-config
-source: canonical-config
-config: /tmp/mullgate-home/config/mullgate/config.json
-routes: 2
+            "
+            Mullgate routed locations
+            phase: inspect-config
+            source: canonical-config
+            config: /tmp/mullgate-home/config/mullgate/config.json
+            routes: 2
 
-1. sweden-gothenburg
-   hostname: sweden-gothenburg
-   bind ip: 127.0.0.1
-   requested: sweden-gothenburg
-   resolved alias: sweden-gothenburg
-   country: se
-   city: got
-   route id: sweden-gothenburg
-   wireproxy service: wireproxy-sweden-gothenburg
+            1. sweden-gothenburg
+               hostname: sweden-gothenburg
+               bind ip: 127.0.0.1
+               requested: sweden-gothenburg
+               resolved alias: sweden-gothenburg
+               country: se
+               city: got
+               route id: sweden-gothenburg
+               wireproxy service: wireproxy-sweden-gothenburg
 
-2. austria-vienna
-   hostname: austria-vienna
-   bind ip: 127.0.0.2
-   requested: austria-vienna
-   resolved alias: austria-vienna
-   country: at
-   city: vie
-   route id: austria-vienna
-   wireproxy service: wireproxy-austria-vienna"
-`);
+            2. austria-vienna
+               hostname: austria-vienna
+               bind ip: 127.0.0.2
+               requested: austria-vienna
+               resolved alias: austria-vienna
+               country: at
+               city: vie
+               route id: austria-vienna
+               wireproxy service: wireproxy-austria-vienna"
+          `);
           expect(`\n${normalizeOutput(hostsResult.stdout, env)}`).toMatchInlineSnapshot(`
-          "
-          Mullgate routed hosts
-          phase: inspect-config
-          source: canonical-config
-          config: /tmp/mullgate-home/config/mullgate/config.json
-          routes: 2
-          hostname -> bind ip
-          1. sweden-gothenburg -> 127.0.0.1 (alias: sweden-gothenburg, route id: sweden-gothenburg)
-          2. austria-vienna -> 127.0.0.2 (alias: austria-vienna, route id: austria-vienna)
+            "
+            Mullgate routed hosts
+            phase: inspect-config
+            source: canonical-config
+            config: /tmp/mullgate-home/config/mullgate/config.json
+            routes: 2
+            hostname -> bind ip
+            1. sweden-gothenburg -> 127.0.0.1 (alias: sweden-gothenburg, route id: sweden-gothenburg)
+            2. austria-vienna -> 127.0.0.2 (alias: austria-vienna, route id: austria-vienna)
 
-          copy/paste hosts block
-          127.0.0.1 sweden-gothenburg
-          127.0.0.2 austria-vienna"
-        `);
+            copy/paste hosts block
+            127.0.0.1 sweden-gothenburg
+            127.0.0.2 austria-vienna"
+          `);
         },
       );
     },
@@ -737,7 +745,7 @@ routes: 2
     { timeout: 15000 },
     async () => {
       const env = createTempEnvironment();
-      await createFakeWireproxyBinary(env.HOME!);
+      await createFakeWireproxyBinary(requireHome(env));
 
       const provisionFixture = JSON.parse(
         await readTextFixture('wg-provision-response.txt'),
@@ -831,7 +839,7 @@ validation: wireproxy-binary/configtest"
           const savedConfig = await readSavedConfig(env);
           const [showResult, hostsResult] = await Promise.all([
             runCli(['config', 'show'], { env }),
-            runCli(['config', 'hosts'], { env }),
+            runCli(['hosts'], { env }),
           ]);
 
           expect(savedConfig.setup.exposure).toEqual({
@@ -851,111 +859,93 @@ validation: wireproxy-binary/configtest"
           ]);
           expect(showResult.stdout).toContain('proxy.example.com');
           expect(`\n${normalizeOutput(hostsResult.stdout, env)}`).toMatchInlineSnapshot(`
-          "
-          Mullgate routed hosts
-          phase: inspect-config
-          source: canonical-config
-          config: /tmp/mullgate-home/config/mullgate/config.json
-          routes: 2
-          hostname -> bind ip
-          1. sweden-gothenburg.proxy.example.com -> 192.168.10.10 (alias: sweden-gothenburg, route id: sweden-gothenburg)
-          2. austria-vienna.proxy.example.com -> 192.168.10.11 (alias: austria-vienna, route id: austria-vienna)
+            "
+            Mullgate routed hosts
+            phase: inspect-config
+            source: canonical-config
+            config: /tmp/mullgate-home/config/mullgate/config.json
+            routes: 2
+            hostname -> bind ip
+            1. sweden-gothenburg.proxy.example.com -> 192.168.10.10 (alias: sweden-gothenburg, route id: sweden-gothenburg)
+            2. austria-vienna.proxy.example.com -> 192.168.10.11 (alias: austria-vienna, route id: austria-vienna)
 
-          copy/paste hosts block
-          192.168.10.10 sweden-gothenburg.proxy.example.com
-          192.168.10.11 austria-vienna.proxy.example.com"
-        `);
+            copy/paste hosts block
+            192.168.10.10 sweden-gothenburg.proxy.example.com
+            192.168.10.11 austria-vienna.proxy.example.com"
+          `);
         },
       );
     },
   );
 
-  it(
-    'exports weighted proxy batches to generated files without leaking secrets',
-    { timeout: 20000 },
-    async () => {
-      const env = createTempEnvironment();
-      await createFakeWireproxyBinary(env.HOME!);
+  it('exports weighted proxy batches with full credentials', { timeout: 20000 }, async () => {
+    const env = createTempEnvironment();
+    await createFakeWireproxyBinary(requireHome(env));
 
-      const provisionFixture = await readTextFixture('wg-provision-response.txt');
-      const relayFixture = await readJsonFixture<unknown>('app-relays.json');
-      const paths = resolveMullgatePaths(env);
+    const provisionFixture = await readTextFixture('wg-provision-response.txt');
+    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+    const paths = resolveMullgatePaths(env);
 
-      await withJsonServer(
-        {
-          '/wg': (request) => {
-            const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
-            return {
-              body: JSON.stringify({
-                ...JSON.parse(provisionFixture),
-                pubkey: payload.pubkey,
-                name: payload.name ?? 'mullgate-export-host',
-              }),
-            };
-          },
-          '/relays': () => ({ body: JSON.stringify(relayFixture) }),
+    await withJsonServer(
+      {
+        '/wg': (request) => {
+          const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
+          return {
+            body: JSON.stringify({
+              ...JSON.parse(provisionFixture),
+              pubkey: payload.pubkey,
+              name: payload.name ?? 'mullgate-export-host',
+            }),
+          };
         },
-        async (baseUrl) => {
-          const setupResult = await runCli(
-            [
-              'setup',
-              '--non-interactive',
-              '--mullvad-wg-url',
-              new URL('/wg', baseUrl).toString(),
-              '--mullvad-relays-url',
-              new URL('/relays', baseUrl).toString(),
-            ],
-            {
-              env: {
-                ...env,
-                MULLGATE_ACCOUNT_NUMBER: '123456789012',
-                MULLGATE_PROXY_USERNAME: 'alice',
-                MULLGATE_PROXY_PASSWORD: 'export-secret',
-                MULLGATE_LOCATION: 'sweden-gothenburg',
-              },
+        '/relays': () => ({ body: JSON.stringify(relayFixture) }),
+      },
+      async (baseUrl) => {
+        const setupResult = await runCli(
+          [
+            'setup',
+            '--non-interactive',
+            '--mullvad-wg-url',
+            new URL('/wg', baseUrl).toString(),
+            '--mullvad-relays-url',
+            new URL('/relays', baseUrl).toString(),
+          ],
+          {
+            env: {
+              ...env,
+              MULLGATE_ACCOUNT_NUMBER: '123456789012',
+              MULLGATE_PROXY_USERNAME: 'alice',
+              MULLGATE_PROXY_PASSWORD: 'export-secret',
+              MULLGATE_LOCATION: 'sweden-gothenburg',
             },
-          );
+          },
+        );
 
-          expect(setupResult.status).toBe(0);
+        expect(setupResult.status).toBe(0);
 
-          const exportFixtureConfig = createProxyExportFixtureConfig(await readSavedConfig(env));
-          await writeFile(paths.configFile, JSON.stringify(exportFixtureConfig, null, 2), 'utf8');
-          await writeFile(
-            paths.provisioningCacheFile,
-            `${JSON.stringify(createProxyExportFixtureRelayCatalog(), null, 2)}\n`,
-            'utf8',
-          );
+        const exportFixtureConfig = createProxyExportFixtureConfig(await readSavedConfig(env));
+        await writeFile(paths.configFile, JSON.stringify(exportFixtureConfig, null, 2), 'utf8');
+        await writeFile(
+          paths.provisioningCacheFile,
+          `${JSON.stringify(createProxyExportFixtureRelayCatalog(), null, 2)}\n`,
+          'utf8',
+        );
 
-          const autoFilename = path.join(
-            repoRoot,
-            'proxy-socks5-country-se-1--region-europe-2.txt',
-          );
-          temporaryFiles.push(autoFilename);
+        const autoFilename = path.join(repoRoot, 'proxy-socks5-country-se-1--region-europe-2.txt');
+        temporaryFiles.push(autoFilename);
 
-          await rm(autoFilename, { force: true });
+        await rm(autoFilename, { force: true });
 
-          const autoResult = await runCli(
-            [
-              'config',
-              'export',
-              '--country',
-              'se',
-              '--count',
-              '1',
-              '--region',
-              'europe',
-              '--count',
-              '2',
-            ],
-            { env },
-          );
-          expect(autoResult.status).toBe(0);
-          expect(autoResult.stdout).not.toContain('export-secret');
-          expect(autoResult.stderr).toBe('');
+        const autoResult = await runCli(
+          ['export', '--country', 'se', '--count', '1', '--region', 'europe', '--count', '2'],
+          { env },
+        );
+        expect(autoResult.status).toBe(0);
+        expect(autoResult.stderr).toBe('');
 
-          const autoFileContents = await readFile(autoFilename, 'utf8');
+        const autoFileContents = await readFile(autoFilename, 'utf8');
 
-          expect(`\n${normalizeOutput(autoResult.stdout, env)}`).toMatchInlineSnapshot(`
+        expect(`\n${normalizeOutput(autoResult.stdout, env)}`).toMatchInlineSnapshot(`
           "
           Mullgate proxy export complete.
           phase: export-proxies
@@ -969,23 +959,22 @@ validation: wireproxy-binary/configtest"
           exported count: 2
           output: ./proxy-socks5-country-se-1--region-europe-2.txt"
         `);
-          expect(`\n${autoFileContents}`).toMatchInlineSnapshot(`
+        expect(`\n${autoFileContents}`).toMatchInlineSnapshot(`
           "
           socks5://alice:export-secret@sweden-gothenburg.proxy.example.com:1080
           socks5://alice:export-secret@austria-vienna.proxy.example.com:1080
           "
         `);
-        },
-      );
-    },
-  );
+      },
+    );
+  });
 
   it(
-    'guides proxy export selection from numbered country, city, and server lists',
+    'guides proxy export selection from numbered country, city, and server lists with full preview output',
     { timeout: 20000 },
     async () => {
       const env = createTempEnvironment();
-      await createFakeWireproxyBinary(env.HOME!);
+      await createFakeWireproxyBinary(requireHome(env));
 
       const provisionFixture = await readTextFixture('wg-provision-response.txt');
       const relayFixture = await readJsonFixture<unknown>('app-relays.json');
@@ -1037,7 +1026,7 @@ validation: wireproxy-binary/configtest"
           );
 
           const guidedResult = await runCli(
-            ['config', 'export', '--guided', '--dry-run', '--protocol', 'http'],
+            ['export', '--guided', '--dry-run', '--protocol', 'http'],
             {
               env,
               input: 'y\n1\n\ny\n1\ny\n1\nn\n',
@@ -1045,26 +1034,27 @@ validation: wireproxy-binary/configtest"
           );
 
           expect(guidedResult.status).toBe(0);
-          expect(guidedResult.stdout).not.toContain('export-secret');
+          expect(guidedResult.stdout).toContain('export-secret');
           expect(guidedResult.stderr).toContain('Country batches');
           expect(guidedResult.stderr).not.toContain(
             'Enter an option number or value from the list.',
           );
           expect(`\n${normalizeOutput(guidedResult.stdout, env)}`).toMatchInlineSnapshot(`
-"\nMullgate proxy export preview.
-phase: export-proxies
-source: canonical-config
-config: /tmp/mullgate-home/config/mullgate/config.json
-protocol: http
-write mode: dry-run
-selectors: 1
-1. country=se city=got server=se-got-wg-101 requested=1 matched=1 exported=1
-exported count: 1
-output: ./proxy-http-country-se-got-se-got-wg-101-1.txt
+            "
+            Mullgate proxy export preview.
+            phase: export-proxies
+            source: canonical-config
+            config: /tmp/mullgate-home/config/mullgate/config.json
+            protocol: http
+            write mode: dry-run
+            selectors: 1
+            1. country=se city=got server=se-got-wg-101 requested=1 matched=1 exported=1
+            exported count: 1
+            output: ./proxy-http-country-se-got-se-got-wg-101-1.txt
 
-preview
-1. http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080 (alias: sweden-gothenburg, country: se, city: got, relay: se-got-wg-101)"
-`);
+            preview
+            1. http://alice:export-secret@sweden-gothenburg.proxy.example.com:8080 (alias: sweden-gothenburg, country: se, city: got, relay: se-got-wg-101)"
+          `);
         },
       );
     },
@@ -1112,9 +1102,9 @@ cause: Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a
 `);
   });
 
-  it('reports route-aware provisioning failures without leaking secrets', async () => {
+  it('reports route-aware provisioning failures with the raw upstream details', async () => {
     const env = createTempEnvironment();
-    await createFakeWireproxyBinary(env.HOME!);
+    await createFakeWireproxyBinary(requireHome(env));
 
     const provisionFixture = JSON.parse(
       await readTextFixture('wg-provision-response.txt'),
@@ -1179,8 +1169,8 @@ cause: Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a
 
         expect(setupResult.status).toBe(1);
         expect(setupResult.stdout).toBe('');
-        expect(setupResult.stderr).not.toContain('123456789012');
         expect(setupResult.stderr).not.toContain('route-2-secret');
+        expect(setupResult.stderr).toContain('123456789012');
         const normalizedFailure = normalizeOutput(setupResult.stderr, env).replace(
           baseUrl.origin,
           'http://127.0.0.1:PORT',
@@ -1199,7 +1189,7 @@ device: mullgate-lab-austria-vienna
 endpoint: http://127.0.0.1:PORT/wg
 reason: Provisioning failed for routed location austria-vienna (austria-vienna -> 127.0.0.2).
 config: /tmp/mullgate-home/config/mullgate/config.json
-cause: account [redacted-account] for mullgate-lab-austria-vienna failed upstream"
+cause: account 123456789012 for mullgate-lab-austria-vienna failed upstream"
 `);
       },
     );
@@ -1207,7 +1197,7 @@ cause: account [redacted-account] for mullgate-lab-austria-vienna failed upstrea
 
   it('updates saved config values safely and refreshes derived artifacts on validate', async () => {
     const env = createTempEnvironment();
-    await createFakeWireproxyBinary(env.HOME!);
+    await createFakeWireproxyBinary(requireHome(env));
 
     const provisionFixture = await readTextFixture('wg-provision-response.txt');
     const relayFixture = await readJsonFixture<unknown>('app-relays.json');
@@ -1262,12 +1252,12 @@ cause: account [redacted-account] for mullgate-lab-austria-vienna failed upstrea
         });
         const getPasswordResult = await runCli(['config', 'get', 'setup.auth.password'], { env });
         const getPortResult = await runCli(['config', 'get', 'setup.bind.httpPort'], { env });
-        const validateResult = await runCli(['config', 'validate'], { env });
+        const validateResult = await runCli(['validate'], { env });
 
         expect(setPasswordResult.status).toBe(0);
         expect(setPasswordResult.stdout).not.toContain('rotated-password');
         expect(setPortResult.status).toBe(0);
-        expect(getPasswordResult.stdout.trim()).toBe('[redacted]');
+        expect(getPasswordResult.stdout.trim()).toBe('rotated-password');
         expect(getPortResult.stdout.trim()).toBe('9091');
         expect(validateResult.status).toBe(0);
         expect(`\n${normalizeOutput(setPasswordResult.stdout, env)}`).toMatchInlineSnapshot(`
@@ -1276,11 +1266,11 @@ phase: persist-config
 source: input
 key: setup.auth.password
 config: /tmp/mullgate-home/config/mullgate/config.json
-value: [redacted]
+value: stored without echoing it back to the terminal
 runtime status: unvalidated"
 `);
         expect(`\n${normalizeOutput(validateResult.stdout, env)}`).toMatchInlineSnapshot(`
-"\nMullgate config validated.
+"\nMullgate validate complete.
 phase: validation
 source: wireproxy-binary
 artifact: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
@@ -1299,7 +1289,7 @@ reason: Validated via wireproxy-binary/configtest."
 
   it('reports corrupted rendered artifacts with phase, source, and secret-safe diagnostics', async () => {
     const env = createTempEnvironment();
-    await createFakeWireproxyBinary(env.HOME!);
+    await createFakeWireproxyBinary(requireHome(env));
 
     const provisionFixture = await readTextFixture('wg-provision-response.txt');
     const relayFixture = await readJsonFixture<unknown>('app-relays.json');
@@ -1343,37 +1333,39 @@ reason: Validated via wireproxy-binary/configtest."
         expect(setupResult.status).toBe(0);
 
         await writeFile(paths.wireproxyConfigFile, '[Interface]\nPrivateKey = broken\n', 'utf8');
-        const validateResult = await runCli(['config', 'validate'], { env });
+        const validateResult = await runCli(['validate'], { env });
 
         expect(validateResult.status).toBe(1);
         expect(validateResult.stdout).toBe('');
         expect(validateResult.stderr).not.toContain('failure-secret');
         expect(validateResult.stderr).not.toContain('123456789012');
         expect(`\n${normalizeOutput(validateResult.stderr, env)}`).toMatchInlineSnapshot(`
-"\nMullgate config validation failed.
-phase: validation
-source: wireproxy-binary
-artifact: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-reason: fake wireproxy configtest: invalid rendered config at /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-cause: fake wireproxy configtest: invalid rendered config at /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf"
-`);
+          "
+          Mullgate validate failed.
+          phase: validation
+          source: wireproxy-binary
+          artifact: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+          reason: fake wireproxy configtest: invalid rendered config at /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+          cause: fake wireproxy configtest: invalid rendered config at /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf"
+        `);
       },
     );
   });
 
   it('explains the missing-config validate failure from a clean XDG home', async () => {
     const env = createTempEnvironment();
-    await createFakeWireproxyBinary(env.HOME!);
+    await createFakeWireproxyBinary(requireHome(env));
 
-    const result = await runCli(['config', 'validate'], { env });
+    const result = await runCli(['validate'], { env });
 
     expect(result.status).toBe(1);
     expect(`\n${normalizeOutput(result.stderr, env)}`).toMatchInlineSnapshot(`
-"\nMullgate config validation failed.
-phase: load-config
-source: empty
-artifact: /tmp/mullgate-home/config/mullgate/config.json
-reason: Mullgate is not configured yet. Run \`mullgate setup\` to create /tmp/mullgate-home/config/mullgate/config.json."
-`);
+      "
+      Mullgate validate failed.
+      phase: load-config
+      source: empty
+      artifact: /tmp/mullgate-home/config/mullgate/config.json
+      reason: Mullgate is not configured yet. Run \`mullgate setup\` to create /tmp/mullgate-home/config/mullgate/config.json."
+    `);
   });
 });

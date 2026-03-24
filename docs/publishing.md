@@ -1,69 +1,59 @@
 # Publishing Mullgate
 
-This document is the maintainer runbook for releases.
+This page is the publish-focused companion to [the release runbook](release-runbook.md).
 
-## Prerequisites
+Use the runbook for the full release sequence. Use this page when you only need the npm and release-channel details.
 
-- Node.js 22
-- `pnpm` 10.18.3
-- npm access to the `mullgate` package
-- GitHub push access for tags and releases
+## Canonical release path
 
-## Local release check
+The maintained release flow is:
 
-Run this before tagging:
+1. update `package.json`, `CHANGELOG.md`, and any release-facing docs
+2. run:
 
 ```bash
 make release-check
+npm pack --dry-run
 ```
 
-That covers:
-
-- lint
-- typecheck
-- full test suite
-- packaged install smoke verification
-- packed release install-path verification
-
-## Version and changelog
-
-Before releasing:
-
-- bump `package.json`
-- move release notes from `Unreleased` into a versioned `CHANGELOG.md` section
-- make sure the README install surface still matches reality
+3. push `main`
+4. push `vX.Y.Z`
+5. let GitHub Actions publish the release assets
+6. let GitHub Actions publish to npm, or publish locally if automation is unavailable
 
 ## npm publish
 
-The package can be published locally with:
+Automatic npm publishing is handled by `.github/workflows/npm-publish.yml` after a successful `Release` workflow, but only when these repository secrets are configured:
+
+- `NPM_TOKEN`
+- `NPM_PUBLISH_ENABLED=true`
+
+If automation is disabled or unavailable, publish locally with:
 
 ```bash
 pnpm publish --no-git-checks --access public --provenance=false
 ```
 
-Local publishing currently uses `--provenance=false` so maintainers are not blocked on GitHub Actions OIDC wiring.
-The GitHub Actions publish workflow keeps provenance enabled through OIDC when `NPM_TOKEN` and `NPM_PUBLISH_ENABLED=true` are configured.
+## Why npm matters
 
-## GitHub release assets
+`mullgate` does not use GitHub release assets as the default install path for the checked-in installer scripts.
 
-The tagged release workflow is intended to:
+- `scripts/install.sh` runs `npm install --global mullgate`
+- `scripts/install.ps1` runs `npm install --global mullgate`
 
-- verify build, typecheck, and tests
-- verify the packed install path
-- verify packaged install smoke on Linux, macOS, and Windows
-- build standalone Bun-compiled binaries for:
-  - `x86_64-unknown-linux-gnu`
-  - `aarch64-unknown-linux-gnu`
-  - `x86_64-apple-darwin`
-  - `aarch64-apple-darwin`
-  - `x86_64-pc-windows-msvc`
-- attach raw binaries, platform archives, `mullgate-vX.Y.Z-checksums.txt`, `release-notes.md`, and `release-notes.json`
+That means a new git tag is not enough. The npm package must also be published for the default install path to deliver the new release.
 
-## Optional fully automated npm publish
+## Release assets
 
-`.github/workflows/npm-publish.yml` only publishes automatically when the repository has:
+`.github/workflows/release-package.yml` publishes:
 
-- `NPM_TOKEN`
-- `NPM_PUBLISH_ENABLED=true`
+- platform archives
+- raw standalone binaries
+- `mullgate-vX.Y.Z-checksums.txt`
+- `release-notes.md`
+- `release-notes.json`
 
-Without those, npm publish remains a maintainer-operated step.
+## Related docs
+
+- [Release Runbook](release-runbook.md)
+- [Multi-exit architecture spec](multi-exit-architecture-spec.md)

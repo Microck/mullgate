@@ -5,6 +5,8 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { requireDefined } from '../src/required.js';
+
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const _tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
 
@@ -47,7 +49,10 @@ async function main(): Promise<void> {
       );
     }
 
-    const tarballPath = path.join(packDir, packFiles[0]!);
+    const tarballPath = path.join(
+      packDir,
+      requireDefined(packFiles[0], `Expected exactly one packed tarball in ${packDir}.`),
+    );
     const tarListResult = await runShellCommand(`tar -tzf ${shellEscape(tarballPath)}`);
     assertSuccess(tarListResult);
     assertCleanTarball(tarListResult.stdout);

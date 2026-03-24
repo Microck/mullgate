@@ -17,6 +17,14 @@ import { resolveMullgatePaths } from '../../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
 import { ConfigStore } from '../../src/config/store.js';
 import type { MullvadRelayCatalog } from '../../src/mullvad/fetch-relays.js';
+import { requireDefined } from '../../src/required.js';
+
+function requireRoute(
+  config: MullgateConfig,
+  index: number,
+): MullgateConfig['routing']['locations'][number] {
+  return requireDefined(config.routing.locations[index], `Expected fixture route ${index + 1}.`);
+}
 
 function createFixtureConfig(): MullgateConfig {
   const env = {
@@ -29,6 +37,7 @@ function createFixtureConfig(): MullgateConfig {
   };
   const paths = resolveMullgatePaths(env);
   const timestamp = '2026-03-21T04:10:00.000Z';
+  const homeDir = requireDefined(env.HOME, 'Expected HOME in the fixture env.');
 
   return {
     version: CONFIG_VERSION,
@@ -60,8 +69,8 @@ function createFixtureConfig(): MullgateConfig {
       },
       https: {
         enabled: true,
-        certPath: path.join(env.HOME!, 'certs', 'proxy.crt'),
-        keyPath: path.join(env.HOME!, 'certs', 'proxy.key'),
+        certPath: path.join(homeDir, 'certs', 'proxy.crt'),
+        keyPath: path.join(homeDir, 'certs', 'proxy.key'),
       },
     },
     mullvad: {
@@ -335,29 +344,33 @@ copy/paste hosts block
 
   it('renders the dedicated exposure report with DNS guidance, direct-IP entrypoints, and restart hints', () => {
     const config = createFixtureConfig();
+    const firstRoute = requireRoute(config, 0);
+    const secondRoute = requireRoute(config, 1);
     config.setup.exposure = {
       mode: 'private-network',
       allowLan: true,
       baseDomain: 'proxy.example.com',
     };
     config.setup.bind.host = '192.168.10.10';
-    config.routing.locations[0]!.hostname = 'sweden-gothenburg.proxy.example.com';
-    config.routing.locations[0]!.bindIp = '192.168.10.10';
-    config.routing.locations[1]!.hostname = 'austria-vienna.proxy.example.com';
-    config.routing.locations[1]!.bindIp = '192.168.10.11';
+    firstRoute.hostname = 'sweden-gothenburg.proxy.example.com';
+    firstRoute.bindIp = '192.168.10.10';
+    secondRoute.hostname = 'austria-vienna.proxy.example.com';
+    secondRoute.bindIp = '192.168.10.11';
     config.runtime.status = {
       phase: 'unvalidated',
       lastCheckedAt: null,
       message:
-        'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+        'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
     };
 
     const report = renderExposureReport(config, '/tmp/mullgate-home/config/mullgate/config.json');
 
-    expect(report).not.toContain('multi-route-secret');
+    expect(report).toContain('multi-route-secret');
     expect(report).not.toContain('123456789012');
     expect(report).not.toContain('private-key-value-1');
-    expect(report).toContain('[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080');
+    expect(report).toContain(
+      'socks5://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:1080',
+    );
     expect(`\n${report}`).toMatchInlineSnapshot(`
       "
       Mullgate exposure report
@@ -368,12 +381,12 @@ copy/paste hosts block
       mode label: Private network / Tailscale-first
       recommendation: recommended-remote
       posture summary: Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.
-      remote story: Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate config hosts\` when local host-file wiring is the easiest path.
+      remote story: Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate hosts\` when local host-file wiring is the easiest path.
       base domain: proxy.example.com
       allow lan: yes
       runtime status: unvalidated
       restart needed: yes
-      runtime message: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+      runtime message: Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
 
       guidance
       - Private-network mode is the recommended remote posture for Tailscale, LAN, and other trusted overlays. Keep it private by ensuring every bind IP stays reachable only inside that trusted network.
@@ -382,65 +395,67 @@ copy/paste hosts block
 
       remediation
       - bind posture: Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.
-      - hostname resolution: Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate config hosts\` when host-file wiring is the intended local workaround.
-      - restart: After exposure or bind-IP changes, rerun \`mullgate config validate\` or \`mullgate start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
+      - hostname resolution: Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate hosts\` when host-file wiring is the intended local workaround.
+      - restart: After exposure or bind-IP changes, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
 
       routes
       1. sweden-gothenburg.proxy.example.com -> 192.168.10.10
          alias: sweden-gothenburg
          route id: sweden-gothenburg
          dns: sweden-gothenburg.proxy.example.com A 192.168.10.10
-         socks5 hostname: socks5://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.10:1080
-         http hostname: http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080
-         http direct ip: http://[redacted]:[redacted]@192.168.10.10:8080
-         https hostname: https://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8443
-         https direct ip: https://[redacted]:[redacted]@192.168.10.10:8443
+         socks5 hostname: socks5://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:1080
+         socks5 direct ip: socks5://alice:multi-route-secret@192.168.10.10:1080
+         http hostname: http://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:8080
+         http direct ip: http://alice:multi-route-secret@192.168.10.10:8080
+         https hostname: https://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:8443
+         https direct ip: https://alice:multi-route-secret@192.168.10.10:8443
       2. austria-vienna.proxy.example.com -> 192.168.10.11
          alias: austria-vienna
          route id: austria-vienna
          dns: austria-vienna.proxy.example.com A 192.168.10.11
-         socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.11:1080
-         http hostname: http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080
-         http direct ip: http://[redacted]:[redacted]@192.168.10.11:8080
-         https hostname: https://[redacted]:[redacted]@austria-vienna.proxy.example.com:8443
-         https direct ip: https://[redacted]:[redacted]@192.168.10.11:8443
+         socks5 hostname: socks5://alice:multi-route-secret@austria-vienna.proxy.example.com:1080
+         socks5 direct ip: socks5://alice:multi-route-secret@192.168.10.11:1080
+         http hostname: http://alice:multi-route-secret@austria-vienna.proxy.example.com:8080
+         http direct ip: http://alice:multi-route-secret@192.168.10.11:8080
+         https hostname: https://alice:multi-route-secret@austria-vienna.proxy.example.com:8443
+         https direct ip: https://alice:multi-route-secret@192.168.10.11:8443
 
       warnings
       - info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
-      - warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+      - warning: Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
 
       local host-file mapping
-      - \`mullgate config hosts\` remains the copy/paste /etc/hosts view for local-only testing."
+      - \`mullgate hosts\` remains the copy/paste /etc/hosts view for local-only testing."
     `);
   });
 
   it('renders the dedicated exposure report for no-domain direct-IP public access', () => {
     const config = createFixtureConfig();
+    const firstRoute = requireRoute(config, 0);
+    const secondRoute = requireRoute(config, 1);
     config.setup.exposure = {
       mode: 'public',
       allowLan: true,
       baseDomain: null,
     };
     config.setup.bind.host = '203.0.113.10';
-    config.routing.locations[0]!.hostname = '203.0.113.10';
-    config.routing.locations[0]!.bindIp = '203.0.113.10';
-    config.routing.locations[1]!.hostname = '203.0.113.11';
-    config.routing.locations[1]!.bindIp = '203.0.113.11';
+    firstRoute.hostname = '203.0.113.10';
+    firstRoute.bindIp = '203.0.113.10';
+    secondRoute.hostname = '203.0.113.11';
+    secondRoute.bindIp = '203.0.113.11';
     config.runtime.status = {
       phase: 'unvalidated',
       lastCheckedAt: null,
       message:
-        'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+        'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
     };
 
     const report = renderExposureReport(config, '/tmp/mullgate-home/config/mullgate/config.json');
 
-    expect(report).not.toContain('multi-route-secret');
+    expect(report).toContain('multi-route-secret');
     expect(report).not.toContain('123456789012');
     expect(report).not.toContain('private-key-value-1');
-    expect(report).toContain('[redacted]:[redacted]@203.0.113.10:1080');
+    expect(report).toContain('socks5://alice:multi-route-secret@203.0.113.10:1080');
     expect(`\n${report}`).toMatchInlineSnapshot(`
       "
       Mullgate exposure report
@@ -456,7 +471,7 @@ copy/paste hosts block
       allow lan: yes
       runtime status: unvalidated
       restart needed: yes
-      runtime message: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+      runtime message: Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
 
       guidance
       - Public mode is advanced operator territory. Only use it when you intentionally want internet-reachable listeners and are prepared to harden the host around them.
@@ -466,36 +481,36 @@ copy/paste hosts block
       remediation
       - bind posture: Use public mode only with intentionally public, distinct bind IPs per route. If you are not deliberately publishing internet-reachable listeners, switch back to private-network mode.
       - hostname resolution: Publish DNS A records so every route hostname resolves to its saved public bind IP before expecting remote hostname access to work on the open internet.
-      - restart: After changing exposure or DNS-facing bind IPs, rerun \`mullgate config validate\` or \`mullgate start\` so runtime artifacts reflect the advanced public posture accurately.
+      - restart: After changing exposure or DNS-facing bind IPs, rerun \`mullgate validate\` or \`mullgate start\` so runtime artifacts reflect the advanced public posture accurately.
 
       routes
       1. 203.0.113.10 -> 203.0.113.10
          alias: sweden-gothenburg
          route id: sweden-gothenburg
          dns: not required; use direct bind IP entrypoints
-         socks5 hostname: socks5://[redacted]:[redacted]@203.0.113.10:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@203.0.113.10:1080
-         http hostname: http://[redacted]:[redacted]@203.0.113.10:8080
-         http direct ip: http://[redacted]:[redacted]@203.0.113.10:8080
-         https hostname: https://[redacted]:[redacted]@203.0.113.10:8443
-         https direct ip: https://[redacted]:[redacted]@203.0.113.10:8443
+         socks5 hostname: socks5://alice:multi-route-secret@203.0.113.10:1080
+         socks5 direct ip: socks5://alice:multi-route-secret@203.0.113.10:1080
+         http hostname: http://alice:multi-route-secret@203.0.113.10:8080
+         http direct ip: http://alice:multi-route-secret@203.0.113.10:8080
+         https hostname: https://alice:multi-route-secret@203.0.113.10:8443
+         https direct ip: https://alice:multi-route-secret@203.0.113.10:8443
       2. 203.0.113.11 -> 203.0.113.11
          alias: austria-vienna
          route id: austria-vienna
          dns: not required; use direct bind IP entrypoints
-         socks5 hostname: socks5://[redacted]:[redacted]@203.0.113.11:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@203.0.113.11:1080
-         http hostname: http://[redacted]:[redacted]@203.0.113.11:8080
-         http direct ip: http://[redacted]:[redacted]@203.0.113.11:8080
-         https hostname: https://[redacted]:[redacted]@203.0.113.11:8443
-         https direct ip: https://[redacted]:[redacted]@203.0.113.11:8443
+         socks5 hostname: socks5://alice:multi-route-secret@203.0.113.11:1080
+         socks5 direct ip: socks5://alice:multi-route-secret@203.0.113.11:1080
+         http hostname: http://alice:multi-route-secret@203.0.113.11:8080
+         http direct ip: http://alice:multi-route-secret@203.0.113.11:8080
+         https hostname: https://alice:multi-route-secret@203.0.113.11:8443
+         https direct ip: https://alice:multi-route-secret@203.0.113.11:8443
 
       warnings
       - warning: Public exposure publishes authenticated proxy listeners on publicly routable IPs. Confirm firewalling, rate limits, and monitoring before enabling it on the open internet.
-      - warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+      - warning: Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
 
       local host-file mapping
-      - \`mullgate config hosts\` remains the copy/paste /etc/hosts view for local-only testing."
+      - \`mullgate hosts\` remains the copy/paste /etc/hosts view for local-only testing."
     `);
   });
 
@@ -534,7 +549,7 @@ copy/paste hosts block
       phase: 'unvalidated',
       lastCheckedAt: null,
       message:
-        'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+        'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
     });
     expect(
       `\n${renderExposureReport(result.config, '/tmp/mullgate-home/config/mullgate/config.json')}`,
@@ -662,18 +677,20 @@ copy/paste hosts block
 
   it('plans proxy exports with ordered selector dedupe and stable filenames', () => {
     const config = createFixtureConfig();
+    const firstRoute = requireRoute(config, 0);
+    const secondRoute = requireRoute(config, 1);
     config.setup.exposure = {
       mode: 'private-network',
       allowLan: true,
       baseDomain: 'proxy.example.com',
     };
     config.setup.bind.host = '192.168.10.10';
-    config.routing.locations[0]!.hostname = 'sweden-gothenburg.proxy.example.com';
-    config.routing.locations[0]!.bindIp = '192.168.10.10';
-    config.routing.locations[1]!.hostname = 'austria-vienna.proxy.example.com';
-    config.routing.locations[1]!.bindIp = '192.168.10.11';
+    firstRoute.hostname = 'sweden-gothenburg.proxy.example.com';
+    firstRoute.bindIp = '192.168.10.10';
+    secondRoute.hostname = 'austria-vienna.proxy.example.com';
+    secondRoute.bindIp = '192.168.10.11';
     config.routing.locations.push({
-      ...structuredClone(config.routing.locations[0]!),
+      ...structuredClone(firstRoute),
       alias: 'usa-new-york',
       hostname: 'usa-new-york.proxy.example.com',
       bindIp: '192.168.10.12',
@@ -685,7 +702,7 @@ copy/paste hosts block
         resolvedAlias: 'usa-new-york',
       },
       mullvad: {
-        ...structuredClone(config.routing.locations[0]!.mullvad),
+        ...structuredClone(firstRoute.mullvad),
         deviceName: 'mullgate-runtime-test-3',
       },
       runtime: {
@@ -739,12 +756,7 @@ copy/paste hosts block
       http://alice:multi-route-secret@austria-vienna.proxy.example.com:8080
       "
     `);
-    expect(`\n${result.redactedOutputText}`).toMatchInlineSnapshot(`
-      "
-      http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080
-      http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080
-      "
-    `);
+    expect(result.outputText).not.toContain('[redacted]');
     expect(
       `\n${renderProxyExportPreview({
         result,
@@ -766,8 +778,8 @@ copy/paste hosts block
       output: ./proxy-http-country-se-1--region-europe-2.txt
 
       preview
-      1. http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080 (alias: sweden-gothenburg, country: se, city: got, relay: se-got-wg-101)
-      2. http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080 (alias: austria-vienna, country: at, city: vie, relay: at-vie-wg-001)"
+      1. http://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:8080 (alias: sweden-gothenburg, country: se, city: got, relay: se-got-wg-101)
+      2. http://alice:multi-route-secret@austria-vienna.proxy.example.com:8080 (alias: austria-vienna, country: at, city: vie, relay: at-vie-wg-001)"
     `);
   });
 
@@ -801,19 +813,19 @@ copy/paste hosts block
 
       1. americas
          countries: ag, ai, ar, aw, bb, bl, bm, bo, br, bs, bz, ca, cl, co, cr, cu, dm, do, ec, fk, gd, gl, gp, gt, gy, hn, ht, jm, kn, ky, lc, mf, mq, ms, mx, ni, pa, pe, pm, pr, py, sr, sv, tc, tt, us, uy, vc, ve, vg, vi
-         example: mullgate config export --region americas --count 5
+         example: mullgate export --region americas --count 5
 
       2. asia-pacific
          countries: as, au, bd, bn, bt, cc, ck, cn, cx, fj, fm, gu, hk, id, in, jp, kh, ki, kp, kr, la, lk, mh, mm, mn, mo, mp, mv, my, nc, nf, np, nr, nu, nz, pg, ph, pk, pn, pw, sb, sg, th, tk, tl, to, tv, tw, vn, vu, wf, ws
-         example: mullgate config export --region asia-pacific --count 5
+         example: mullgate export --region asia-pacific --count 5
 
       3. europe
          countries: ad, al, at, ba, be, bg, by, ch, cy, cz, de, dk, ee, es, fi, fo, fr, gb, gg, gi, gr, hr, hu, ie, im, is, it, je, li, lt, lu, lv, mc, md, me, mk, mt, nl, no, pl, pt, ro, rs, se, si, sj, sk, sm, ua, va
-         example: mullgate config export --region europe --count 5
+         example: mullgate export --region europe --count 5
 
       4. middle-east-africa
          countries: ae, am, ao, az, bf, bi, bj, bw, cd, cf, cg, ci, cm, cv, dj, dz, eg, eh, er, et, ga, ge, gh, gm, gn, gq, gw, il, iq, ir, jo, ke, km, kw, lb, lr, ls, ly, ma, mg, ml, mr, mu, mw, mz, na, ne, ng, om, qa, re, rw, sa, sc, sd, sh, sl, sn, so, ss, st, sz, td, tg, tn, tr, tz, ug, ye, yt, za, zm, zw
-         example: mullgate config export --region middle-east-africa --count 5"
+         example: mullgate export --region middle-east-africa --count 5"
     `);
   });
 });

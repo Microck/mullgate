@@ -5,6 +5,7 @@ import net from 'node:net';
 import path from 'node:path';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../src/config/schema.js';
 import { ConfigStore } from '../src/config/store.js';
+import { requireArrayValue } from '../src/required.js';
 import type {
   RuntimeBundleManifest,
   RuntimeEndpoint,
@@ -179,7 +180,7 @@ function parseArgs(argv: readonly string[]): VerificationOptions | null {
   let routeCheckIp = DEFAULT_ROUTE_CHECK_IP;
 
   for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index]!;
+    const argument = requireArrayValue(argv, index, `Missing CLI argument at index ${index}.`);
 
     if (argument === '--help' || argument === '-h') {
       process.stdout.write(renderHelp());

@@ -5,6 +5,7 @@ import {
   runSetupFlow,
   type SetupFlowResult,
 } from '../app/setup-runner.js';
+import { writeCliReport } from '../cli-output.js';
 import { ConfigStore } from '../config/store.js';
 
 const ACCOUNT_NUMBER_ENV = 'MULLGATE_ACCOUNT_NUMBER';
@@ -179,7 +180,7 @@ function buildRunOptions(
 
 function writeSetupResult(result: SetupFlowResult): void {
   if (result.ok) {
-    process.stdout.write(`${result.summary}\n`);
+    writeCliReport({ sink: process.stdout, text: result.summary, tone: 'success' });
     return;
   }
 
@@ -207,7 +208,7 @@ function writeSetupResult(result: SetupFlowResult): void {
     ...(!result.cancelled && result.cause ? [`cause: ${result.cause}`] : []),
   ];
 
-  process.stderr.write(`${lines.join('\n')}\n`);
+  writeCliReport({ sink: process.stderr, text: lines.join('\n'), tone: 'error' });
 }
 
 function collectLocationOption(value: string, previous: string[] = []): string[] {

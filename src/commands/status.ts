@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 
+import { writeCliReport } from '../cli-output.js';
 import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
-import { redactSensitiveText } from '../config/redact.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
 import { ConfigStore, type LoadConfigResult } from '../config/store.js';
 import { buildPlatformSupportContract } from '../platform/support-contract.js';
@@ -61,8 +61,8 @@ type RouteSurface = {
   readonly dnsRecord: string | null;
   readonly endpoints: readonly {
     readonly protocol: string;
-    readonly redactedHostnameUrl: string;
-    readonly redactedBindUrl: string;
+    readonly hostnameUrl: string;
+    readonly bindUrl: string;
   }[];
 };
 
@@ -185,98 +185,95 @@ export async function runStatusFlow(
     lastStart,
   });
 
-  const summary = redactSensitiveText(
-    [
-      'Mullgate runtime status',
-      `phase: ${phase}`,
-      `config: ${store.paths.configFile}`,
-      `runtime dir: ${store.paths.runtimeDir}`,
-      `docker compose: ${composeFilePath}`,
-      `runtime manifest: ${formatArtifactPresence(manifestPath, manifestResult)}`,
-      `last start report: ${formatArtifactPresence(startReportPath, lastStartResult)}`,
-      `saved runtime status: ${config.runtime.status.phase}`,
-      `saved checked at: ${config.runtime.status.lastCheckedAt ?? 'n/a'}`,
-      `saved message: ${config.runtime.status.message ?? 'n/a'}`,
-      `exposure source: ${manifestResult.kind === 'present' ? 'runtime-manifest' : 'canonical-config fallback'}`,
-      `mode label: ${exposure.posture.modeLabel}`,
-      `recommendation: ${exposure.posture.recommendation}`,
-      `posture summary: ${exposure.posture.summary}`,
-      `remote story: ${exposure.posture.remoteStory}`,
-      `platform: ${platform.platform}`,
-      `platform source: ${platform.platformSource}`,
-      `platform support: ${platform.posture.supportLevel}`,
-      `platform mode: ${platform.posture.modeLabel}`,
-      `platform summary: ${platform.posture.summary}`,
-      `runtime story: ${platform.posture.runtimeStory}`,
-      `host networking: ${platform.hostNetworking.modeLabel}`,
-      `host networking summary: ${platform.hostNetworking.summary}`,
-      `compose inspection: ${composeStatus.ok ? 'available' : 'unavailable'}`,
-      ...(composeStatus.ok
-        ? [
-            `compose project: ${composeStatus.project ?? 'n/a'}`,
-            `compose command: ${composeStatus.command.rendered}`,
-            `container summary: ${composeStatus.summary.total} total, ${composeStatus.summary.running} running, ${composeStatus.summary.starting} starting, ${composeStatus.summary.stopped} stopped, ${composeStatus.summary.unhealthy} unhealthy`,
-            `routing layer: ${routingLayerState.detail}`,
-          ]
-        : [
-            `compose command: ${composeStatus.command.rendered}`,
-            `compose code: ${composeStatus.code}`,
-            `compose reason: ${composeStatus.message}`,
-            ...(composeStatus.cause ? [`compose cause: ${composeStatus.cause}`] : []),
-          ]),
-      '',
-      'routes',
-      ...routeViews.flatMap((view) => [
-        `${view.route.index + 1}. ${view.route.hostname} -> ${view.route.bindIp}`,
-        `   alias: ${view.route.alias}`,
-        `   route id: ${view.route.routeId}`,
-        `   service: ${view.route.serviceName}`,
-        `   live state: ${view.detail}`,
-        ...(view.route.backends.socks5 ? [`   socks5 backend: ${view.route.backends.socks5}`] : []),
-        ...(view.route.backends.http ? [`   http backend: ${view.route.backends.http}`] : []),
-        ...(view.route.backends.https ? [`   https backend: ${view.route.backends.https}`] : []),
-        `   dns: ${view.route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
-        ...view.route.endpoints.flatMap((endpoint) => [
-          `   ${endpoint.protocol} hostname: ${endpoint.redactedHostnameUrl}`,
-          `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`,
+  const summary = [
+    'Mullgate runtime status',
+    `phase: ${phase}`,
+    `config: ${store.paths.configFile}`,
+    `runtime dir: ${store.paths.runtimeDir}`,
+    `docker compose: ${composeFilePath}`,
+    `runtime manifest: ${formatArtifactPresence(manifestPath, manifestResult)}`,
+    `last start report: ${formatArtifactPresence(startReportPath, lastStartResult)}`,
+    `saved runtime status: ${config.runtime.status.phase}`,
+    `saved checked at: ${config.runtime.status.lastCheckedAt ?? 'n/a'}`,
+    `saved message: ${config.runtime.status.message ?? 'n/a'}`,
+    `exposure source: ${manifestResult.kind === 'present' ? 'runtime-manifest' : 'canonical-config fallback'}`,
+    `mode label: ${exposure.posture.modeLabel}`,
+    `recommendation: ${exposure.posture.recommendation}`,
+    `posture summary: ${exposure.posture.summary}`,
+    `remote story: ${exposure.posture.remoteStory}`,
+    `platform: ${platform.platform}`,
+    `platform source: ${platform.platformSource}`,
+    `platform support: ${platform.posture.supportLevel}`,
+    `platform mode: ${platform.posture.modeLabel}`,
+    `platform summary: ${platform.posture.summary}`,
+    `runtime story: ${platform.posture.runtimeStory}`,
+    `host networking: ${platform.hostNetworking.modeLabel}`,
+    `host networking summary: ${platform.hostNetworking.summary}`,
+    `compose inspection: ${composeStatus.ok ? 'available' : 'unavailable'}`,
+    ...(composeStatus.ok
+      ? [
+          `compose project: ${composeStatus.project ?? 'n/a'}`,
+          `compose command: ${composeStatus.command.rendered}`,
+          `container summary: ${composeStatus.summary.total} total, ${composeStatus.summary.running} running, ${composeStatus.summary.starting} starting, ${composeStatus.summary.stopped} stopped, ${composeStatus.summary.unhealthy} unhealthy`,
+          `routing layer: ${routingLayerState.detail}`,
+        ]
+      : [
+          `compose command: ${composeStatus.command.rendered}`,
+          `compose code: ${composeStatus.code}`,
+          `compose reason: ${composeStatus.message}`,
+          ...(composeStatus.cause ? [`compose cause: ${composeStatus.cause}`] : []),
         ]),
+    '',
+    'routes',
+    ...routeViews.flatMap((view) => [
+      `${view.route.index + 1}. ${view.route.hostname} -> ${view.route.bindIp}`,
+      `   alias: ${view.route.alias}`,
+      `   route id: ${view.route.routeId}`,
+      `   service: ${view.route.serviceName}`,
+      `   live state: ${view.detail}`,
+      ...(view.route.backends.socks5 ? [`   socks5 backend: ${view.route.backends.socks5}`] : []),
+      ...(view.route.backends.http ? [`   http backend: ${view.route.backends.http}`] : []),
+      ...(view.route.backends.https ? [`   https backend: ${view.route.backends.https}`] : []),
+      `   dns: ${view.route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
+      ...view.route.endpoints.flatMap((endpoint) => [
+        `   ${endpoint.protocol} hostname: ${endpoint.hostnameUrl}`,
+        `   ${endpoint.protocol} direct ip: ${endpoint.bindUrl}`,
       ]),
-      '',
-      'platform guidance',
-      ...platform.guidance.map((line) => `- ${line}`),
-      ...(platform.warnings.length > 0
-        ? [
-            '',
-            'platform warnings',
-            ...platform.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`),
-          ]
-        : []),
-      '',
-      'network-mode guidance',
-      ...exposure.guidance.map((line) => `- ${line}`),
-      '',
-      'warnings',
-      ...(diagnostics.length > 0 ? diagnostics.map((diagnostic) => `- ${diagnostic}`) : ['- none']),
-      '',
-      'last start diagnostics',
-      ...(lastStart
-        ? [
-            `status: ${lastStart.status}`,
-            `attempted at: ${lastStart.attemptedAt}`,
-            `phase: ${lastStart.phase}`,
-            `source: ${lastStart.source}`,
-            `code: ${lastStart.code ?? 'n/a'}`,
-            ...(lastStart.routeId ? [`route id: ${lastStart.routeId}`] : []),
-            ...(lastStart.routeHostname ? [`route hostname: ${lastStart.routeHostname}`] : []),
-            ...(lastStart.routeBindIp ? [`route bind ip: ${lastStart.routeBindIp}`] : []),
-            ...(lastStart.serviceName ? [`service: ${lastStart.serviceName}`] : []),
-            `reason: ${lastStart.message}`,
-            ...(lastStart.cause ? [`cause: ${lastStart.cause}`] : []),
-          ]
-        : ['status: none persisted yet']),
-    ].join('\n'),
-    config,
-  );
+    ]),
+    '',
+    'platform guidance',
+    ...platform.guidance.map((line) => `- ${line}`),
+    ...(platform.warnings.length > 0
+      ? [
+          '',
+          'platform warnings',
+          ...platform.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`),
+        ]
+      : []),
+    '',
+    'network-mode guidance',
+    ...exposure.guidance.map((line) => `- ${line}`),
+    '',
+    'warnings',
+    ...(diagnostics.length > 0 ? diagnostics.map((diagnostic) => `- ${diagnostic}`) : ['- none']),
+    '',
+    'last start diagnostics',
+    ...(lastStart
+      ? [
+          `status: ${lastStart.status}`,
+          `attempted at: ${lastStart.attemptedAt}`,
+          `phase: ${lastStart.phase}`,
+          `source: ${lastStart.source}`,
+          `code: ${lastStart.code ?? 'n/a'}`,
+          ...(lastStart.routeId ? [`route id: ${lastStart.routeId}`] : []),
+          ...(lastStart.routeHostname ? [`route hostname: ${lastStart.routeHostname}`] : []),
+          ...(lastStart.routeBindIp ? [`route bind ip: ${lastStart.routeBindIp}`] : []),
+          ...(lastStart.serviceName ? [`service: ${lastStart.serviceName}`] : []),
+          `reason: ${lastStart.message}`,
+          ...(lastStart.cause ? [`cause: ${lastStart.cause}`] : []),
+        ]
+      : ['status: none persisted yet']),
+  ].join('\n');
 
   return {
     ok: true,
@@ -313,8 +310,8 @@ function buildRouteSurfaces(
       dnsRecord: exposureRoute?.dnsRecord ?? null,
       endpoints: (exposureRoute?.endpoints ?? []).map((endpoint) => ({
         protocol: endpoint.protocol,
-        redactedHostnameUrl: endpoint.redactedHostnameUrl,
-        redactedBindUrl: endpoint.redactedBindUrl,
+        hostnameUrl: endpoint.hostnameUrl,
+        bindUrl: endpoint.bindUrl,
       })),
     };
   });
@@ -495,9 +492,9 @@ function writeStatusResult(
   const stderr = dependencies.stderr ?? process.stderr;
 
   if (result.ok) {
-    stdout.write(`${result.summary}\n`);
+    writeCliReport({ sink: stdout, text: result.summary });
     return;
   }
 
-  stderr.write(`${result.summary}\n`);
+  writeCliReport({ sink: stderr, text: result.summary, tone: 'error' });
 }

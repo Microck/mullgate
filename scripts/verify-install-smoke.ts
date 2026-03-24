@@ -5,6 +5,8 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { requireDefined } from '../src/required.js';
+
 const repoRoot = path.resolve(import.meta.dirname, '..');
 
 type CommandResult = {
@@ -33,7 +35,10 @@ async function main(): Promise<void> {
       );
     }
 
-    const tarballPath = path.join(packDir, packFiles[0]!);
+    const tarballPath = path.join(
+      packDir,
+      requireDefined(packFiles[0], `Expected exactly one packed tarball in ${packDir}.`),
+    );
     assertSuccess(
       await runShellCommand({
         command: `npm install --prefix ${shellEscape(installDir)} ${shellEscape(tarballPath)}`,

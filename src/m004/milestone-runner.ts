@@ -1,6 +1,6 @@
 import { copyFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-
+import { requireArrayValue } from '../required.js';
 import {
   type CompatibilityParseResult,
   type CompatibilityRunnerOptions,
@@ -51,7 +51,7 @@ export function parseMilestoneArgs(
 
   try {
     for (let index = 0; index < argv.length; index += 1) {
-      const argument = argv[index]!;
+      const argument = requireArrayValue(argv, index, `Missing CLI argument at index ${index}.`);
 
       if (argument === '--help' || argument === '-h') {
         return {

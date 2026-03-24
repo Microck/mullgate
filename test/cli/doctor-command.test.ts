@@ -429,7 +429,7 @@ afterEach(async () => {
 });
 
 describe('mullgate doctor command', () => {
-  it('reports a healthy configured install with pass checks and redacted output', async () => {
+  it('reports a healthy configured install with full operator output', async () => {
     const env = createTempEnvironment();
     const fixturePaths = resolveMullgatePaths(env);
     const { store, paths } = await seedSavedConfig(env, {
@@ -518,9 +518,6 @@ describe('mullgate doctor command', () => {
 
     expect(process.exitCode).toBe(0);
     expect(stderr.value.current).toBe('');
-    expect(stdout.value.current).not.toContain('proxy-password');
-    expect(stdout.value.current).not.toContain('123456789012');
-    expect(stdout.value.current).not.toContain('private-key-value-1');
     expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate doctor
@@ -588,10 +585,10 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate config exposure --mode private-network ...\` with one trusted-network bind IP per route.
-         detail: hostname-remediation=For local host-file testing, use \`mullgate config hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
-         detail: restart-remediation=After changing exposure settings, rerun \`mullgate config validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
-         detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
 
       6. bind-posture: pass
          summary: Saved bind IPs match the configured exposure posture.
@@ -780,10 +777,10 @@ checks
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate config exposure --mode private-network ...\` with one trusted-network bind IP per route.
-         detail: hostname-remediation=For local host-file testing, use \`mullgate config hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
-         detail: restart-remediation=After changing exposure settings, rerun \`mullgate config validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
-         detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
 
       6. bind-posture: pass
          summary: Saved bind IPs match the configured exposure posture.
@@ -878,7 +875,7 @@ checks
             phase: 'unvalidated',
             lastCheckedAt: '2026-03-21T07:00:00.000Z',
             message:
-              'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+              'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
           },
         },
       }),
@@ -951,11 +948,11 @@ checks
       3. validation-artifacts: degraded
          summary: Saved config is marked \`unvalidated\`, so runtime artifacts may lag behind recent config or exposure edits.
          detail: saved-runtime-phase=unvalidated
-         detail: saved-runtime-message=Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
+         detail: saved-runtime-message=Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
          detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
          detail: report[se-got-wg-101]=missing (/tmp/mullgate-home/state/mullgate/runtime/wireproxy-se-got-wg-101-configtest.json)
          detail: report[at-vie-wg-001]=missing (/tmp/mullgate-home/state/mullgate/runtime/wireproxy-at-vie-wg-001-configtest.json)
-         remediation: Run \`mullgate config validate\` or \`mullgate start\` to regenerate wireproxy artifacts and capture a fresh validation report.
+         remediation: Run \`mullgate validate\` or \`mullgate start\` to regenerate wireproxy artifacts and capture a fresh validation report.
 
       4. relay-cache: degraded
          summary: Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.
@@ -965,7 +962,7 @@ checks
          detail: fetched-at=2026-03-10T08:00:00.000Z
          detail: relay-count=2
          detail: age=11d
-         remediation: Refresh the saved relay catalog with \`mullgate setup\`, then rerun \`mullgate config validate\` or \`mullgate start\` so runtime artifacts use the fresh relay data.
+         remediation: Refresh the saved relay catalog with \`mullgate setup\`, then rerun \`mullgate validate\` or \`mullgate start\` so runtime artifacts use the fresh relay data.
 
       5. exposure-contract: degraded
          summary: Saved exposure contract includes warning-level posture guidance that operators should resolve or consciously accept.
@@ -978,12 +975,12 @@ checks
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate config exposure --mode private-network ...\` with one trusted-network bind IP per route.
-         detail: hostname-remediation=For local host-file testing, use \`mullgate config hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
-         detail: restart-remediation=After changing exposure settings, rerun \`mullgate config validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
-         detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
-         detail: warning: Exposure settings changed; rerun \`mullgate config validate\` or \`mullgate start\` to refresh runtime artifacts.
-         remediation: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate config exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
+         detail: warning: Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
+         remediation: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
 
       6. bind-posture: pass
          summary: Saved bind IPs match the configured exposure posture.
@@ -996,7 +993,7 @@ checks
          detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
          detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.9
          detail: Route at-vie-wg-001 expects at-vie-wg-001 to resolve to 127.0.0.2, but it currently resolves to 127.0.0.9.
-         remediation: Use \`mullgate config hosts\` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun \`mullgate doctor\`.
+         remediation: Use \`mullgate hosts\` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun \`mullgate doctor\`.
 
       8. runtime: degraded
          summary: No live compose containers are running right now.
@@ -1102,10 +1099,6 @@ checks
 
     expect(process.exitCode).toBe(1);
     expect(stdout.value.current).toBe('');
-    expect(stderr.value.current).not.toContain('proxy-password');
-    expect(stderr.value.current).not.toContain('123456789012');
-    expect(stderr.value.current).not.toContain('private-key-value-2');
-    expect(stderr.value.current).not.toContain('BEGIN PRIVATE KEY');
     expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate doctor
@@ -1173,10 +1166,10 @@ checks
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate config exposure --mode private-network ...\` with one trusted-network bind IP per route.
-         detail: hostname-remediation=For local host-file testing, use \`mullgate config hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
-         detail: restart-remediation=After changing exposure settings, rerun \`mullgate config validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
-         detail: info: Loopback mode is local-only. Keep using \`mullgate config hosts\` for host-file testing on this machine.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
 
       6. bind-posture: pass
          summary: Saved bind IPs match the configured exposure posture.
@@ -1213,9 +1206,11 @@ checks
          detail: route-hostname=at-vie-wg-001
          detail: route-bind-ip=127.0.0.2
          detail: service=wireproxy-at-vie-wg-001
-         detail: reason=Docker Compose failed for [redacted] / [redacted] / [redacted] while authenticating route at-vie-wg-001.
-         detail: cause=service wireproxy-at-vie-wg-001 rejected username alice password [redacted] while reading [redacted]
-         remediation: Check route at-vie-wg-001, service wireproxy-at-vie-wg-001, hostname at-vie-wg-001, bind 127.0.0.2 for rejected proxy auth or stale rendered credentials. If credentials changed, update \`setup.auth.username\` / \`setup.auth.password\` with \`mullgate config set\`, then rerun \`mullgate config validate\` and \`mullgate start\`."
+         detail: reason=Docker Compose failed for proxy-password / 123456789012 / private-key-value-2 while authenticating route at-vie-wg-001.
+         detail: cause=service wireproxy-at-vie-wg-001 rejected username alice password proxy-password while reading -----BEGIN PRIVATE KEY-----
+      fixture
+      -----END PRIVATE KEY-----
+         remediation: Check route at-vie-wg-001, service wireproxy-at-vie-wg-001, hostname at-vie-wg-001, bind 127.0.0.2 for rejected proxy auth or stale rendered credentials. If credentials changed, update \`setup.auth.username\` / \`setup.auth.password\` with \`mullgate config set\`, then rerun \`mullgate validate\` and \`mullgate start\`."
     `);
   });
 });

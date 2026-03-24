@@ -310,7 +310,7 @@ export function resolveLocationAlias(
     phase: 'location-lookup',
     source: 'user-input',
     alias,
-    value: candidates[0]!,
+    value: candidates[0],
   };
 }
 

@@ -8,6 +8,7 @@ import { buildExposureContract } from '../src/config/exposure-contract.js';
 import { resolveMullgatePaths } from '../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../src/config/schema.js';
 import { buildPlatformSupportContract } from '../src/platform/support-contract.js';
+import { requireArrayValue } from '../src/required.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
@@ -115,7 +116,11 @@ function parseArgs(argv: readonly string[]): FinalVerifierOptions | null {
   let outputRoot = defaultOutputRoot;
 
   for (let index = 0; index < normalizedArgs.length; index += 1) {
-    const argument = normalizedArgs[index]!;
+    const argument = requireArrayValue(
+      normalizedArgs,
+      index,
+      `Missing CLI argument at index ${index}.`,
+    );
 
     if (argument === '--help' || argument === '-h') {
       process.stdout.write(renderHelp());

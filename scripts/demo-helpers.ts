@@ -312,7 +312,6 @@ export async function seedLoopbackSetup(options: SetupSeedOptions): Promise<void
 
 export async function seedPrivateNetworkExposure(options: ExposureSeedOptions): Promise<void> {
   const args = [
-    'config',
     'exposure',
     '--mode',
     'private-network',
@@ -341,7 +340,7 @@ export async function seedPrivateNetworkExposure(options: ExposureSeedOptions): 
 
 export async function validateSavedConfig(env: NodeJS.ProcessEnv): Promise<void> {
   const result = await runCli({
-    args: ['config', 'validate'],
+    args: ['validate'],
     env,
   });
 

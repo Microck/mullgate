@@ -64,24 +64,26 @@ describe('mullgate help command contract', () => {
       startHelp,
       statusHelp,
       doctorHelp,
+      autostartHelp,
       configHelp,
-      configRegionsHelp,
-      configExportHelp,
-      configHostsHelp,
-      configExposureHelp,
-      configValidateHelp,
+      regionsHelp,
+      exportHelp,
+      hostsHelp,
+      exposureHelp,
+      validateHelp,
     ] = await Promise.all([
       expectHelpOutput(['--help']),
       expectHelpOutput(['setup', '--help']),
       expectHelpOutput(['start', '--help']),
       expectHelpOutput(['status', '--help']),
       expectHelpOutput(['doctor', '--help']),
+      expectHelpOutput(['autostart', '--help']),
       expectHelpOutput(['config', '--help']),
-      expectHelpOutput(['config', 'regions', '--help']),
-      expectHelpOutput(['config', 'export', '--help']),
-      expectHelpOutput(['config', 'hosts', '--help']),
-      expectHelpOutput(['config', 'exposure', '--help']),
-      expectHelpOutput(['config', 'validate', '--help']),
+      expectHelpOutput(['regions', '--help']),
+      expectHelpOutput(['export', '--help']),
+      expectHelpOutput(['hosts', '--help']),
+      expectHelpOutput(['exposure', '--help']),
+      expectHelpOutput(['validate', '--help']),
     ]);
 
     expect(`\n${topLevelHelp}`).toMatchInlineSnapshot(`
@@ -91,20 +93,36 @@ describe('mullgate help command contract', () => {
       CLI-first Mullvad proxy provisioning and config management
 
       Options:
-        -h, --help       display help for command
+        -h, --help          display help for command
 
       Commands:
-        setup [options]  Run the guided Mullvad-backed setup flow and persist config
-                         plus derived runtime artifacts.
-        start            Re-render derived runtime artifacts from saved config,
-                         validate them, and launch the Docker runtime bundle.
-        status           Inspect saved Mullgate state, runtime artifacts, and live
-                         Docker Compose status in one report.
-        doctor           Run deterministic, route-aware diagnostics for config,
-                         runtime, bind, DNS, and last-start failures.
-        config           Inspect or update saved Mullgate configuration and derived
-                         paths.
-        help [command]   display help for command"
+        setup [options]     Run the guided Mullvad-backed setup flow and persist
+                            config plus derived runtime artifacts.
+        start               Re-render derived runtime artifacts from saved config,
+                            validate them, and launch the Docker runtime bundle.
+        status              Inspect saved Mullgate state, runtime artifacts, and live
+                            Docker Compose status in one report.
+        doctor              Run deterministic, route-aware diagnostics for config,
+                            runtime, bind, DNS, and last-start failures.
+        autostart           Manage Linux login-time Mullgate startup with a systemd
+                            user service.
+        path                Show the resolved Mullgate config, state, cache, and
+                            runtime paths.
+        locations           List routed location aliases, bind IPs, relay preferences,
+                            and runtime ids.
+        hosts               List configured proxy hostnames and their route bind-IP
+                            mappings.
+        regions             List the curated export region groups and their member
+                            country codes.
+        exposure [options]  Inspect or update how Mullgate publishes route hostnames,
+                            bind IPs, and restart guidance.
+        export [options]    Export proxy URLs to a text file with ordered country or
+                            region batches plus optional city, server, and provider
+                            filters.
+        validate [options]  Validate the saved or freshly rendered wireproxy config
+                            and persist the result metadata.
+        config              Inspect or edit the saved Mullgate config directly.
+        help [command]      display help for command"
     `);
     expect(`\n${setupHelp}`).toMatchInlineSnapshot(`
       "
@@ -184,57 +202,52 @@ describe('mullgate help command contract', () => {
       Options:
         -h, --help  display help for command"
     `);
+    expect(`\n${autostartHelp}`).toMatchInlineSnapshot(`
+      "
+      Usage: mullgate autostart [options] [command]
+
+      Manage Linux login-time Mullgate startup with a systemd user service.
+
+      Options:
+        -h, --help      display help for command
+
+      Commands:
+        enable          Install and start the Mullgate systemd user service.
+        disable         Stop and remove the Mullgate systemd user service.
+        status          Inspect the Mullgate systemd user service state.
+        help [command]  display help for command"
+    `);
     expect(`\n${configHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate config [options] [command]
 
-      Inspect or update saved Mullgate configuration and derived paths.
+      Inspect or edit the saved Mullgate config directly.
 
       Options:
         -h, --help                       display help for command
 
       Commands:
-        path                             Show the resolved Mullgate
-                                         config/state/cache/runtime paths.
-        show                             Show the saved Mullgate config with secrets
-                                         redacted.
-        locations                        List routed location aliases, bind IPs, relay
-                                         preferences, and runtime ids without secrets.
-        hosts                            List configured proxy hostnames and their
-                                         route bind IP mappings without secrets.
-        regions                          List the curated export region groups and
-                                         their member country codes.
-        exposure [options]               Inspect or update remote exposure mode, bind
-                                         IPs, DNS guidance, and restart status without
-                                         raw JSON edits.
-        export [options]                 Export proxy URLs to a text file with ordered
-                                         country/region selector batches, optional
-                                         city/server/provider filters, and
-                                         deterministic dedupe.
-        get <keyPath>                    Read one saved config value with secret-safe
-                                         redaction.
-        set [options] <keyPath> [value]  Update a saved config value without printing
-                                         secrets back to the terminal.
-        validate [options]               Validate the saved or freshly rendered
-                                         wireproxy config and persist the result
-                                         metadata.
+        show                             Show the saved Mullgate config as JSON.
+        get <keyPath>                    Read one saved config value.
+        set [options] <keyPath> [value]  Update a saved config value without editing
+                                         JSON by hand.
         help [command]                   display help for command"
     `);
-    expect(`\n${configRegionsHelp}`).toMatchInlineSnapshot(`
+    expect(`\n${regionsHelp}`).toMatchInlineSnapshot(`
       "
-      Usage: mullgate config regions [options]
+      Usage: mullgate regions [options]
 
       List the curated export region groups and their member country codes.
 
       Options:
         -h, --help  display help for command"
     `);
-    expect(`\n${configExportHelp}`).toMatchInlineSnapshot(`
+    expect(`\n${exportHelp}`).toMatchInlineSnapshot(`
       "
-      Usage: mullgate config export [options]
+      Usage: mullgate export [options]
 
-      Export proxy URLs to a text file with ordered country/region selector batches,
-      optional city/server/provider filters, and deterministic dedupe.
+      Export proxy URLs to a text file with ordered country or region batches plus
+      optional city, server, and provider filters.
 
       Options:
         --protocol <protocol>     Export proxy URLs for socks5, http, or https.
@@ -252,10 +265,8 @@ describe('mullgate help command contract', () => {
                                   --region selector by provider. Repeat as needed.
         --count <number>          Apply a per-selector export cap to the immediately
                                   preceding --country or --region batch.
-        --guided                  Launch a guided export flow, like setup, for
-                                  creating proxy lists.
-        --dry-run                 Preview a secret-safe export summary without writing
-                                  a file.
+        --guided                  Launch a guided flow for creating proxy lists.
+        --dry-run                 Preview the export without writing a file.
         --stdout                  Write the exported proxy URLs to stdout instead of a
                                   file.
         --force                   Overwrite an existing output file.
@@ -263,22 +274,21 @@ describe('mullgate help command contract', () => {
                                   auto filename.
         -h, --help                display help for command"
     `);
-    expect(`\n${configHostsHelp}`).toMatchInlineSnapshot(`
+    expect(`\n${hostsHelp}`).toMatchInlineSnapshot(`
       "
-      Usage: mullgate config hosts [options]
+      Usage: mullgate hosts [options]
 
-      List configured proxy hostnames and their route bind IP mappings without
-      secrets.
+      List configured proxy hostnames and their route bind-IP mappings.
 
       Options:
         -h, --help  display help for command"
     `);
-    expect(`\n${configExposureHelp}`).toMatchInlineSnapshot(`
+    expect(`\n${exposureHelp}`).toMatchInlineSnapshot(`
       "
-      Usage: mullgate config exposure [options]
+      Usage: mullgate exposure [options]
 
-      Inspect or update remote exposure mode, bind IPs, DNS guidance, and restart
-      status without raw JSON edits.
+      Inspect or update how Mullgate publishes route hostnames, bind IPs, and restart
+      guidance.
 
       Options:
         --mode <mode>           Set exposure mode to loopback, private-network, or
@@ -291,9 +301,9 @@ describe('mullgate help command contract', () => {
                                 route. (default: [])
         -h, --help              display help for command"
     `);
-    expect(`\n${configValidateHelp}`).toMatchInlineSnapshot(`
+    expect(`\n${validateHelp}`).toMatchInlineSnapshot(`
       "
-      Usage: mullgate config validate [options]
+      Usage: mullgate validate [options]
 
       Validate the saved or freshly rendered wireproxy config and persist the result
       metadata.

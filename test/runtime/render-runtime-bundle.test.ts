@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveMullgatePaths } from '../../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
+import { requireDefined } from '../../src/required.js';
 import { planRuntimeBundle, renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
 import {
   cleanupWindowsFixtureArtifacts,
@@ -418,15 +419,15 @@ backend route-at-vie-wg-001-https
     });
     expect(parsedManifest.exposure.guidance).toEqual([
       'Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.',
-      'Use `mullgate config hosts` if you want a copy/paste /etc/hosts block for this machine.',
+      'Use `mullgate hosts` if you want a copy/paste /etc/hosts block for this machine.',
     ]);
     expect(parsedManifest.exposure.remediation).toEqual({
       bindPosture:
-        'Keep loopback mode on local-only bind IPs. If you need remote access, rerun `mullgate config exposure --mode private-network ...` with one trusted-network bind IP per route.',
+        'Keep loopback mode on local-only bind IPs. If you need remote access, rerun `mullgate exposure --mode private-network ...` with one trusted-network bind IP per route.',
       hostnameResolution:
-        'For local host-file testing, use `mullgate config hosts` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.',
+        'For local host-file testing, use `mullgate hosts` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.',
       restart:
-        'After changing exposure settings, rerun `mullgate config validate` or `mullgate start` so the runtime artifacts match the saved local-only posture.',
+        'After changing exposure settings, rerun `mullgate validate` or `mullgate start` so the runtime artifacts match the saved local-only posture.',
     });
     expect(parsedManifest.platform).toEqual({
       platform: 'linux',
@@ -571,7 +572,10 @@ backend route-at-vie-wg-001-https
     config.setup.bind.host = '198.51.100.10';
     config.routing.locations = [
       {
-        ...config.routing.locations[0]!,
+        ...requireDefined(
+          config.routing.locations[0],
+          'Expected at least one routed location in the fixture config.',
+        ),
         alias: 'sweden-gothenburg',
         hostname: 'sweden-gothenburg.proxy.example.com',
         bindIp: '198.51.100.10',
@@ -581,7 +585,7 @@ backend route-at-vie-wg-001-https
       phase: 'unvalidated',
       lastCheckedAt: null,
       message:
-        'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+        'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
     };
 
     const result = await renderRuntimeBundle({
@@ -616,7 +620,7 @@ backend route-at-vie-wg-001-https
       hostnameResolution:
         'Publish DNS A records so every route hostname resolves to its saved public bind IP before expecting remote hostname access to work on the open internet.',
       restart:
-        'After changing exposure or DNS-facing bind IPs, rerun `mullgate config validate` or `mullgate start` so runtime artifacts reflect the advanced public posture accurately.',
+        'After changing exposure or DNS-facing bind IPs, rerun `mullgate validate` or `mullgate start` so runtime artifacts reflect the advanced public posture accurately.',
     });
     expect(exposure.warnings.map((warning) => warning.code)).toEqual([
       'DNS_REQUIRED',
