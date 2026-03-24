@@ -230,5 +230,5 @@ describe('mullgate autostart command', () => {
 });
 
 function normalizeTempPath(value: string, homeDir: string): string {
-  return value.split(homeDir).join('/tmp/mullgate-autostart-REPLACED');
+  return value.split(homeDir).join('/tmp/mullgate-autostart-REPLACED').replaceAll('\\', '/');
 }
