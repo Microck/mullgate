@@ -17,10 +17,10 @@ import {
   defaultDeviceName,
   deriveRouteDeviceName,
   loadStoredRelayCatalog,
+  type PlannedSetupRoute,
   planSetupRoutes,
   provisionRouteWithRetries,
   summarizeValidationSource,
-  type PlannedSetupRoute,
   verifyHttpsAssets,
   withRuntimeStatus,
 } from '../app/setup-runner.js';
@@ -40,7 +40,11 @@ import {
   listRegionGroups,
   resolveRegionCountryCodes,
 } from '../domain/region-groups.js';
-import { fetchRelays, type MullvadRelay, type MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
+import {
+  fetchRelays,
+  type MullvadRelay,
+  type MullvadRelayCatalog,
+} from '../mullvad/fetch-relays.js';
 import { buildPlatformSupportContract } from '../platform/support-contract.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
 import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
@@ -1269,7 +1273,9 @@ export function parseProxyExportSelectors(
   };
 }
 
-function buildCountryPromptOptions(relayCatalog: MullvadRelayCatalog): readonly PromptSelectOption[] {
+function buildCountryPromptOptions(
+  relayCatalog: MullvadRelayCatalog,
+): readonly PromptSelectOption[] {
   return relayCatalog.countries.map((country) => ({
     value: country.code,
     label: `${country.name} (${country.code})`,
@@ -1330,10 +1336,12 @@ function buildProviderPromptOptions(input: {
     }
   });
 
-  return [...providers].sort((left, right) => left.localeCompare(right)).map((provider) => ({
-    value: provider,
-    label: provider,
-  }));
+  return [...providers]
+    .sort((left, right) => left.localeCompare(right))
+    .map((provider) => ({
+      value: provider,
+      label: provider,
+    }));
 }
 
 function renderProxyExportSelectorLabel(selector: ProxyExportSelector): string {
@@ -1356,9 +1364,7 @@ function resolveProxyExportProviderNames(input: {
   readonly providers: readonly string[];
   readonly relayCatalog: MullvadRelayCatalog;
   readonly configPath: string;
-}):
-  | { readonly ok: true; readonly providers: readonly string[] }
-  | ProxyExportFailure {
+}): { readonly ok: true; readonly providers: readonly string[] } | ProxyExportFailure {
   const available = new Map<string, string>();
 
   input.relayCatalog.relays.forEach((relay) => {
@@ -1395,9 +1401,7 @@ function resolveCountryCode(input: {
   readonly config: MullgateConfig;
   readonly relayCatalog: MullvadRelayCatalog;
   readonly configPath: string;
-}):
-  | { readonly ok: true; readonly countryCode: string }
-  | ProxyExportFailure {
+}): { readonly ok: true; readonly countryCode: string } | ProxyExportFailure {
   const normalized = normalizeLocationToken(input.value);
   const match = input.relayCatalog.countries.find(
     (country) =>
@@ -1439,13 +1443,12 @@ function resolveCityCode(input: {
   readonly config: MullgateConfig;
   readonly relayCatalog: MullvadRelayCatalog;
   readonly configPath: string;
-}):
-  | { readonly ok: true; readonly cityCode: string }
-  | ProxyExportFailure {
+}): { readonly ok: true; readonly cityCode: string } | ProxyExportFailure {
   const country = input.relayCatalog.countries.find((entry) => entry.code === input.countryCode);
   const normalized = normalizeLocationToken(input.value);
   const match = country?.cities.find(
-    (city) => city.code.toLowerCase() === normalized || normalizeLocationToken(city.name) === normalized,
+    (city) =>
+      city.code.toLowerCase() === normalized || normalizeLocationToken(city.name) === normalized,
   );
 
   if (match) {
@@ -1484,9 +1487,7 @@ function resolveServerHostname(input: {
   readonly value: string;
   readonly relayCatalog: MullvadRelayCatalog;
   readonly configPath: string;
-}):
-  | { readonly ok: true; readonly hostname: string }
-  | ProxyExportFailure {
+}): { readonly ok: true; readonly hostname: string } | ProxyExportFailure {
   const normalized = normalizeLocationToken(input.value);
   const relay = listMatchingRelays({
     relayCatalog: input.relayCatalog,
@@ -2021,8 +2022,7 @@ async function collectGuidedProxyExportSelectors(
 
   while (true) {
     const addAnother = await prompts.confirm({
-      message:
-        selectors.length === 0 ? 'Add a selector batch?' : 'Add another selector batch?',
+      message: selectors.length === 0 ? 'Add a selector batch?' : 'Add another selector batch?',
       initialValue: selectors.length === 0,
       active: 'Yes',
       inactive: 'No',
@@ -2377,9 +2377,7 @@ function resolveProxyExportSelectorsWithCatalog(input: {
   readonly selectors: readonly ProxyExportSelector[];
   readonly relayCatalog: MullvadRelayCatalog;
   readonly configPath: string;
-}):
-  | { readonly ok: true; readonly selectors: readonly ProxyExportSelector[] }
-  | ProxyExportFailure {
+}): { readonly ok: true; readonly selectors: readonly ProxyExportSelector[] } | ProxyExportFailure {
   const selectors: ProxyExportSelector[] = [];
 
   for (const selector of input.selectors) {
@@ -2501,8 +2499,7 @@ function describeConfiguredProxyExportRoutes(input: {
   );
 
   return input.config.routing.locations.map((location, routeIndex) => {
-    const matchedRelay =
-      relayByHostname.get(location.relayPreference.hostnameLabel ?? '') ?? null;
+    const matchedRelay = relayByHostname.get(location.relayPreference.hostnameLabel ?? '') ?? null;
 
     return {
       routeIndex,
@@ -2512,15 +2509,16 @@ function describeConfiguredProxyExportRoutes(input: {
       countryCode: matchedRelay?.location.countryCode ?? location.relayPreference.country ?? null,
       cityCode: matchedRelay?.location.cityCode ?? location.relayPreference.city ?? null,
       relayHostname: matchedRelay?.hostname ?? location.relayPreference.hostnameLabel ?? null,
-      provider:
-        matchedRelay?.provider ?? location.mullvad.relayConstraints.providers[0] ?? null,
+      provider: matchedRelay?.provider ?? location.mullvad.relayConstraints.providers[0] ?? null,
     };
   });
 }
 
 async function loadRelayCatalogForProxyExport(input: {
   readonly store: ConfigStore;
-}): Promise<{ readonly ok: true; readonly relayCatalog: MullvadRelayCatalog } | ProxyExportFailure> {
+}): Promise<
+  { readonly ok: true; readonly relayCatalog: MullvadRelayCatalog } | ProxyExportFailure
+> {
   const cached = await loadStoredRelayCatalog(input.store.paths.provisioningCacheFile);
 
   if (cached.ok) {
@@ -2641,7 +2639,9 @@ async function ensureProxyExportRoutes(input: {
       message: plannedRoutesResult.message,
       configPath: input.store.paths.configFile,
       ...(plannedRoutesResult.code ? { cause: plannedRoutesResult.code } : {}),
-      ...(plannedRoutesResult.artifactPath ? { artifactPath: plannedRoutesResult.artifactPath } : {}),
+      ...(plannedRoutesResult.artifactPath
+        ? { artifactPath: plannedRoutesResult.artifactPath }
+        : {}),
     };
   }
 
@@ -2992,9 +2992,7 @@ function deriveAddedRouteBindIps(input: {
   readonly config: MullgateConfig;
   readonly count: number;
   readonly configPath: string;
-}):
-  | { readonly ok: true; readonly routeBindIps: readonly string[] }
-  | ProxyExportFailure {
+}): { readonly ok: true; readonly routeBindIps: readonly string[] } | ProxyExportFailure {
   if (input.count === 0) {
     return {
       ok: true,
@@ -3040,7 +3038,10 @@ function deriveAddedRouteBindIps(input: {
     routeCount: input.config.routing.locations.length + input.count,
     exposureMode: input.config.setup.exposure.mode,
     exposureBaseDomain: input.config.setup.exposure.baseDomain,
-    routeBindIps: [...input.config.routing.locations.map((location) => location.bindIp), ...nextRouteBindIps],
+    routeBindIps: [
+      ...input.config.routing.locations.map((location) => location.bindIp),
+      ...nextRouteBindIps,
+    ],
     artifactPath: input.configPath,
   });
 
@@ -3064,7 +3065,10 @@ function deriveAddedRouteBindIps(input: {
 function incrementIpv4Address(value: string): string {
   const segments = value.split('.').map((segment) => Number(segment));
 
-  if (segments.length !== 4 || segments.some((segment) => !Number.isInteger(segment) || segment < 0 || segment > 255)) {
+  if (
+    segments.length !== 4 ||
+    segments.some((segment) => !Number.isInteger(segment) || segment < 0 || segment > 255)
+  ) {
     throw new Error(`Cannot derive the next bind IP from ${value}.`);
   }
 
@@ -3085,7 +3089,10 @@ function createProvisionedRouteConfig(input: {
   readonly route: PlannedSetupRoute;
   readonly accountNumber: string;
   readonly providers: readonly string[];
-  readonly provisioning?: Extract<Awaited<ReturnType<typeof provisionRouteWithRetries>>, { ok: true }>;
+  readonly provisioning?: Extract<
+    Awaited<ReturnType<typeof provisionRouteWithRetries>>,
+    { ok: true }
+  >;
 }): MullgateConfig['routing']['locations'][number] {
   return {
     alias: input.route.alias,
@@ -3099,18 +3106,17 @@ function createProvisionedRouteConfig(input: {
       relayConstraints: {
         providers: [...input.providers],
       },
-      wireguard:
-        input.provisioning?.value.toConfigValue() ?? {
-          publicKey: null,
-          privateKey: null,
-          ipv4Address: null,
-          ipv6Address: null,
-          gatewayIpv4: null,
-          gatewayIpv6: null,
-          dnsServers: [],
-          peerPublicKey: null,
-          peerEndpoint: null,
-        },
+      wireguard: input.provisioning?.value.toConfigValue() ?? {
+        publicKey: null,
+        privateKey: null,
+        ipv4Address: null,
+        ipv6Address: null,
+        gatewayIpv4: null,
+        gatewayIpv6: null,
+        dnsServers: [],
+        peerPublicKey: null,
+        peerEndpoint: null,
+      },
     },
     runtime: {
       routeId: input.route.routeId,
@@ -3488,7 +3494,9 @@ function createGuidedPromptClient(): GuidedPromptClient {
       while (true) {
         process.stderr.write(`${options.message}\n`);
         options.options.forEach((option, index) => {
-          process.stderr.write(`  ${index + 1}. ${option.label}${option.hint ? ` - ${option.hint}` : ''}\n`);
+          process.stderr.write(
+            `  ${index + 1}. ${option.label}${option.hint ? ` - ${option.hint}` : ''}\n`,
+          );
         });
         process.stderr.write('Select one option: ');
         const answer = await nextBufferedLine();
@@ -3520,7 +3528,9 @@ function createGuidedPromptClient(): GuidedPromptClient {
       while (true) {
         process.stderr.write(`${options.message}\n`);
         options.options.forEach((option, index) => {
-          process.stderr.write(`  ${index + 1}. ${option.label}${option.hint ? ` - ${option.hint}` : ''}\n`);
+          process.stderr.write(
+            `  ${index + 1}. ${option.label}${option.hint ? ` - ${option.hint}` : ''}\n`,
+          );
         });
         process.stderr.write('Select one or more options (comma-separated, blank for none): ');
         const answer = await nextBufferedLine();

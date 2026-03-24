@@ -185,7 +185,9 @@ export function selectConfiguredRouteRelays(input: {
         source: selectedTargetResult.source,
         message: 'No relay from the cached Mullvad catalog matched the saved route preference.',
         ...(selectedTargetResult.cause ? { cause: selectedTargetResult.cause } : {}),
-        ...(selectedTargetResult.artifactPath ? { artifactPath: selectedTargetResult.artifactPath } : {}),
+        ...(selectedTargetResult.artifactPath
+          ? { artifactPath: selectedTargetResult.artifactPath }
+          : {}),
         ...describeRoute(route),
       };
     }
