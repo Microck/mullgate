@@ -62,15 +62,15 @@ async function main(): Promise<void> {
       message: 'Installed CLI help output drifted away from the expected top-level usage contract.',
     });
 
-    const configPathResult = await runShellCommand({
-      command: `${shellEscape(installedCliPath)} config path`,
+    const pathResult = await runShellCommand({
+      command: `${shellEscape(installedCliPath)} path`,
     });
-    assertSuccess(configPathResult);
+    assertSuccess(pathResult);
     assertContains({
-      text: configPathResult.stdout,
+      text: pathResult.stdout,
       expected: 'Mullgate path report',
       message:
-        'Installed CLI config-path output drifted away from the expected top-level report contract.',
+        'Installed CLI path output drifted away from the expected top-level report contract.',
     });
 
     process.stdout.write(
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
         `- tarball: ${tarballPath}`,
         `- installed cli: ${installedCliPath}`,
         '- installed mullgate help: ok',
-        '- installed mullgate config path: ok',
+        '- installed mullgate path: ok',
       ].join('\n')}\n`,
     );
   } finally {

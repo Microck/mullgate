@@ -148,7 +148,7 @@ function renderHelp(): string {
     'Usage: pnpm verify:m002-platform-surfaces [options]',
     '',
     'Run the real Mullgate CLI under simulated Linux, macOS, and Windows',
-    'environments. The verifier checks `config path`, `status`, `doctor`, and',
+    'environments. The verifier checks `path`, `status`, `doctor`, and',
     '`runtime-manifest.json` for platform-support drift and preserves its temp',
     'home bundle on failure.',
     '',
@@ -185,7 +185,7 @@ async function verifyScenario(input: {
         throw new Error(`${input.scenario.id}: planned runtime bundle was not available.`);
       }
 
-      const configPathOutput = renderExpectedConfigPathSurface({
+      const pathOutput = renderExpectedConfigPathSurface({
         paths: seeded.paths,
         contract: platformContract,
       });
@@ -195,16 +195,16 @@ async function verifyScenario(input: {
         root,
         manifest,
         commandResults: {
-          configPath: { exitCode: 0, stdout: `${configPathOutput}\n`, stderr: '' },
+          configPath: { exitCode: 0, stdout: `${pathOutput}\n`, stderr: '' },
           status: { exitCode: 0, stdout: '', stderr: '' },
           doctor: { exitCode: 0, stdout: '', stderr: '' },
         },
       });
 
       assertContains({
-        text: configPathOutput,
+        text: pathOutput,
         expected: `platform: ${platformContract.platform}`,
-        message: `${input.scenario.id}: planned config path platform missing.`,
+        message: `${input.scenario.id}: planned path platform missing.`,
       });
       assertManifestSurface({
         manifest,
@@ -213,13 +213,13 @@ async function verifyScenario(input: {
         scenarioId: input.scenario.id,
       });
 
-      return `- ${input.scenario.id}: ok (${input.scenario.title}; planned manifest/config-path contract verified, runtime execution intentionally limited on this host)`;
+      return `- ${input.scenario.id}: ok (${input.scenario.title}; planned manifest/path contract verified, runtime execution intentionally limited on this host)`;
     }
 
     const configPathResult = await runCliCommand({
       env: seeded.env,
       cwd: seeded.root,
-      args: ['config', 'path'],
+      args: ['path'],
     });
     const statusResult = await runCliCommand({
       env: seeded.env,
@@ -252,7 +252,7 @@ async function verifyScenario(input: {
     assertExitCode({
       result: configPathResult,
       expected: 0,
-      message: `${input.scenario.id}: config path failed.`,
+      message: `${input.scenario.id}: path failed.`,
     });
     assertExitCode({
       result: statusResult,
@@ -266,7 +266,7 @@ async function verifyScenario(input: {
     });
 
     assertNoSecretLeaks({
-      label: `${input.scenario.id} config path`,
+      label: `${input.scenario.id} path`,
       text: configPathResult.stdout,
       config: seeded.config,
     });
@@ -785,32 +785,32 @@ function assertConfigPathSurface(input: {
   assertContains({
     text: input.output,
     expected: 'Mullgate path report',
-    message: `${input.scenarioId}: config path header missing.`,
+    message: `${input.scenarioId}: path header missing.`,
   });
   assertContains({
     text: input.output,
     expected: `platform: ${input.contract.platform}`,
-    message: `${input.scenarioId}: config path platform missing.`,
+    message: `${input.scenarioId}: path platform missing.`,
   });
   assertContains({
     text: input.output,
     expected: `platform source: ${input.contract.platformSource}`,
-    message: `${input.scenarioId}: config path platform source missing.`,
+    message: `${input.scenarioId}: path platform source missing.`,
   });
   assertContains({
     text: input.output,
     expected: `platform support: ${input.contract.posture.supportLevel}`,
-    message: `${input.scenarioId}: config path support level missing.`,
+    message: `${input.scenarioId}: path support level missing.`,
   });
   assertContains({
     text: input.output,
     expected: `platform mode: ${input.contract.posture.modeLabel}`,
-    message: `${input.scenarioId}: config path mode label missing.`,
+    message: `${input.scenarioId}: path mode label missing.`,
   });
   assertContains({
     text: input.output,
     expected: `host networking: ${input.contract.hostNetworking.modeLabel}`,
-    message: `${input.scenarioId}: config path host networking label missing.`,
+    message: `${input.scenarioId}: path host networking label missing.`,
   });
   assertContains({
     text: input.output,
