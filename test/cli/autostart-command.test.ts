@@ -68,6 +68,7 @@ describe('mullgate autostart command', () => {
     const result = await enableAutostart({
       env: fixture.env,
       argv: ['node', fixture.binaryPath],
+      platform: 'linux',
       runSystemctl: async (args) => {
         commands.push(args.join(' '));
         return { code: 0, stdout: '', stderr: '' };
@@ -103,6 +104,7 @@ describe('mullgate autostart command', () => {
         PATH: '/usr/bin:/bin',
       },
       argv: ['node', relativeBinaryPath],
+      platform: 'linux',
       runSystemctl: async (args) => {
         commands.push(args.join(' '));
         return { code: 0, stdout: '', stderr: '' };
@@ -123,12 +125,14 @@ describe('mullgate autostart command', () => {
     await enableAutostart({
       env: fixture.env,
       argv: ['node', fixture.binaryPath],
+      platform: 'linux',
       runSystemctl: async () => ({ code: 0, stdout: '', stderr: '' }),
     });
 
     const result = await inspectAutostart({
       env: fixture.env,
       argv: ['node', fixture.binaryPath],
+      platform: 'linux',
       runSystemctl: async (args) => {
         const command = args.join(' ');
 
@@ -160,6 +164,7 @@ describe('mullgate autostart command', () => {
         PATH: path.dirname(fixture.binaryPath),
       },
       argv: ['node', fixture.binaryPath],
+      platform: 'linux',
     });
 
     expect(result).toMatchObject({
@@ -181,12 +186,14 @@ describe('mullgate autostart command', () => {
     await enableAutostart({
       env: fixture.env,
       argv: ['node', fixture.binaryPath],
+      platform: 'linux',
       runSystemctl: async () => ({ code: 0, stdout: '', stderr: '' }),
     });
 
     const result = await disableAutostart({
       env: fixture.env,
       argv: ['node', fixture.binaryPath],
+      platform: 'linux',
       runSystemctl: async (args) => {
         commands.push(args.join(' '));
         return { code: 0, stdout: '', stderr: '' };
@@ -198,6 +205,27 @@ describe('mullgate autostart command', () => {
     expect(result.ok).toBe(true);
     await expect(readFile(unitPath, 'utf8')).rejects.toThrow();
     expect(commands).toEqual(['--user disable --now mullgate.service', '--user daemon-reload']);
+  });
+
+  it('fails clearly on non-linux platforms', async () => {
+    const fixture = await createAutostartFixture();
+
+    const result = await inspectAutostart({
+      env: fixture.env,
+      argv: ['node', fixture.binaryPath],
+      platform: 'darwin',
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      exitCode: 1,
+    });
+    expect(`\n${result.summary}`).toMatchInlineSnapshot(`
+      "
+      Mullgate autostart failed.
+      phase: autostart-status
+      reason: Autostart is only supported on Linux right now."
+    `);
   });
 });
 

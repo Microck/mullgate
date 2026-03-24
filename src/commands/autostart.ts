@@ -26,6 +26,7 @@ type SystemctlRunner = (args: readonly string[]) => Promise<SystemctlResult>;
 type AutostartCommandDependencies = {
   readonly env?: NodeJS.ProcessEnv;
   readonly argv?: readonly string[];
+  readonly platform?: NodeJS.Platform;
   readonly runSystemctl?: SystemctlRunner;
   readonly stdout?: WritableTextSink;
   readonly stderr?: WritableTextSink;
@@ -94,6 +95,8 @@ export async function enableAutostart(
   const support = await resolveAutostartSupport({
     env,
     argv: dependencies.argv ?? process.argv,
+    platform: dependencies.platform ?? process.platform,
+    requireSystemctlOnPath: dependencies.runSystemctl === undefined,
   });
 
   if (!support.ok) {
@@ -161,6 +164,8 @@ export async function disableAutostart(
   const support = await resolveAutostartSupport({
     env,
     argv: dependencies.argv ?? process.argv,
+    platform: dependencies.platform ?? process.platform,
+    requireSystemctlOnPath: dependencies.runSystemctl === undefined,
   });
 
   if (!support.ok) {
@@ -222,6 +227,8 @@ export async function inspectAutostart(
   const support = await resolveAutostartSupport({
     env,
     argv: dependencies.argv ?? process.argv,
+    platform: dependencies.platform ?? process.platform,
+    requireSystemctlOnPath: dependencies.runSystemctl === undefined,
   });
 
   if (!support.ok) {
@@ -278,26 +285,39 @@ export function buildAutostartUnitFile(input: { readonly binaryPath: string }): 
 async function resolveAutostartSupport(input: {
   readonly env: NodeJS.ProcessEnv;
   readonly argv: readonly string[];
+  readonly platform: NodeJS.Platform;
+  readonly requireSystemctlOnPath: boolean;
 }): Promise<AutostartSupport | AutostartFailure> {
-  if (process.platform !== 'linux') {
+  if (input.platform !== 'linux') {
     return renderAutostartFailure({
       action: 'status',
       message: 'Autostart is only supported on Linux right now.',
     });
   }
 
-  const systemctlPath = await resolveExecutableFromPath('systemctl', input.env);
+  if (input.requireSystemctlOnPath) {
+    const systemctlPath = await resolveExecutableFromPath('systemctl', input.env);
 
-  if (!systemctlPath) {
+    if (systemctlPath) {
+      return resolveSupportedAutostartPaths(input.env, input.argv);
+    }
+
     return renderAutostartFailure({
       action: 'status',
       message: 'systemctl was not found on PATH, so Mullgate cannot manage a user service.',
     });
   }
 
+  return resolveSupportedAutostartPaths(input.env, input.argv);
+}
+
+async function resolveSupportedAutostartPaths(
+  env: NodeJS.ProcessEnv,
+  argv: readonly string[],
+): Promise<AutostartSupport | AutostartFailure> {
   const binaryPath = await resolveMullgateBinaryPath({
-    env: input.env,
-    argv: input.argv,
+    env,
+    argv,
   });
 
   if (!binaryPath) {
@@ -308,7 +328,7 @@ async function resolveAutostartSupport(input: {
     });
   }
 
-  const paths = resolveMullgatePaths(input.env);
+  const paths = resolveMullgatePaths(env);
 
   return {
     ok: true,
