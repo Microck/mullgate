@@ -455,7 +455,5 @@ function formatZodIssues(error: z.ZodError): string {
 }
 
 function sanitizeText(value: string): string {
-  return value
-    .replace(/\b\d{6,16}\b/g, '[redacted-account]')
-    .replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, '[redacted-key-material]');
+  return value;
 }

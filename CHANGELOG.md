@@ -13,6 +13,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.4.0] - 2026-03-24
+
+### Added
+
+- `mullgate autostart` for Linux systemd user-service management, including enable, disable, and status flows that can target installed binaries or packed release assets
+- top-level `mullgate export`, `mullgate regions`, and `mullgate hosts` command surfaces so proxy-list and route-discovery flows no longer sit behind `config`
+- richer guided proxy export with numbered country, city, and server pick-lists plus preview-aware file generation
+
+### Changed
+
+- config inspection, exposure, and export previews now present the full operator-facing proxy credentials intentionally instead of censoring saved auth fields
+- setup, doctor, status, and CLI report rendering now use the refreshed human-friendly output formatting and Mullvad-aligned demo/docs surface
+- release documentation now includes a canonical runbook covering npm publishing, GitHub releases, and post-release verification
+
+### Fixed
+
+- `mullgate autostart` now accepts relative release-binary invocations such as `./mullgate autostart enable` even when `mullgate` is not already on `PATH`
+- demo recordings now use taller framing so the showcased setup, status, and exposure flows stay readable in README and docs embeds
+
 ## [0.3.0] - 2026-03-24
 
 ### Added

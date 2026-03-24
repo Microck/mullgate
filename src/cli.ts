@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-
-import { registerConfigCommands } from './commands/config.js';
+import { writeCliReport } from './cli-output.js';
+import { registerAutostartCommand } from './commands/autostart.js';
+import { registerConfigCommands, registerOperatorCommands } from './commands/config.js';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerSetupCommand } from './commands/setup.js';
 import { registerStartCommand } from './commands/start.js';
@@ -20,6 +21,8 @@ export function createCli(): Command {
   registerStartCommand(program);
   registerStatusCommand(program);
   registerDoctorCommand(program);
+  registerAutostartCommand(program);
+  registerOperatorCommands(program);
   registerConfigCommands(program);
 
   return program;
@@ -32,6 +35,10 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`${message}\n`);
+  writeCliReport({
+    sink: process.stderr,
+    text: ['Mullgate CLI failed.', `reason: ${message}`].join('\n'),
+    tone: 'error',
+  });
   process.exitCode = 1;
 });

@@ -8,6 +8,7 @@ import {
   buildPlatformSupportContract,
   type PlatformSupportContract,
 } from '../platform/support-contract.js';
+import { requireDefined } from '../required.js';
 
 const CONTAINER_BIND_HOST = '0.0.0.0';
 const WIREPROXY_IMAGE = 'backplane/wireproxy:20260320';
@@ -496,7 +497,10 @@ function buildHttpsSidecarConfig(
   ];
 
   if (https.enabled) {
-    const primaryRoute = config.routing.locations[0]!;
+    const primaryRoute = requireDefined(
+      config.routing.locations[0],
+      'Expected at least one routed location when rendering the HTTPS runtime bundle.',
+    );
     lines.push(
       'frontend https_proxy',
       `  bind ${CONTAINER_BIND_HOST}:${https.port} ssl crt ${HAPROXY_COMBINED_PEM_PATH}`,

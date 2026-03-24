@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { requireDefined } from '../required.js';
+
 export type WireproxyValidationIssue = {
   target: string;
   message: string;
@@ -250,7 +252,14 @@ function parseWireproxyConfig(input: string, target: string): ParsedConfig {
     const separator = line.indexOf('=');
 
     if (separator === -1) {
-      record(parsed.get(ROOT_SECTION)!, target, `Unrecognized wireproxy config line: ${line}`);
+      record(
+        requireDefined(
+          parsed.get(ROOT_SECTION),
+          'Expected the root wireproxy config section to exist during parsing.',
+        ),
+        target,
+        `Unrecognized wireproxy config line: ${line}`,
+      );
       continue;
     }
 

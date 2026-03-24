@@ -26,7 +26,7 @@ This guide uses installed `mullgate ...` commands by default. If you are working
 
 Mullgate reports platform support truthfully on Linux, macOS, and Windows.
 
-| Platform | `config path` | `status` / `doctor` | Current runtime execution |
+| Platform | `path` | `status` / `doctor` | Current runtime execution |
 | --- | --- | --- | --- |
 | Linux | Supported | Supported | **Fully supported** |
 | macOS | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
@@ -86,7 +86,7 @@ export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
 export MULLGATE_DEVICE_NAME=mullgate-loopback
 
 mullgate setup --non-interactive
-mullgate config hosts
+mullgate hosts
 ```
 
 What to expect:
@@ -112,13 +112,13 @@ export MULLGATE_EXPOSURE_MODE=private-network
 export MULLGATE_EXPOSURE_BASE_DOMAIN=proxy.example.com
 
 mullgate setup --non-interactive
-mullgate config exposure
+mullgate exposure
 ```
 
 What to expect:
 
 - route hostnames become `sweden-gothenburg.proxy.example.com` and `austria-vienna.proxy.example.com`
-- `config exposure` prints the DNS A records operators must publish
+- `mullgate exposure` prints the DNS A records operators must publish
 - each hostname must resolve to its own bind IP before hostname-based routing proof can work remotely
 
 ### Example: direct-IP exposure with no base domain
@@ -126,7 +126,7 @@ What to expect:
 If you do not set a base domain in `private-network` or `public` mode, Mullgate falls back to the bind IPs as the hostnames clients should use:
 
 ```bash
-mullgate config exposure \
+mullgate exposure \
   --mode private-network \
   --clear-base-domain \
   --route-bind-ip 192.168.10.10 \
@@ -137,16 +137,16 @@ In that posture:
 
 - there are no DNS records to publish
 - direct bind-IP entrypoints are the intended access path
-- `config hosts` is still useful for local-only hostname testing, but it is no longer required for remote clients
+- `mullgate hosts` is still useful for local-only hostname testing, but it is no longer required for remote clients
 
 ## Exporting proxy lists for clients
 
-Use `mullgate config export` when you want a ready-to-paste inventory of authenticated route URLs instead of assembling client config by hand.
+Use `mullgate export` when you want a ready-to-paste inventory of authenticated route URLs instead of assembling client config by hand.
 
 ### Discover the curated region groups
 
 ```bash
-mullgate config regions
+mullgate regions
 ```
 
 This prints the built-in groups accepted by `--region`, such as `europe` and `asia-pacific`.
@@ -154,7 +154,7 @@ This prints the built-in groups accepted by `--region`, such as `europe` and `as
 ### Guided `proxies.txt` export
 
 ```bash
-mullgate config export --guided
+mullgate export --guided
 ```
 
 The guided flow defaults to writing `proxies.txt`, only prompts for values you did not already pass on the CLI, and works both on a real terminal and with piped stdin.
@@ -163,7 +163,7 @@ It now starts from actual country and region pick-lists, then lets you refine ea
 ### Deterministic selector batches
 
 ```bash
-mullgate config export \
+mullgate export \
   --country se --city got --count 1 \
   --region europe --provider m247 --count 2 \
   --output proxies.txt
@@ -180,11 +180,11 @@ Rules worth knowing:
 ### Preview or stream the export
 
 ```bash
-mullgate config export --dry-run --protocol http --country us --server us-nyc-wg-001
-mullgate config export --stdout --protocol socks5 --region europe
+mullgate export --dry-run --protocol http --country us --server us-nyc-wg-001
+mullgate export --stdout --protocol socks5 --region europe
 ```
 
-- `--dry-run` prints a secret-safe preview with credentials redacted and does not write a file
+- `--dry-run` prints the real proxy URLs it would export and does not write a file
 - `--stdout` writes the real proxy URLs to stdout and prints the export summary on stderr
 - `--force` is required when you want to overwrite an existing export file
 
@@ -201,7 +201,7 @@ Hostname-based access works only when the client resolves each configured hostna
 
 That mapping can come from:
 
-- local `/etc/hosts` entries produced by `mullgate config hosts`
+- local `/etc/hosts` entries produced by `mullgate hosts`
 - published DNS records when you use `--base-domain`
 - some other trusted name-resolution system that preserves the same hostname-to-bind-IP mapping
 
@@ -212,7 +212,7 @@ Mullgate's routing layer dispatches by **destination bind IP**, not by a late ap
 - every remote route needs its own bind IP
 - hostname proof only works when name resolution lands on the correct IP first
 - if two hostnames resolve to the same bind IP, they collapse to the same route
-- if a hostname resolves somewhere else, `mullgate doctor` reports hostname drift and points you back to `mullgate config hosts`
+- if a hostname resolves somewhere else, `mullgate doctor` reports hostname drift and points you back to `mullgate hosts`
 
 ### Example `curl` forms
 
@@ -234,16 +234,16 @@ curl \
   https://am.i.mullvad.net/json
 ```
 
-If HTTPS proxy support is configured with a cert, key, and HTTPS port, the same route inventory appears in `config exposure`, `start`, `status`, and `runtime-manifest.json`.
+If HTTPS proxy support is configured with a cert, key, and HTTPS port, the same route inventory appears in `mullgate exposure`, `start`, `status`, and `runtime-manifest.json`.
 
 ## Editing exposure after setup
 
-Use `mullgate config exposure` instead of editing JSON by hand.
+Use `mullgate exposure` instead of editing JSON by hand.
 
 ### Inspect the current posture
 
 ```bash
-mullgate config exposure
+mullgate exposure
 ```
 
 The report includes:
@@ -252,7 +252,7 @@ The report includes:
 - base domain and whether LAN access is expected
 - per-route hostname and bind IP inventory
 - DNS guidance when a base domain is set
-- hostname and direct-IP listener URLs with credentials redacted
+- hostname and direct-IP listener URLs with full credentials, ready to copy
 - whether the current runtime state needs a restart or refresh
 
 ### Update the posture
@@ -260,7 +260,7 @@ The report includes:
 Example: switch from loopback to private-network hostnames:
 
 ```bash
-mullgate config exposure \
+mullgate exposure \
   --mode private-network \
   --base-domain proxy.example.com \
   --route-bind-ip 192.168.10.10 \
@@ -270,7 +270,7 @@ mullgate config exposure \
 Example: switch to direct-IP public exposure:
 
 ```bash
-mullgate config exposure \
+mullgate exposure \
   --mode public \
   --clear-base-domain \
   --route-bind-ip 203.0.113.10 \
@@ -280,7 +280,7 @@ mullgate config exposure \
 After an exposure edit, Mullgate marks the runtime state as `unvalidated`. Do one of these before trusting the saved and runtime surfaces again:
 
 ```bash
-mullgate config validate --refresh
+mullgate validate --refresh
 # or
 mullgate start
 ```
@@ -293,13 +293,13 @@ The runtime status and diagnostics surfaces are easiest to read when you see the
 
 ## Validation and runtime lifecycle
 
-### `mullgate config validate`
+### `mullgate validate`
 
 Use this when you want to refresh or verify derived runtime artifacts without starting Docker immediately.
 
 ```bash
-mullgate config validate --help
-mullgate config validate --refresh
+mullgate validate --help
+mullgate validate --refresh
 ```
 
 It validates the rendered wireproxy config and persists validation metadata under the runtime directory.
@@ -330,7 +330,7 @@ In day-to-day use, the safest pattern is:
 The fastest way to find the active XDG paths is:
 
 ```bash
-mullgate config path
+mullgate path
 ```
 
 That report also prints:
@@ -348,7 +348,7 @@ Important files:
 | `wireproxy.conf` | Primary rendered wireproxy config path recorded in the canonical config |
 | `wireproxy-configtest.json` | Persisted config validation report |
 | `docker-compose.yml` | Rendered runtime bundle entrypoint for `mullgate start` |
-| `runtime-manifest.json` | Truthful route/endpoint manifest, including redacted published URLs and backend topology |
+| `runtime-manifest.json` | Truthful route/endpoint manifest, including authenticated published URLs and backend topology |
 | `last-start.json` | Secret-safe success/failure report for the most recent `mullgate start` attempt |
 
 ## Integrated release verifier
@@ -388,7 +388,7 @@ pnpm verify:s06
 ### What the verifier proves
 
 - non-interactive `mullgate setup` against the real CLI
-- `mullgate config hosts` output and saved hostname → bind IP mappings
+- `mullgate hosts` output and saved hostname → bind IP mappings
 - `mullgate start`, `mullgate status`, and `mullgate doctor`
 - authenticated SOCKS5, HTTP, and HTTPS traffic through the published listeners
 - direct host-route invariance before/after `mullgate start`

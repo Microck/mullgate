@@ -5,6 +5,8 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { requireDefined } from '../src/required.js';
+
 const repoRoot = path.resolve(import.meta.dirname, '..');
 
 type CommandResult = {
@@ -33,7 +35,10 @@ async function main(): Promise<void> {
       );
     }
 
-    const tarballPath = path.join(packDir, packFiles[0]!);
+    const tarballPath = path.join(
+      packDir,
+      requireDefined(packFiles[0], `Expected exactly one packed tarball in ${packDir}.`),
+    );
     assertSuccess(
       await runShellCommand({
         command: `npm install --prefix ${shellEscape(installDir)} ${shellEscape(tarballPath)}`,
@@ -57,15 +62,15 @@ async function main(): Promise<void> {
       message: 'Installed CLI help output drifted away from the expected top-level usage contract.',
     });
 
-    const configPathResult = await runShellCommand({
-      command: `${shellEscape(installedCliPath)} config path`,
+    const pathResult = await runShellCommand({
+      command: `${shellEscape(installedCliPath)} path`,
     });
-    assertSuccess(configPathResult);
+    assertSuccess(pathResult);
     assertContains({
-      text: configPathResult.stdout,
+      text: pathResult.stdout,
       expected: 'Mullgate path report',
       message:
-        'Installed CLI config-path output drifted away from the expected top-level report contract.',
+        'Installed CLI path output drifted away from the expected top-level report contract.',
     });
 
     process.stdout.write(
@@ -75,7 +80,7 @@ async function main(): Promise<void> {
         `- tarball: ${tarballPath}`,
         `- installed cli: ${installedCliPath}`,
         '- installed mullgate help: ok',
-        '- installed mullgate config path: ok',
+        '- installed mullgate path: ok',
       ].join('\n')}\n`,
     );
   } finally {

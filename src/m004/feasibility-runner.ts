@@ -11,6 +11,7 @@ import {
   type MullvadRelayCatalog,
 } from '../mullvad/fetch-relays.js';
 import { provisionWireguard } from '../mullvad/provision-wireguard.js';
+import { requireArrayValue, requireDefined } from '../required.js';
 import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
 import {
   createEntryIdentityFromRelay,
@@ -136,7 +137,7 @@ export function parseFeasibilityArgs(
   let fixturePath: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index]!;
+    const argument = requireArrayValue(argv, index, `Missing CLI argument at index ${index}.`);
 
     if (argument === '--help' || argument === '-h') {
       return {
@@ -565,7 +566,10 @@ export async function runFeasibilityVerifier(
           context,
           input: {
             logicalExit,
-            localSocksPort: context.socksPort!,
+            localSocksPort: requireDefined(
+              context.socksPort,
+              'SOCKS port should be available before running chained probes.',
+            ),
             proxyUsername: liveInputs.proxyUsername,
             proxyPassword: liveInputs.proxyPassword,
             targetUrl: liveInputs.targetUrl,

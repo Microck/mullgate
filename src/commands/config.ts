@@ -24,6 +24,7 @@ import {
   verifyHttpsAssets,
   withRuntimeStatus,
 } from '../app/setup-runner.js';
+import { writeCliRaw, writeCliReport } from '../cli-output.js';
 import {
   buildExposureContract,
   deriveExposureHostname,
@@ -31,7 +32,6 @@ import {
   normalizeExposureBaseDomain,
   validateExposureSettings,
 } from '../config/exposure-contract.js';
-import { formatRedactedConfig, REDACTED, redactConfig } from '../config/redact.js';
 import type { ExposureMode, MullgateConfig } from '../config/schema.js';
 import { ConfigStore, type LoadConfigResult, syncLegacyMirrorsToRouting } from '../config/store.js';
 import { createLocationAliasCatalog, normalizeLocationToken } from '../domain/location-aliases.js';
@@ -46,6 +46,7 @@ import {
   type MullvadRelayCatalog,
 } from '../mullvad/fetch-relays.js';
 import { buildPlatformSupportContract } from '../platform/support-contract.js';
+import { requireArrayValue, requireDefined } from '../required.js';
 import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
 import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
 
@@ -153,7 +154,6 @@ type ProxyExportEntry = {
   readonly relayHostname: string | null;
   readonly provider: string | null;
   readonly url: string;
-  readonly redactedUrl: string;
 };
 
 type ProxyExportRouteDescriptor = {
@@ -173,7 +173,6 @@ type ProxyExportPlanSuccess = {
   readonly selectors: readonly ProxyExportSelectorResult[];
   readonly entries: readonly ProxyExportEntry[];
   readonly outputText: string;
-  readonly redactedOutputText: string;
   readonly suggestedFilename: string;
 };
 
@@ -260,6 +259,10 @@ type PromptConfirmOptions = {
   readonly inactive?: string;
 };
 
+function describePromptStep(title: string, detail: string): string {
+  return `${title}\n${detail}`;
+}
+
 type GuidedProxyExportSelectorSeed = {
   readonly kind: ProxyExportSelector['kind'];
   readonly value: string;
@@ -282,95 +285,126 @@ type GuidedPromptClient = {
   readonly close: () => Promise<void>;
 };
 
+export function registerOperatorCommands(program: Command): void {
+  registerPathCommand(program);
+  registerLocationsCommand(program);
+  registerHostsCommand(program);
+  registerRegionsCommand(program);
+  registerExposureCommand(program);
+  registerExportCommand(program);
+  registerValidateCommand(program);
+}
+
 export function registerConfigCommands(program: Command): void {
   const config = program
     .command('config')
-    .description('Inspect or update saved Mullgate configuration and derived paths.');
+    .description('Inspect or edit the saved Mullgate config directly.');
 
-  config
+  registerConfigShowCommand(config);
+  registerConfigGetCommand(config);
+  registerConfigSetCommand(config);
+}
+
+function registerPathCommand(target: Command): void {
+  target
     .command('path')
-    .description('Show the resolved Mullgate config/state/cache/runtime paths.')
+    .description('Show the resolved Mullgate config, state, cache, and runtime paths.')
     .action(async () => {
       const store = new ConfigStore();
       const report = await store.inspectPaths();
-      process.stdout.write(`${renderPathReport(report)}\n`);
+      writeCliReport({ sink: process.stdout, text: renderPathReport(report) });
     });
+}
 
-  config
+function registerConfigShowCommand(target: Command): void {
+  target
     .command('show')
-    .description('Show the saved Mullgate config with secrets redacted.')
+    .description('Show the saved Mullgate config as JSON.')
     .action(async () => {
       const store = new ConfigStore();
       const result = await store.load();
 
       if (!result.ok) {
-        process.stderr.write(`${renderLoadError(result)}\n`);
+        writeCliReport({ sink: process.stderr, text: renderLoadError(result), tone: 'error' });
         process.exitCode = 1;
         return;
       }
 
       if (result.source === 'empty') {
-        process.stdout.write(`${result.message}\n`);
+        writeCliReport({ sink: process.stdout, text: result.message });
         return;
       }
 
-      process.stdout.write(`${formatRedactedConfig(result.config)}\n`);
+      writeCliRaw({
+        sink: process.stdout,
+        text: `${JSON.stringify(result.config, null, 2)}\n`,
+      });
     });
+}
 
-  config
+function registerLocationsCommand(target: Command): void {
+  target
     .command('locations')
-    .description(
-      'List routed location aliases, bind IPs, relay preferences, and runtime ids without secrets.',
-    )
+    .description('List routed location aliases, bind IPs, relay preferences, and runtime ids.')
     .action(async () => {
       const store = new ConfigStore();
       const result = await store.load();
 
       if (!result.ok) {
-        process.stderr.write(`${renderLoadError(result)}\n`);
+        writeCliReport({ sink: process.stderr, text: renderLoadError(result), tone: 'error' });
         process.exitCode = 1;
         return;
       }
 
       if (result.source === 'empty') {
-        process.stdout.write(`${result.message}\n`);
+        writeCliReport({ sink: process.stdout, text: result.message });
         return;
       }
 
-      process.stdout.write(`${renderLocationsReport(result.config, store.paths.configFile)}\n`);
+      writeCliReport({
+        sink: process.stdout,
+        text: renderLocationsReport(result.config, store.paths.configFile),
+      });
     });
+}
 
-  config
+function registerHostsCommand(target: Command): void {
+  target
     .command('hosts')
-    .description(
-      'List configured proxy hostnames and their route bind IP mappings without secrets.',
-    )
+    .description('List configured proxy hostnames and their route bind-IP mappings.')
     .action(async () => {
       const store = new ConfigStore();
       const result = await store.load();
 
       if (!result.ok) {
-        process.stderr.write(`${renderLoadError(result)}\n`);
+        writeCliReport({ sink: process.stderr, text: renderLoadError(result), tone: 'error' });
         process.exitCode = 1;
         return;
       }
 
       if (result.source === 'empty') {
-        process.stdout.write(`${result.message}\n`);
+        writeCliReport({ sink: process.stdout, text: result.message });
         return;
       }
 
-      process.stdout.write(`${renderHostsReport(result.config, store.paths.configFile)}\n`);
+      writeCliReport({
+        sink: process.stdout,
+        text: renderHostsReport(result.config, store.paths.configFile),
+      });
     });
+}
 
-  config
+function registerRegionsCommand(target: Command): void {
+  target
     .command('regions')
     .description('List the curated export region groups and their member country codes.')
     .action(() => {
-      process.stdout.write(`${renderRegionGroupsReport()}\n`);
+      writeCliReport({ sink: process.stdout, text: renderRegionGroupsReport() });
     });
+}
 
-  config
+function registerExposureCommand(target: Command): void {
+  target
     .command('exposure')
     .option('--mode <mode>', 'Set exposure mode to loopback, private-network, or public.')
     .option('--base-domain <domain>', 'Set the base domain used to derive per-route hostnames.')
@@ -385,40 +419,49 @@ export function registerConfigCommands(program: Command): void {
       [],
     )
     .description(
-      'Inspect or update remote exposure mode, bind IPs, DNS guidance, and restart status without raw JSON edits.',
+      'Inspect or update how Mullgate publishes route hostnames, bind IPs, and restart guidance.',
     )
     .action(async (options: ExposureCommandOptions) => {
       const store = new ConfigStore();
       const result = await store.load();
 
       if (!result.ok) {
-        process.stderr.write(`${renderLoadError(result)}\n`);
+        writeCliReport({ sink: process.stderr, text: renderLoadError(result), tone: 'error' });
         process.exitCode = 1;
         return;
       }
 
       if (result.source === 'empty') {
-        process.stderr.write(`${renderMissingConfig(result.message, store.paths.configFile)}\n`);
+        writeCliReport({
+          sink: process.stderr,
+          text: renderMissingConfig(result.message, store.paths.configFile),
+          tone: 'error',
+        });
         process.exitCode = 1;
         return;
       }
 
       if (!hasExposureUpdate(options)) {
-        process.stdout.write(`${renderExposureReport(result.config, store.paths.configFile)}\n`);
+        writeCliReport({
+          sink: process.stdout,
+          text: renderExposureReport(result.config, store.paths.configFile),
+        });
         return;
       }
 
       if (options.baseDomain !== undefined && options.clearBaseDomain) {
-        process.stderr.write(
-          `${renderExposureUpdateError({
+        writeCliReport({
+          sink: process.stderr,
+          text: renderExposureUpdateError({
             ok: false,
             phase: 'setup-validation',
             source: 'input',
             code: 'AMBIGUOUS_BASE_DOMAIN',
             message: 'Pass --base-domain or --clear-base-domain, not both.',
             artifactPath: store.paths.configFile,
-          })}\n`,
-        );
+          }),
+          tone: 'error',
+        });
         process.exitCode = 1;
         return;
       }
@@ -429,16 +472,18 @@ export function registerConfigCommands(program: Command): void {
         try {
           mode = parseExposureModeOption(options.mode);
         } catch (error) {
-          process.stderr.write(
-            `${renderExposureUpdateError({
+          writeCliReport({
+            sink: process.stderr,
+            text: renderExposureUpdateError({
               ok: false,
               phase: 'setup-validation',
               source: 'input',
               code: 'INVALID_EXPOSURE_MODE',
               message: error instanceof Error ? error.message : String(error),
               artifactPath: store.paths.configFile,
-            })}\n`,
-          );
+            }),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
@@ -455,7 +500,11 @@ export function registerConfigCommands(program: Command): void {
       });
 
       if (!updateResult.ok) {
-        process.stderr.write(`${renderExposureUpdateError(updateResult)}\n`);
+        writeCliReport({
+          sink: process.stderr,
+          text: renderExposureUpdateError(updateResult),
+          tone: 'error',
+        });
         process.exitCode = 1;
         return;
       }
@@ -463,26 +512,32 @@ export function registerConfigCommands(program: Command): void {
       try {
         await store.save(updateResult.config);
       } catch (error) {
-        process.stderr.write(
-          `${renderValidationError({
+        writeCliReport({
+          sink: process.stderr,
+          text: renderValidationError({
             ok: false,
             phase: 'persist-config',
             source: 'filesystem',
             message: 'Failed to persist the updated exposure contract.',
             artifactPath: store.paths.configFile,
             cause: error instanceof Error ? error.message : String(error),
-          })}\n`,
-        );
+          }),
+          tone: 'error',
+        });
         process.exitCode = 1;
         return;
       }
 
-      process.stdout.write(
-        `${renderExposureUpdateSuccess(updateResult.config, store.paths.configFile)}\n`,
-      );
+      writeCliReport({
+        sink: process.stdout,
+        text: renderExposureUpdateSuccess(updateResult.config, store.paths.configFile),
+        tone: 'success',
+      });
     });
+}
 
-  config
+function registerExportCommand(target: Command): void {
+  target
     .command('export')
     .option('--protocol <protocol>', 'Export proxy URLs for socks5, http, or https.')
     .option(
@@ -509,56 +564,62 @@ export function registerConfigCommands(program: Command): void {
       '--count <number>',
       'Apply a per-selector export cap to the immediately preceding --country or --region batch.',
     )
-    .option('--guided', 'Launch a guided export flow, like setup, for creating proxy lists.')
-    .option('--dry-run', 'Preview a secret-safe export summary without writing a file.')
+    .option('--guided', 'Launch a guided flow for creating proxy lists.')
+    .option('--dry-run', 'Preview the export without writing a file.')
     .option('--stdout', 'Write the exported proxy URLs to stdout instead of a file.')
     .option('--force', 'Overwrite an existing output file.')
     .option('--output <path>', 'Write the export to this path instead of using an auto filename.')
     .description(
-      'Export proxy URLs to a text file with ordered country/region selector batches, optional city/server/provider filters, and deterministic dedupe.',
+      'Export proxy URLs to a text file with ordered country or region batches plus optional city, server, and provider filters.',
     )
     .action(async (options: ProxyExportCommandOptions) => {
       const store = new ConfigStore();
       const result = await store.load();
 
       if (!result.ok) {
-        process.stderr.write(
-          `${renderProxyExportError({
+        writeCliReport({
+          sink: process.stderr,
+          text: renderProxyExportError({
             ok: false,
             phase: result.phase,
             source: result.source,
             message: result.message,
             artifactPath: result.artifactPath,
-          })}\n`,
-        );
+          }),
+          tone: 'error',
+        });
         process.exitCode = 1;
         return;
       }
 
       if (result.source === 'empty') {
-        process.stderr.write(
-          `${renderProxyExportError({
+        writeCliReport({
+          sink: process.stderr,
+          text: renderProxyExportError({
             ok: false,
             phase: 'load-config',
             source: 'empty',
             message: result.message,
             configPath: store.paths.configFile,
-          })}\n`,
-        );
+          }),
+          tone: 'error',
+        });
         process.exitCode = 1;
         return;
       }
 
       try {
-        const selectorResult = parseProxyExportSelectors(extractConfigExportArgs(process.argv));
+        const selectorResult = parseProxyExportSelectors(extractProxyExportArgs(process.argv));
 
         if (!selectorResult.ok) {
-          process.stderr.write(
-            `${renderProxyExportError({
+          writeCliReport({
+            sink: process.stderr,
+            text: renderProxyExportError({
               ...selectorResult,
               configPath: store.paths.configFile,
-            })}\n`,
-          );
+            }),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
@@ -566,7 +627,11 @@ export function registerConfigCommands(program: Command): void {
         const relayCatalogResult = await loadRelayCatalogForProxyExport({ store });
 
         if (!relayCatalogResult.ok) {
-          process.stderr.write(`${renderProxyExportError(relayCatalogResult)}\n`);
+          writeCliReport({
+            sink: process.stderr,
+            text: renderProxyExportError(relayCatalogResult),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
@@ -580,7 +645,11 @@ export function registerConfigCommands(program: Command): void {
         });
 
         if (!resolvedInput.ok) {
-          process.stderr.write(`${renderProxyExportError(resolvedInput)}\n`);
+          writeCliReport({
+            sink: process.stderr,
+            text: renderProxyExportError(resolvedInput),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
@@ -594,7 +663,11 @@ export function registerConfigCommands(program: Command): void {
         });
 
         if (!ensuredRoutes.ok) {
-          process.stderr.write(`${renderProxyExportError(ensuredRoutes)}\n`);
+          writeCliReport({
+            sink: process.stderr,
+            text: renderProxyExportError(ensuredRoutes),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
@@ -608,7 +681,11 @@ export function registerConfigCommands(program: Command): void {
         });
 
         if (!exportPlan.ok) {
-          process.stderr.write(`${renderProxyExportError(exportPlan)}\n`);
+          writeCliReport({
+            sink: process.stderr,
+            text: renderProxyExportError(exportPlan),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
@@ -621,63 +698,80 @@ export function registerConfigCommands(program: Command): void {
         });
 
         if (!deliveryResult.ok) {
-          process.stderr.write(`${renderProxyExportError(deliveryResult)}\n`);
+          writeCliReport({
+            sink: process.stderr,
+            text: renderProxyExportError(deliveryResult),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
       } catch (error) {
-        process.stderr.write(
-          `${renderProxyExportError({
+        writeCliReport({
+          sink: process.stderr,
+          text: renderProxyExportError({
             ok: false,
             phase: 'export-proxies',
             source: 'input',
             message: error instanceof Error ? error.message : String(error),
             configPath: store.paths.configFile,
-          })}\n`,
-        );
+          }),
+          tone: 'error',
+        });
         process.exitCode = 1;
       }
     });
+}
 
-  config
+function registerConfigGetCommand(target: Command): void {
+  target
     .command('get')
     .argument('<keyPath>', 'Dot-separated key path within the saved config.')
-    .description('Read one saved config value with secret-safe redaction.')
+    .description('Read one saved config value.')
     .action(async (keyPath: string) => {
       const store = new ConfigStore();
       const result = await store.load();
 
       if (!result.ok) {
-        process.stderr.write(`${renderLoadError(result)}\n`);
+        writeCliReport({ sink: process.stderr, text: renderLoadError(result), tone: 'error' });
         process.exitCode = 1;
         return;
       }
 
       if (result.source === 'empty') {
-        process.stderr.write(`${renderMissingConfig(result.message, store.paths.configFile)}\n`);
+        writeCliReport({
+          sink: process.stderr,
+          text: renderMissingConfig(result.message, store.paths.configFile),
+          tone: 'error',
+        });
         process.exitCode = 1;
         return;
       }
 
-      const redacted = redactConfig(result.config);
-      const resolved = getConfigValue(redacted, keyPath);
+      const resolved = getConfigValue(result.config, keyPath);
 
       if (!resolved.found) {
-        process.stderr.write(`${renderConfigPathError('Config key was not found.', keyPath)}\n`);
+        writeCliReport({
+          sink: process.stderr,
+          text: renderConfigPathError('Config key was not found.', keyPath),
+          tone: 'error',
+        });
         process.exitCode = 1;
         return;
       }
 
-      process.stdout.write(`${formatOutputValue(resolved.value)}\n`);
+      writeCliRaw({ sink: process.stdout, text: `${formatOutputValue(resolved.value)}\n` });
     });
+}
 
-  config
+function registerConfigSetCommand(target: Command): void {
+  target
     .command('set')
     .argument('<keyPath>', 'Editable config key path.')
     .argument('[value]', 'Replacement value. Use --stdin for secrets or complex JSON.')
     .option('--stdin', 'Read the replacement value from standard input.')
     .option('--json', 'Parse the provided value as JSON before saving.')
-    .description('Update a saved config value without printing secrets back to the terminal.')
+    .description('Update a saved config value without editing JSON by hand.')
     .action(
       async (
         keyPath: string,
@@ -688,17 +782,24 @@ export function registerConfigCommands(program: Command): void {
         const spec = EDITABLE_CONFIG_FIELDS.get(keyPath);
 
         if (!spec) {
-          process.stderr.write(
-            `${renderConfigPathError('Only a safe subset of config fields is editable. Use `mullgate config show` to inspect the saved schema.', keyPath)}\n`,
-          );
+          writeCliReport({
+            sink: process.stderr,
+            text: renderConfigPathError(
+              'Only a safe subset of config fields is editable. Use `mullgate config show` to inspect the saved schema.',
+              keyPath,
+            ),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
 
         if (options.stdin && value !== undefined) {
-          process.stderr.write(
-            `${renderConfigPathError('Pass a value or --stdin, not both.', keyPath)}\n`,
-          );
+          writeCliReport({
+            sink: process.stderr,
+            text: renderConfigPathError('Pass a value or --stdin, not both.', keyPath),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
@@ -706,9 +807,11 @@ export function registerConfigCommands(program: Command): void {
         const rawValue = options.stdin ? await readStdinValue() : value;
 
         if (rawValue === undefined) {
-          process.stderr.write(
-            `${renderConfigPathError('A replacement value is required.', keyPath)}\n`,
-          );
+          writeCliReport({
+            sink: process.stderr,
+            text: renderConfigPathError('A replacement value is required.', keyPath),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
@@ -716,15 +819,21 @@ export function registerConfigCommands(program: Command): void {
         const loadResult = await store.load();
 
         if (!loadResult.ok) {
-          process.stderr.write(`${renderLoadError(loadResult)}\n`);
+          writeCliReport({
+            sink: process.stderr,
+            text: renderLoadError(loadResult),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
 
         if (loadResult.source === 'empty') {
-          process.stderr.write(
-            `${renderMissingConfig(loadResult.message, store.paths.configFile)}\n`,
-          );
+          writeCliReport({
+            sink: process.stderr,
+            text: renderMissingConfig(loadResult.message, store.paths.configFile),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
@@ -736,9 +845,14 @@ export function registerConfigCommands(program: Command): void {
           setConfigValue(updatedConfig, keyPath, parsedValue);
           applyPostSetNormalization(updatedConfig, keyPath);
         } catch (error) {
-          process.stderr.write(
-            `${renderConfigPathError(error instanceof Error ? error.message : String(error), keyPath)}\n`,
-          );
+          writeCliReport({
+            sink: process.stderr,
+            text: renderConfigPathError(
+              error instanceof Error ? error.message : String(error),
+              keyPath,
+            ),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
@@ -748,41 +862,49 @@ export function registerConfigCommands(program: Command): void {
           canonicalConfig,
           'unvalidated',
           null,
-          `Config changed at ${keyPath}; rerun \`mullgate config validate\` to refresh derived artifacts.`,
+          `Config changed at ${keyPath}; rerun \`mullgate validate\` to refresh derived artifacts.`,
         );
 
         try {
           await store.save(staleConfig);
         } catch (error) {
-          process.stderr.write(
-            `${renderValidationError({
+          writeCliReport({
+            sink: process.stderr,
+            text: renderValidationError({
               ok: false,
               phase: 'persist-config',
               source: 'filesystem',
               message: 'Failed to persist the updated canonical config.',
               artifactPath: store.paths.configFile,
               cause: error instanceof Error ? error.message : String(error),
-            })}\n`,
-          );
+            }),
+            tone: 'error',
+          });
           process.exitCode = 1;
           return;
         }
 
-        process.stdout.write(
-          `${[
+        writeCliReport({
+          sink: process.stdout,
+          text: [
             'Mullgate config updated.',
             'phase: persist-config',
             'source: input',
             `key: ${keyPath}`,
             `config: ${store.paths.configFile}`,
-            spec.secret ? 'value: [redacted]' : 'value: updated',
+            spec.secret
+              ? 'value: stored without echoing it back to the terminal'
+              : 'value: updated',
             'runtime status: unvalidated',
-          ].join('\n')}\n`,
-        );
+          ].join('\n'),
+          tone: 'success',
+        });
       },
     );
+}
 
-  config
+function registerValidateCommand(target: Command): void {
+  target
     .command('validate')
     .option(
       '--refresh',
@@ -796,12 +918,20 @@ export function registerConfigCommands(program: Command): void {
       const result = await validateSavedConfig({ store, refresh: Boolean(options.refresh) });
 
       if (!result.ok) {
-        process.stderr.write(`${renderValidationError(result)}\n`);
+        writeCliReport({
+          sink: process.stderr,
+          text: renderValidationError(result),
+          tone: 'error',
+        });
         process.exitCode = 1;
         return;
       }
 
-      process.stdout.write(`${renderValidationSuccess(result)}\n`);
+      writeCliReport({
+        sink: process.stdout,
+        text: renderValidationSuccess(result),
+        tone: 'success',
+      });
     });
 }
 
@@ -919,8 +1049,8 @@ export function renderExposureReport(config: MullgateConfig, configPath: string)
       `   route id: ${route.routeId}`,
       `   dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
       ...route.endpoints.flatMap((endpoint) => [
-        `   ${endpoint.protocol} hostname: ${endpoint.redactedHostnameUrl}`,
-        `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`,
+        `   ${endpoint.protocol} hostname: ${createAuthenticatedEndpointUrl(config, endpoint.hostnameUrl)}`,
+        `   ${endpoint.protocol} direct ip: ${createAuthenticatedEndpointUrl(config, endpoint.bindUrl)}`,
       ]),
     ]),
     '',
@@ -930,7 +1060,7 @@ export function renderExposureReport(config: MullgateConfig, configPath: string)
       : ['- none']),
     '',
     'local host-file mapping',
-    '- `mullgate config hosts` remains the copy/paste /etc/hosts view for local-only testing.',
+    '- `mullgate hosts` remains the copy/paste /etc/hosts view for local-only testing.',
   ].join('\n');
 }
 
@@ -966,10 +1096,18 @@ export function updateExposureConfig(
 
   const updatedRoutingLocations = config.routing.locations.map((location, index) => ({
     ...location,
-    bindIp: validated.routeBindIps[index]!,
+    bindIp: requireArrayValue(
+      validated.routeBindIps,
+      index,
+      `Missing validated bind IP for routed location ${location.alias}.`,
+    ),
     hostname: deriveExposureHostname(
       location.alias,
-      validated.routeBindIps[index]!,
+      requireArrayValue(
+        validated.routeBindIps,
+        index,
+        `Missing validated bind IP for routed location ${location.alias}.`,
+      ),
       validated.baseDomain,
       validated.mode,
     ),
@@ -999,7 +1137,7 @@ export function updateExposureConfig(
       canonicalConfig,
       'unvalidated',
       null,
-      'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+      'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
     ),
   };
 }
@@ -1045,7 +1183,7 @@ export function renderRegionGroupsReport(): string {
       '',
       `${index + 1}. ${region.name}`,
       `   countries: ${region.countryCodes.join(', ')}`,
-      `   example: mullgate config export --region ${region.name} --count 5`,
+      `   example: mullgate export --region ${region.name} --count 5`,
     ]),
   ].join('\n');
 }
@@ -1606,7 +1744,6 @@ export function buildProxyExportPlan(input: {
           username: input.config.setup.auth.username,
           password: input.config.setup.auth.password,
         }),
-        redactedUrl: endpoint.redactedHostnameUrl,
       } satisfies ProxyExportEntry;
     })
     .filter(isDefined);
@@ -1628,7 +1765,6 @@ export function buildProxyExportPlan(input: {
       selectors: [],
       entries,
       outputText: `${entries.map((entry) => entry.url).join('\n')}\n`,
-      redactedOutputText: `${entries.map((entry) => entry.redactedUrl).join('\n')}\n`,
       suggestedFilename: buildProxyExportFilename({
         protocol: input.protocol,
         selectors: input.selectors,
@@ -1681,7 +1817,6 @@ export function buildProxyExportPlan(input: {
     selectors: selectorResults,
     entries: selectedEntries,
     outputText: `${selectedEntries.map((entry) => entry.url).join('\n')}\n`,
-    redactedOutputText: `${selectedEntries.map((entry) => entry.redactedUrl).join('\n')}\n`,
     suggestedFilename: buildProxyExportFilename({
       protocol: input.protocol,
       selectors: input.selectors,
@@ -1722,7 +1857,7 @@ export function renderProxyExportPreview(input: {
     'preview',
     ...input.result.entries.map(
       (entry, index) =>
-        `${index + 1}. ${entry.redactedUrl} (alias: ${entry.alias}, country: ${entry.countryCode ?? 'n/a'}, city: ${entry.cityCode ?? 'n/a'}, relay: ${entry.relayHostname ?? 'n/a'})`,
+        `${index + 1}. ${entry.url} (alias: ${entry.alias}, country: ${entry.countryCode ?? 'n/a'}, city: ${entry.cityCode ?? 'n/a'}, relay: ${entry.relayHostname ?? 'n/a'})`,
     ),
   ].join('\n');
 }
@@ -1854,12 +1989,17 @@ async function collectGuidedProxyExportInput(input: {
   const prompts = createGuidedPromptClient();
 
   try {
-    prompts.intro('Mullgate proxy export');
+    prompts.intro(
+      'Mullgate proxy export\nBuild a ready-to-paste proxy list from your saved routes.',
+    );
 
     const protocol =
       input.initialProtocol ??
       (await prompts.select({
-        message: 'Proxy protocol',
+        message: describePromptStep(
+          'Proxy protocol',
+          'Pick the scheme your clients expect in the exported proxy URLs.',
+        ),
         initialValue: 'socks5',
         options: [
           { value: 'socks5', label: 'SOCKS5' },
@@ -1899,7 +2039,10 @@ async function collectGuidedProxyExportInput(input: {
       input.initialWriteMode !== 'file' || input.initialOutputPath !== undefined
         ? input.initialWriteMode
         : await prompts.select({
-            message: 'Output mode',
+            message: describePromptStep(
+              'Output mode',
+              'Choose whether Mullgate should write a file, print the list, or just preview it.',
+            ),
             initialValue: 'file',
             options: [
               { value: 'file', label: 'Write file' },
@@ -1924,7 +2067,10 @@ async function collectGuidedProxyExportInput(input: {
 
     if (writeMode === 'file' && !outputPath) {
       const promptedOutputPath = await prompts.text({
-        message: 'Output path',
+        message: describePromptStep(
+          'Output path',
+          'Choose where Mullgate should write the proxy list file.',
+        ),
         initialValue: 'proxies.txt',
         placeholder: 'proxies.txt',
         validate: (value) =>
@@ -1971,7 +2117,10 @@ async function collectGuidedProxyExportSelectors(
   relayCatalog: MullvadRelayCatalog,
 ): Promise<readonly ProxyExportSelector[] | typeof GUIDED_PROMPT_CANCELLED> {
   const filterExport = await prompts.confirm({
-    message: 'Filter the export to specific countries or regions?',
+    message: describePromptStep(
+      'Filter the export?',
+      'Choose specific countries or region groups if you do not want every configured route in the file.',
+    ),
     initialValue: false,
     active: 'Yes',
     inactive: 'No',
@@ -2022,7 +2171,10 @@ async function collectGuidedProxyExportSelectors(
 
   while (true) {
     const addAnother = await prompts.confirm({
-      message: selectors.length === 0 ? 'Add a selector batch?' : 'Add another selector batch?',
+      message: describePromptStep(
+        selectors.length === 0 ? 'Add a selector batch?' : 'Add another selector batch?',
+        'Each batch can target one country or region, plus optional provider, city, server, and count filters.',
+      ),
       initialValue: selectors.length === 0,
       active: 'Yes',
       inactive: 'No',
@@ -2058,7 +2210,10 @@ async function collectGuidedProxyExportSelectorSeeds(input: {
 }): Promise<readonly GuidedProxyExportSelectorSeed[] | typeof GUIDED_PROMPT_CANCELLED> {
   while (true) {
     const selectedCountries = await input.prompts.multiselect({
-      message: 'Country batches',
+      message: describePromptStep(
+        'Country batches',
+        'Select one or more countries to turn into export batches.',
+      ),
       options: input.countryOptions,
       placeholder: 'Select one or more countries',
     });
@@ -2068,7 +2223,10 @@ async function collectGuidedProxyExportSelectorSeeds(input: {
     }
 
     const selectedRegions = await input.prompts.multiselect({
-      message: 'Region batches',
+      message: describePromptStep(
+        'Region batches',
+        'Select one or more built-in region groups such as Europe or Americas.',
+      ),
       options: input.regionOptions,
       placeholder: 'Select one or more region groups',
     });
@@ -2085,7 +2243,10 @@ async function collectGuidedProxyExportSelectorSeeds(input: {
     }
 
     const manualOnly = await input.prompts.confirm({
-      message: 'No countries or regions selected. Build batches one at a time instead?',
+      message: describePromptStep(
+        'Nothing selected from the lists yet.',
+        'You can keep using the checklists or switch to building batches one at a time.',
+      ),
       initialValue: true,
       active: 'Yes',
       inactive: 'Select from lists',
@@ -2141,7 +2302,10 @@ async function collectManualGuidedProxyExportSelectorSeed(input: {
   readonly regionOptions: readonly PromptSelectOption[];
 }): Promise<GuidedProxyExportSelectorSeed | typeof GUIDED_PROMPT_CANCELLED> {
   const selectorType = await input.prompts.select({
-    message: 'Selector type',
+    message: describePromptStep(
+      'Selector type',
+      'Choose whether this batch targets one country or one built-in region group.',
+    ),
     initialValue: 'country',
     options: [
       { value: 'country', label: 'Country' },
@@ -2157,7 +2321,10 @@ async function collectManualGuidedProxyExportSelectorSeed(input: {
 
   if (kind === 'region') {
     const region = await input.prompts.select({
-      message: 'Region',
+      message: describePromptStep(
+        'Region',
+        'Pick the region group that should feed this export batch.',
+      ),
       options: input.regionOptions,
       placeholder: 'Europe, Americas, Asia-Pacific',
     });
@@ -2173,7 +2340,7 @@ async function collectManualGuidedProxyExportSelectorSeed(input: {
   }
 
   const countryCode = await input.prompts.select({
-    message: 'Country',
+    message: describePromptStep('Country', 'Pick the country that should feed this export batch.'),
     options: input.countryOptions,
     placeholder: 'Sweden, Austria, United States',
   });
@@ -2197,7 +2364,10 @@ async function collectGuidedRegionSelector(input: {
   const providerFilter =
     providerOptions.length > 0
       ? await input.prompts.confirm({
-          message: `Filter ${input.region} by provider?`,
+          message: describePromptStep(
+            `Filter ${input.region} by provider?`,
+            'Use this if you want only specific Mullvad hosting providers for this batch.',
+          ),
           initialValue: false,
           active: 'Yes',
           inactive: 'No',
@@ -2211,7 +2381,10 @@ async function collectGuidedRegionSelector(input: {
   const providers =
     providerFilter && providerOptions.length > 0
       ? await input.prompts.multiselect({
-          message: `Providers for ${input.region}`,
+          message: describePromptStep(
+            `Providers for ${input.region}`,
+            'Select one or more providers to keep in this region batch.',
+          ),
           options: providerOptions,
           placeholder: 'm247, xtom, datawagon',
         })
@@ -2222,7 +2395,10 @@ async function collectGuidedRegionSelector(input: {
   }
 
   const selectorCount = await input.prompts.text({
-    message: `Count for ${input.region} (number or all)`,
+    message: describePromptStep(
+      `Count for ${input.region} (number or all)`,
+      'Set how many proxies this batch should contribute, or use "all".',
+    ),
     initialValue: '1',
     validate: validateProxyExportSelectorCountInput,
   });
@@ -2252,7 +2428,10 @@ async function collectGuidedCountrySelector(input: {
   const cityFilter =
     cityOptions.length > 0
       ? await input.prompts.confirm({
-          message: `Pin ${countryLabel} to a city?`,
+          message: describePromptStep(
+            `Pin ${countryLabel} to a city?`,
+            'Choose one city if you want a tighter location filter than the whole country.',
+          ),
           initialValue: false,
           active: 'Yes',
           inactive: 'No',
@@ -2266,7 +2445,10 @@ async function collectGuidedCountrySelector(input: {
   const city =
     cityFilter && cityOptions.length > 0
       ? await input.prompts.select({
-          message: `${countryLabel} city`,
+          message: describePromptStep(
+            `${countryLabel} city`,
+            'Pick the city that should feed this country batch.',
+          ),
           options: cityOptions,
           placeholder: 'Gothenburg, Vienna, New York',
         })
@@ -2284,7 +2466,10 @@ async function collectGuidedCountrySelector(input: {
   const providerFilter =
     providerOptions.length > 0
       ? await input.prompts.confirm({
-          message: `Filter ${countryLabel} by provider?`,
+          message: describePromptStep(
+            `Filter ${countryLabel} by provider?`,
+            'Use this if you want only specific Mullvad hosting providers for this country batch.',
+          ),
           initialValue: false,
           active: 'Yes',
           inactive: 'No',
@@ -2298,7 +2483,10 @@ async function collectGuidedCountrySelector(input: {
   const providers =
     providerFilter && providerOptions.length > 0
       ? await input.prompts.multiselect({
-          message: `${countryLabel} providers`,
+          message: describePromptStep(
+            `${countryLabel} providers`,
+            'Select one or more providers to keep in this batch.',
+          ),
           options: providerOptions,
           placeholder: 'm247, xtom, datawagon',
         })
@@ -2317,7 +2505,10 @@ async function collectGuidedCountrySelector(input: {
   const serverFilter =
     serverOptions.length > 0
       ? await input.prompts.confirm({
-          message: `Pin ${countryLabel} to one exact server?`,
+          message: describePromptStep(
+            `Pin ${countryLabel} to one exact server?`,
+            'Use this only when you want a single named Mullvad relay host.',
+          ),
           initialValue: false,
           active: 'Yes',
           inactive: 'No',
@@ -2331,7 +2522,10 @@ async function collectGuidedCountrySelector(input: {
   const server =
     serverFilter && serverOptions.length > 0
       ? await input.prompts.select({
-          message: `${countryLabel} server`,
+          message: describePromptStep(
+            `${countryLabel} server`,
+            'Pick the exact relay hostname for this batch.',
+          ),
           options: serverOptions,
           placeholder: 'se-got-wg-101, at-vie-wg-001',
         })
@@ -2345,7 +2539,10 @@ async function collectGuidedCountrySelector(input: {
     typeof server === 'string'
       ? '1'
       : await input.prompts.text({
-          message: `Count for ${countryLabel} (number or all)`,
+          message: describePromptStep(
+            `Count for ${countryLabel} (number or all)`,
+            'Set how many proxies this batch should contribute, or use "all".',
+          ),
           initialValue: '1',
           validate: validateProxyExportSelectorCountInput,
         });
@@ -2679,7 +2876,11 @@ async function ensureProxyExportRoutes(input: {
   const provisionedRoutes = [];
 
   for (let index = 0; index < plannedRoutes.length; index += 1) {
-    const route = plannedRoutes[index]!;
+    const route = requireArrayValue(
+      plannedRoutes,
+      index,
+      `Missing planned export route at index ${index}.`,
+    );
     const provisionResult = await provisionRouteWithRetries({
       accountNumber: input.config.mullvad.accountNumber,
       route,
@@ -2702,7 +2903,11 @@ async function ensureProxyExportRoutes(input: {
     provisionedRoutes.push({
       route,
       provisioning: provisionResult,
-      selector: plannedTargets.targets[index]!.selector,
+      selector: requireArrayValue(
+        plannedTargets.targets,
+        index,
+        `Missing planned export selector at index ${index}.`,
+      ).selector,
     });
   }
 
@@ -2712,7 +2917,7 @@ async function ensureProxyExportRoutes(input: {
     routing: {
       locations: [
         ...input.config.routing.locations,
-        ...provisionedRoutes.map(({ route, provisioning, selector }, index) =>
+        ...provisionedRoutes.map(({ route, provisioning, selector }) =>
           createProvisionedRouteConfig({
             route,
             accountNumber: input.config.mullvad.accountNumber,
@@ -2845,7 +3050,6 @@ function planProxyExportRelayTargets(input: {
           relayHostname: route.relayHostname,
           provider: route.provider,
           url: '',
-          redactedUrl: '',
         },
       });
     });
@@ -3134,26 +3338,28 @@ async function deliverProxyExport(input: {
   readonly guided: boolean;
 }): Promise<{ readonly ok: true } | ProxyExportFailure> {
   if (input.input.writeMode === 'stdout') {
-    process.stdout.write(input.result.outputText);
-    process.stderr.write(
-      `${renderProxyExportStdoutNotice({
+    writeCliRaw({ sink: process.stdout, text: input.result.outputText });
+    writeCliReport({
+      sink: process.stderr,
+      text: renderProxyExportStdoutNotice({
         result: input.result,
         configPath: input.configPath,
-      })}\n`,
-    );
+      }),
+    });
     return { ok: true };
   }
 
   const defaultOutputPath = input.input.outputPath ?? `./${input.result.suggestedFilename}`;
 
   if (input.input.writeMode === 'dry-run') {
-    process.stdout.write(
-      `${renderProxyExportPreview({
+    writeCliReport({
+      sink: process.stdout,
+      text: renderProxyExportPreview({
         result: input.result,
         configPath: input.configPath,
         outputPath: defaultOutputPath,
-      })}\n`,
-    );
+      }),
+    });
     return { ok: true };
   }
 
@@ -3183,13 +3389,15 @@ async function deliverProxyExport(input: {
     };
   }
 
-  process.stdout.write(
-    `${renderProxyExportSuccess({
+  writeCliReport({
+    sink: process.stdout,
+    text: renderProxyExportSuccess({
       result: input.result,
       configPath: input.configPath,
       outputPath: resolvedOutput.displayPath,
-    })}\n`,
-  );
+    }),
+    tone: 'success',
+  });
   return { ok: true };
 }
 
@@ -3233,7 +3441,10 @@ async function resolveProxyExportOutputPath(input: {
   try {
     while (true) {
       const overwrite = await prompts.confirm({
-        message: `Output file ${displayPath} already exists. Overwrite it?`,
+        message: describePromptStep(
+          `Output file ${displayPath} already exists. Overwrite it?`,
+          'Choose overwrite to replace it now, or pick a new destination path.',
+        ),
         initialValue: false,
         active: 'Overwrite',
         inactive: 'Choose another path',
@@ -3260,7 +3471,10 @@ async function resolveProxyExportOutputPath(input: {
       }
 
       const nextPath = await prompts.text({
-        message: 'Choose a different output path',
+        message: describePromptStep(
+          'Choose a different output path',
+          'Pick a new file path for the proxy list.',
+        ),
         initialValue: 'proxies.txt',
         validate: (value) =>
           readOptionalString(value) ? undefined : 'Output path is required when writing a file.',
@@ -3596,27 +3810,6 @@ function createGuidedPromptClient(): GuidedPromptClient {
   };
 }
 
-function validateProxyExportProtocolInput(value: string | undefined): string | undefined {
-  const normalized = value?.trim().toLowerCase() ?? '';
-  return normalized === 'socks5' || normalized === 'http' || normalized === 'https'
-    ? undefined
-    : 'Enter socks5, http, or https.';
-}
-
-function validateProxyExportWriteModeInput(value: string | undefined): string | undefined {
-  const normalized = value?.trim().toLowerCase() ?? '';
-  return normalized === 'file' || normalized === 'stdout' || normalized === 'dry-run'
-    ? undefined
-    : 'Enter file, stdout, or dry-run.';
-}
-
-function validateProxyExportSelectorTypeInput(value: string | undefined): string | undefined {
-  const normalized = value?.trim().toLowerCase() ?? '';
-  return normalized === 'country' || normalized === 'region'
-    ? undefined
-    : 'Enter country or region.';
-}
-
 function validateProxyExportSelectorCountInput(value: string | undefined): string | undefined {
   const normalized = value?.trim().toLowerCase() ?? '';
 
@@ -3626,23 +3819,6 @@ function validateProxyExportSelectorCountInput(value: string | undefined): strin
 
   try {
     parseProxyExportCount(normalized);
-    return undefined;
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error);
-  }
-}
-
-function validateGuidedProxyExportSelectorValue(input: {
-  readonly kind: ProxyExportSelector['kind'];
-  readonly value: string | undefined;
-}): string | undefined {
-  try {
-    const normalized = normalizeProxyExportSelectorValue(input.value ?? '', input.kind);
-
-    if (input.kind === 'region' && !resolveRegionCountryCodes(normalized)) {
-      return `Unknown region ${normalized}. Supported regions: ${listRegionGroupNames().join(', ')}.`;
-    }
-
     return undefined;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
@@ -3877,7 +4053,7 @@ function renderConfigPathError(message: string, keyPath: string): string {
 
 function renderValidationSuccess(result: ConfigValidationSuccess): string {
   return [
-    'Mullgate config validated.',
+    'Mullgate validate complete.',
     `phase: ${result.phase}`,
     `source: ${result.source}`,
     `artifact: ${result.artifactPath}`,
@@ -3890,7 +4066,7 @@ function renderValidationSuccess(result: ConfigValidationSuccess): string {
 
 function renderValidationError(result: ConfigValidationFailure): string {
   return [
-    'Mullgate config validation failed.',
+    'Mullgate validate failed.',
     `phase: ${result.phase}`,
     `source: ${result.source}`,
     ...(result.artifactPath ? [`artifact: ${result.artifactPath}`] : []),
@@ -3929,7 +4105,7 @@ function setConfigValue(config: MullgateConfig, keyPath: string, value: unknown)
   let current: Record<string, unknown> = config as unknown as Record<string, unknown>;
 
   for (let index = 0; index < segments.length - 1; index += 1) {
-    const segment = segments[index]!;
+    const segment = requireArrayValue(segments, index, `Config path ${keyPath} is not writable.`);
     const next = current[segment];
 
     if (!next || typeof next !== 'object') {
@@ -3939,7 +4115,8 @@ function setConfigValue(config: MullgateConfig, keyPath: string, value: unknown)
     current = next as Record<string, unknown>;
   }
 
-  current[segments.at(-1)!] = value;
+  const finalSegment = requireDefined(segments.at(-1), `Config path ${keyPath} is not writable.`);
+  current[finalSegment] = value;
 }
 
 function applyPostSetNormalization(config: MullgateConfig, changedPath: string): void {
@@ -4012,7 +4189,13 @@ function collectRepeatedValues(value: string, previous: string[]): string[] {
   return [...previous, value.trim()].filter((entry) => entry.length > 0);
 }
 
-function extractConfigExportArgs(argv: readonly string[]): string[] {
+function extractProxyExportArgs(argv: readonly string[]): string[] {
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === 'export') {
+      return argv.slice(index + 1);
+    }
+  }
+
   for (let index = 0; index < argv.length - 1; index += 1) {
     if (argv[index] === 'config' && argv[index + 1] === 'export') {
       return argv.slice(index + 2);
@@ -4030,6 +4213,22 @@ function parseProxyExportProtocol(raw: string | undefined): ProxyExportProtocol 
   }
 
   throw new Error('Protocol must be one of socks5, http, or https.');
+}
+
+function createAuthenticatedEndpointUrl(
+  config: Pick<MullgateConfig, 'setup'>,
+  url: string,
+): string {
+  const separatorIndex = url.indexOf('://');
+
+  if (separatorIndex === -1) {
+    return url;
+  }
+
+  const protocol = url.slice(0, separatorIndex);
+  const authorityAndPath = url.slice(separatorIndex + 3);
+
+  return `${protocol}://${encodeURIComponent(config.setup.auth.username)}:${encodeURIComponent(config.setup.auth.password)}@${authorityAndPath}`;
 }
 
 function buildProxyExportFilename(input: {

@@ -1,5 +1,6 @@
 import { REDACTED } from '../config/redact.js';
 import type { MullvadRelay, MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
+import { requireDefined } from '../required.js';
 
 export const FEASIBILITY_ARTIFACT_VERSION = 1 as const;
 export const FEASIBILITY_PROOF_MODEL = 'single-entry-shared-socks-exits' as const;
@@ -284,8 +285,14 @@ export function selectFeasibilityExitRelays(
       endpointIpv4: relay.endpointIpv4,
       ...(relay.endpointIpv6 ? { endpointIpv6: relay.endpointIpv6 } : {}),
       publicKey: relay.publicKey,
-      socksHostname: relay.socksName!,
-      socksPort: relay.socksPort!,
+      socksHostname: requireDefined(
+        relay.socksName,
+        `Relay ${relay.hostname} is missing SOCKS hostname metadata.`,
+      ),
+      socksPort: requireDefined(
+        relay.socksPort,
+        `Relay ${relay.hostname} is missing SOCKS port metadata.`,
+      ),
       source: relay.source,
       location: toRelayLocation(relay),
     })),

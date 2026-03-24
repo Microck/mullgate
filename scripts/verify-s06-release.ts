@@ -11,6 +11,7 @@ import { resolveMullgatePaths } from '../src/config/paths.js';
 import { REDACTED, redactSensitiveText } from '../src/config/redact.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../src/config/schema.js';
 import { ConfigStore } from '../src/config/store.js';
+import { requireArrayValue } from '../src/required.js';
 import type {
   RuntimeBundleManifest,
   RuntimeEndpoint,
@@ -449,7 +450,7 @@ function parseArgs(argv: readonly string[]): VerificationOptions | null {
   let reuseTempHome: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index]!;
+    const argument = requireArrayValue(argv, index, `Missing CLI argument at index ${index}.`);
 
     if (argument === '--') {
       continue;

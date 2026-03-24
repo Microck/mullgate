@@ -51,8 +51,8 @@ For a low-friction Linux proof, start with a local loopback setup using two rout
 Once setup is saved, the next low-friction inspection path is usually:
 
 ```bash
-mullgate config regions
-mullgate config export --guided
+mullgate regions
+mullgate export --guided
 ```
 
 That gives you a guided `proxies.txt` flow with real country and region pick-lists instead of hand-editing URLs or typing country codes from memory.
@@ -63,7 +63,7 @@ See the full examples in [Usage](/docs/guides/usage) and [Setup and Exposure](/d
 
 Linux is the fully supported runtime environment.
 
-macOS and Windows support the CLI, config path, and diagnostic surfaces, but Docker Desktop host networking differs from Linux, so the shipped multi-route runtime should not be treated as fully equivalent there.
+macOS and Windows support the CLI, `path`, and diagnostic surfaces, but Docker Desktop host networking differs from Linux, so the shipped multi-route runtime should not be treated as fully equivalent there.
 
 For the exact support posture, see [Platform Support](/docs/reference/platform-support).
 
@@ -74,4 +74,4 @@ For the exact support posture, see [Platform Support](/docs/reference/platform-s
 3. [Architecture Overview](/docs/architecture/overview)
 4. [Current Runtime Model](/docs/architecture/current-runtime)
 5. [Multi-exit Architecture Spec](/docs/architecture/multi-exit)
-6. [Publishing](/docs/operations/publishing)
+6. [Release Runbook](/docs/operations/release-runbook)

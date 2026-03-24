@@ -12,6 +12,7 @@ import {
   resolveLocationAlias,
 } from '../domain/location-aliases.js';
 import type { MullvadRelay, MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
+import { requireDefined } from '../required.js';
 
 const DEFAULT_ALLOWED_IPS = '0.0.0.0/0, ::/0';
 const DEFAULT_KEEPALIVE_SECONDS = 25;
@@ -135,7 +136,10 @@ export function planWireproxyArtifacts(options: RenderWireproxyOptions): RenderW
     });
   }
 
-  const primaryRoute = routes[0]!;
+  const primaryRoute = requireDefined(
+    routes[0],
+    'Expected at least one rendered route when planning wireproxy artifacts.',
+  );
 
   return {
     ok: true,

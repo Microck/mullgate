@@ -11,6 +11,7 @@ import {
 import path from 'node:path';
 
 import { normalizeLocationToken } from '../domain/location-aliases.js';
+import { requireDefined } from '../required.js';
 import { type MullgatePaths, resolveMullgatePaths } from './paths.js';
 import {
   type MullgateConfig,
@@ -179,7 +180,10 @@ export class ConfigStore {
 export function normalizeMullgateConfig(input: unknown): MullgateConfig {
   const parsed = mullgateConfigInputSchema.parse(input);
   const locations = normalizeRoutingLocations(parsed);
-  const primaryLocation = locations[0]!;
+  const primaryLocation = requireDefined(
+    locations[0],
+    'Expected at least one routed location in the Mullgate config.',
+  );
 
   const normalized: MullgateConfig = {
     ...parsed,

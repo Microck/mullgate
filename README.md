@@ -19,7 +19,7 @@ the main setup path is `mullgate setup`. on a real terminal it opens a guided fl
 
 ![setup demo](images/demos/setup-guided.gif)
 
-once your routes are saved, `mullgate` can also generate ready-to-paste client inventories. use `mullgate config regions` to inspect the built-in region groups, then run `mullgate config export --guided` for a setup-style `proxies.txt` flow with country and region pick-lists, or compose deterministic batches such as `mullgate config export --country se --city got --count 1 --region europe --provider m247 --count 2 --output proxies.txt`.
+once your routes are saved, `mullgate` can also generate ready-to-paste client inventories. use `mullgate regions` to inspect the built-in region groups, then run `mullgate export --guided` for a setup-style `proxies.txt` flow with country and region pick-lists, or compose deterministic batches such as `mullgate export --country se --city got --count 1 --region europe --provider m247 --count 2 --output proxies.txt`.
 
 ## why
 
@@ -80,9 +80,9 @@ for non-interactive setup, start from [`.env.example`](.env.example) and then ru
 
 ```bash
 mullgate setup --non-interactive
-mullgate config hosts
-mullgate config regions
-mullgate config export --guided
+mullgate hosts
+mullgate regions
+mullgate export --guided
 mullgate start
 mullgate status
 mullgate doctor
@@ -92,7 +92,7 @@ mullgate doctor
 
 `mullgate` is currently a Linux-first runtime with truthful cross-platform install, config, and diagnostics surfaces.
 
-| platform | install | `config path` / `status` / `doctor` | full runtime execution |
+| platform | install | `path` / `status` / `doctor` | full runtime execution |
 | --- | --- | --- | --- |
 | Linux | Supported | Supported | **Supported** |
 | macOS | Supported | Supported | **Partial** |
@@ -108,12 +108,13 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 | `mullgate start` | re-render artifacts, validate them, and launch the Docker runtime bundle |
 | `mullgate status` | inspect saved runtime state, runtime artifacts, live Docker Compose state, and exposure entrypoints |
 | `mullgate doctor` | run deterministic diagnostics for config, runtime, bind, DNS, and last-start failures |
-| `mullgate config path` | print active config/state/cache/runtime paths plus platform support posture |
-| `mullgate config hosts` | print hostname to bind-IP mappings and the copy/paste hosts block |
-| `mullgate config export` | generate authenticated proxy URL inventories with ordered country or region batches plus optional city, server, and provider filters |
-| `mullgate config regions` | print the curated region groups accepted by `config export --region ...` |
-| `mullgate config exposure` | inspect or update loopback, private-network, and public exposure posture |
-| `mullgate config validate` | validate rendered wireproxy config and refresh runtime validation metadata |
+| `mullgate autostart` | manage a Linux `systemd --user` unit that starts the proxy runtime at login |
+| `mullgate path` | print active config/state/cache/runtime paths plus platform support posture |
+| `mullgate hosts` | print hostname to bind-IP mappings and the copy/paste hosts block |
+| `mullgate export` | generate authenticated proxy URL inventories with ordered country or region batches plus optional city, server, and provider filters |
+| `mullgate regions` | print the curated region groups accepted by `export --region ...` |
+| `mullgate exposure` | inspect or update loopback, private-network, and public exposure posture |
+| `mullgate validate` | validate rendered wireproxy config and refresh runtime validation metadata |
 
 ## examples
 
@@ -126,7 +127,7 @@ export MULLGATE_PROXY_PASSWORD='replace-me'
 export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
 
 mullgate setup --non-interactive
-mullgate config hosts
+mullgate hosts
 ```
 
 start the runtime and inspect its current posture:
@@ -149,16 +150,24 @@ curl \
 generate a shareable proxy list from the saved route inventory:
 
 ```bash
-mullgate config regions
-mullgate config export --guided
-mullgate config export --country se --city got --count 1 --region europe --provider m247 --count 2 --output proxies.txt
-mullgate config export --dry-run --protocol http --country us --server us-nyc-wg-001
+mullgate regions
+mullgate export --guided
+mullgate export --country se --city got --count 1 --region europe --provider m247 --count 2 --output proxies.txt
+mullgate export --dry-run --protocol http --country us --server us-nyc-wg-001
+```
+
+enable login-time startup on Linux when you want the proxy runtime to come back automatically:
+
+```bash
+mullgate autostart enable
+mullgate autostart status
 ```
 
 ## documentation
 
 - [documentation site](https://mullgate.micr.dev)
 - [usage guide](https://mullgate.micr.dev/docs)
+- [release runbook](docs/release-runbook.md)
 - [publishing guide](docs/publishing.md)
 - [multi-exit architecture spec](docs/multi-exit-architecture-spec.md)
 - [`.env.example`](.env.example) - documented setup inputs for local runs

@@ -1,4 +1,4 @@
 {
   "title": "Operations",
-  "pages": ["maintainer-checklist", "demos", "publishing"]
+  "pages": ["release-runbook", "maintainer-checklist", "demos", "publishing"]
 }

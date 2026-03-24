@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { requireDefined } from '../required.js';
+
 const MULLVAD_RELAYS_URL = 'https://api.mullvad.net/public/relays/wireguard/v1/';
 
 const appRelaySchema = z
@@ -286,7 +288,10 @@ export function normalizeRelayPayload(
         active: relay.active,
         owned: relay.owned,
         ...(relay.provider ? { provider: relay.provider } : {}),
-        publicKey: relay.pubkey!,
+        publicKey: requireDefined(
+          relay.pubkey,
+          `Legacy Mullvad relay ${relay.hostname} is missing a public key.`,
+        ),
         endpointIpv4: relay.ipv4_addr_in,
         ...(relay.ipv6_addr_in ? { endpointIpv6: relay.ipv6_addr_in } : {}),
         ...(relay.multihop_port ? { multihopPort: relay.multihop_port } : {}),

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { resolveMullgatePaths } from '../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig, type RoutedLocation } from '../src/config/schema.js';
 import { ConfigStore } from '../src/config/store.js';
+import { requireDefined } from '../src/required.js';
 import {
   type RuntimeBundleManifest,
   renderRuntimeBundle,
@@ -800,8 +801,9 @@ function createTempEnvironment(root: string): NodeJS.ProcessEnv {
 function createBaseFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
   const paths = resolveMullgatePaths(env);
   const timestamp = '2026-03-21T06:00:00.000Z';
-  const certPath = path.join(env.HOME!, 'certs', 'proxy.crt');
-  const keyPath = path.join(env.HOME!, 'certs', 'proxy.key');
+  const homeDir = requireDefined(env.HOME, 'Expected HOME in the verification env.');
+  const certPath = path.join(homeDir, 'certs', 'proxy.crt');
+  const keyPath = path.join(homeDir, 'certs', 'proxy.key');
 
   return {
     version: CONFIG_VERSION,

@@ -3,51 +3,43 @@ title: Maintainer Checklist
 description: A concise operational checklist for preparing, validating, and publishing a Mullgate release.
 ---
 
-Use this page as the short-form companion to [Publishing](/docs/operations/publishing).
+Use this page as the short-form companion to [Release Runbook](/docs/operations/release-runbook).
 
 ## Before release
 
+- pick `X.Y.Z`
 - confirm `package.json` version is correct
 - move release notes from `Unreleased` into a versioned changelog section
-- verify README install instructions still match reality
-- run the full local release check
+- verify the README and docs still match the shipped install and command surface
+- decide whether npm publish is GitHub Actions-driven or local
+- if automation will publish to npm, confirm `NPM_TOKEN` and `NPM_PUBLISH_ENABLED=true` exist as repository secrets
+- run the full local release check plus npm package dry-run
 
 ```bash
 make release-check
+npm pack --dry-run
 ```
 
-## Before npm publish
+## Before tag push
 
-- confirm npm access to the `mullgate` package
-- confirm the branch and tag state are correct
-- decide whether publishing is local or GitHub Actions-driven
+- confirm `main` contains the intended release commit
+- push `main`
+- create `vX.Y.Z`
+- push `vX.Y.Z`
 
-## Local npm publish
+## npm publish
+
+- if GitHub automation is enabled, watch the `Release` and `Publish to npm` workflows
+- if npm automation is disabled or failed, publish locally:
 
 ```bash
 pnpm publish --no-git-checks --access public --provenance=false
 ```
 
-## GitHub automation prerequisites
-
-Automatic npm publishing only runs when the repository has:
-
-- `NPM_TOKEN`
-- `NPM_PUBLISH_ENABLED=true`
-
-## Release asset expectations
-
-A tagged release is expected to verify builds and tests, then attach:
-
-- raw binaries
-- platform archives
-- checksums file
-- `release-notes.md`
-- `release-notes.json`
-
 ## After release
 
+- verify the git tag has a GitHub release
+- verify the release includes archives, raw binaries, checksums, and extracted notes
 - verify the npm package is available
-- verify GitHub release assets uploaded correctly
+- verify the install scripts still point operators at a working npm install path
 - verify documentation still reflects the shipped install and runtime surface
-- sanity-check the README and docs landing page for any version-specific changes
