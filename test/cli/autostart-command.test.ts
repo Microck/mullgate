@@ -79,7 +79,7 @@ describe('mullgate autostart command', () => {
     const unitContents = await readFile(unitPath, 'utf8');
 
     expect(result.ok).toBe(true);
-    expect(unitContents).toContain(`ExecStart=${fixture.binaryPath} start`);
+    expect(unitContents).toBe(`${buildAutostartUnitFile({ binaryPath: fixture.binaryPath })}\n`);
     expect(commands).toEqual(['--user daemon-reload', '--user enable --now mullgate.service']);
     expect(`\n${normalizeTempPath(result.summary, fixture.homeDir)}`).toMatchInlineSnapshot(`
       "
@@ -115,7 +115,7 @@ describe('mullgate autostart command', () => {
     const unitContents = await readFile(unitPath, 'utf8');
 
     expect(result.ok).toBe(true);
-    expect(unitContents).toContain(`ExecStart=${fixture.binaryPath} start`);
+    expect(unitContents).toBe(`${buildAutostartUnitFile({ binaryPath: fixture.binaryPath })}\n`);
     expect(commands).toEqual(['--user daemon-reload', '--user enable --now mullgate.service']);
   });
 
