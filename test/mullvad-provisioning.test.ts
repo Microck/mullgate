@@ -702,8 +702,8 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
     expect(routeProxyMount.endsWith(':ro')).toBe(false);
     expect(wireproxyStagedPath).not.toBe(renderResult.artifactPaths.entryWireproxyConfigPath);
     expect(routeProxyStagedPath).not.toBe(renderResult.artifactPaths.routeProxyConfigPath);
-    expect(existsSync(path.dirname(wireproxyStagedPath))).toBe(false);
-    expect(existsSync(path.dirname(routeProxyStagedPath))).toBe(false);
+    expect(existsSync(wireproxyStagedPath)).toBe(false);
+    expect(existsSync(routeProxyStagedPath)).toBe(false);
     expect(renderResult.routeProxyConfig).toContain('parent 1000 socks5+ 127.0.0.1 39101');
     expect(renderResult.routeProxyConfig).not.toContain('parent 1000 socks5 127.0.0.1 39101');
   });

@@ -56,17 +56,26 @@ function createTempEnvironment(): NodeJS.ProcessEnv {
   const root = mkdtempSync(path.join(tmpdir(), 'mullgate-setup-cli-'));
   const linuxRoot = root.replaceAll('\\', '/');
   const binDir = `${linuxRoot}/bin`;
+  const inheritedPath = process.env.PATH ?? process.env.Path ?? '';
+  const mergedPath = `${binDir}${path.delimiter}${inheritedPath}`;
   temporaryDirectories.push(root);
 
-  return {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     MULLGATE_PLATFORM: 'linux',
     HOME: linuxRoot,
-    PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
+    PATH: mergedPath,
     XDG_CONFIG_HOME: `${linuxRoot}/config`,
     XDG_STATE_HOME: `${linuxRoot}/state`,
     XDG_CACHE_HOME: `${linuxRoot}/cache`,
   };
+
+  if (process.platform === 'win32') {
+    // Windows child-process env lookup is case-insensitive, so keep both spellings aligned.
+    env.Path = mergedPath;
+  }
+
+  return env;
 }
 
 async function readJsonFixture<T>(name: string): Promise<T> {

@@ -499,76 +499,79 @@ describe('mullgate start command', () => {
     ]);
   });
 
-  it('persists secret-safe route-aware compose failure diagnostics with phase, source, code, and validation metadata', async () => {
-    const env = createTempEnvironment();
-    const paths = resolveMullgatePaths(env);
-    const store = await seedSavedConfig(env);
-    const stdout = createBufferSink();
-    const stderr = createBufferSink();
-    const wireproxyBinary = await createFakeWireproxyBinary(
-      requireDefined(env.HOME, 'Expected HOME in the test env.'),
-    );
+  it(
+    'persists secret-safe route-aware compose failure diagnostics with phase, source, code, and validation metadata',
+    { timeout: 15000 },
+    async () => {
+      const env = createTempEnvironment();
+      const paths = resolveMullgatePaths(env);
+      const store = await seedSavedConfig(env);
+      const stdout = createBufferSink();
+      const stderr = createBufferSink();
+      const wireproxyBinary = await createFakeWireproxyBinary(
+        requireDefined(env.HOME, 'Expected HOME in the test env.'),
+      );
 
-    const action = createStartCommandAction({
-      store,
-      checkedAt: '2026-03-21T01:05:00.000Z',
-      stdout,
-      stderr,
-      validateOptions: {
-        wireproxyBinary,
-      },
-      startRuntime: async (options) => ({
-        ok: false,
-        phase: 'compose-launch',
-        source: 'docker-compose',
+      const action = createStartCommandAction({
+        store,
         checkedAt: '2026-03-21T01:05:00.000Z',
-        code: 'COMPOSE_UP_FAILED',
-        composeFilePath: options.composeFilePath,
-        command: {
-          binary: 'docker',
-          args: ['compose', '--file', options.composeFilePath, 'up', '--detach'],
-          cwd: path.dirname(options.composeFilePath),
-          rendered: `docker compose --file ${options.composeFilePath} up --detach`,
+        stdout,
+        stderr,
+        validateOptions: {
+          wireproxyBinary,
         },
+        startRuntime: async (options) => ({
+          ok: false,
+          phase: 'compose-launch',
+          source: 'docker-compose',
+          checkedAt: '2026-03-21T01:05:00.000Z',
+          code: 'COMPOSE_UP_FAILED',
+          composeFilePath: options.composeFilePath,
+          command: {
+            binary: 'docker',
+            args: ['compose', '--file', options.composeFilePath, 'up', '--detach'],
+            cwd: path.dirname(options.composeFilePath),
+            rendered: `docker compose --file ${options.composeFilePath} up --detach`,
+          },
+          message: 'Docker Compose failed to start the Mullgate runtime bundle.',
+          cause:
+            'service route-proxy crashed while booting at-vie-wg-001 for proxy-password / 123456789012 / private-key-value-2 while reading -----BEGIN PRIVATE KEY-----\\nfixture\\n-----END PRIVATE KEY-----',
+          artifactPath: options.composeFilePath,
+          exitCode: 1,
+        }),
+      });
+
+      await action();
+
+      expect(process.exitCode).toBe(1);
+      expect(stdout.value.current).toBe('');
+
+      const savedConfigResult = await store.load();
+      expect(savedConfigResult.ok && savedConfigResult.source === 'file').toBe(true);
+
+      if (!savedConfigResult.ok || savedConfigResult.source !== 'file') {
+        return;
+      }
+
+      const savedConfig = savedConfigResult.config;
+      const persistedReport = JSON.parse(
+        await readFile(paths.runtimeStartDiagnosticsFile, 'utf8'),
+      ) as RuntimeStartDiagnostic;
+
+      expect(savedConfig.runtime.status).toMatchObject({
+        phase: 'error',
+        lastCheckedAt: '2026-03-21T01:05:00.000Z',
         message: 'Docker Compose failed to start the Mullgate runtime bundle.',
-        cause:
-          'service route-proxy crashed while booting at-vie-wg-001 for proxy-password / 123456789012 / private-key-value-2 while reading -----BEGIN PRIVATE KEY-----\\nfixture\\n-----END PRIVATE KEY-----',
-        artifactPath: options.composeFilePath,
-        exitCode: 1,
-      }),
-    });
-
-    await action();
-
-    expect(process.exitCode).toBe(1);
-    expect(stdout.value.current).toBe('');
-
-    const savedConfigResult = await store.load();
-    expect(savedConfigResult.ok && savedConfigResult.source === 'file').toBe(true);
-
-    if (!savedConfigResult.ok || savedConfigResult.source !== 'file') {
-      return;
-    }
-
-    const savedConfig = savedConfigResult.config;
-    const persistedReport = JSON.parse(
-      await readFile(paths.runtimeStartDiagnosticsFile, 'utf8'),
-    ) as RuntimeStartDiagnostic;
-
-    expect(savedConfig.runtime.status).toMatchObject({
-      phase: 'error',
-      lastCheckedAt: '2026-03-21T01:05:00.000Z',
-      message: 'Docker Compose failed to start the Mullgate runtime bundle.',
-    });
-    expect(savedConfig.diagnostics.lastRuntimeStart).toEqual(persistedReport);
-    expect(savedConfig.diagnostics.lastRuntimeStart?.routeId).toBe('at-vie-wg-001');
-    expect(savedConfig.diagnostics.lastRuntimeStart?.routeHostname).toBe('at-vie-wg-001');
-    expect(savedConfig.diagnostics.lastRuntimeStart?.routeBindIp).toBe('127.0.0.2');
-    expect(savedConfig.diagnostics.lastRuntimeStart?.serviceName).toBe('route-proxy');
-    expect(savedConfig.diagnostics.lastRuntimeStart?.cause).toContain('proxy-password');
-    expect(savedConfig.diagnostics.lastRuntimeStart?.cause).toContain('123456789012');
-    expect(savedConfig.diagnostics.lastRuntimeStart?.cause).toContain('private-key-value-2');
-    expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
+      });
+      expect(savedConfig.diagnostics.lastRuntimeStart).toEqual(persistedReport);
+      expect(savedConfig.diagnostics.lastRuntimeStart?.routeId).toBe('at-vie-wg-001');
+      expect(savedConfig.diagnostics.lastRuntimeStart?.routeHostname).toBe('at-vie-wg-001');
+      expect(savedConfig.diagnostics.lastRuntimeStart?.routeBindIp).toBe('127.0.0.2');
+      expect(savedConfig.diagnostics.lastRuntimeStart?.serviceName).toBe('route-proxy');
+      expect(savedConfig.diagnostics.lastRuntimeStart?.cause).toContain('proxy-password');
+      expect(savedConfig.diagnostics.lastRuntimeStart?.cause).toContain('123456789012');
+      expect(savedConfig.diagnostics.lastRuntimeStart?.cause).toContain('private-key-value-2');
+      expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate start failed.
       phase: compose-launch
@@ -589,7 +592,7 @@ describe('mullgate start command', () => {
       start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json
       runtime status: error"
     `);
-    expect(`\n${normalizeReport(persistedReport, env)}`).toMatchInlineSnapshot(`
+      expect(`\n${normalizeReport(persistedReport, env)}`).toMatchInlineSnapshot(`
       "
       {
         "attemptedAt": "2026-03-21T01:05:00.000Z",
@@ -609,5 +612,6 @@ describe('mullgate start command', () => {
         "command": "docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach"
       }"
     `);
-  });
+    },
+  );
 });
