@@ -225,9 +225,12 @@ function createFixtureRelayCatalog(): MullvadRelayCatalog {
         fqdn: 'at-vie-wg-001.relays.mullvad.net',
         source: 'www-relays-all',
         active: true,
-        owned: true,
+        owned: false,
+        provider: 'datawagon',
         publicKey: 'relay-public-key-at-vie-001',
         endpointIpv4: '185.213.154.1',
+        networkPortSpeed: 1000,
+        stboot: false,
         location: {
           countryCode: 'at',
           countryName: 'Austria',
@@ -241,8 +244,11 @@ function createFixtureRelayCatalog(): MullvadRelayCatalog {
         source: 'www-relays-all',
         active: true,
         owned: true,
+        provider: 'm247',
         publicKey: 'relay-public-key-se-got-101',
         endpointIpv4: '185.213.154.2',
+        networkPortSpeed: 10000,
+        stboot: true,
         location: {
           countryCode: 'se',
           countryName: 'Sweden',
@@ -255,9 +261,12 @@ function createFixtureRelayCatalog(): MullvadRelayCatalog {
         fqdn: 'us-nyc-wg-001.relays.mullvad.net',
         source: 'www-relays-all',
         active: true,
-        owned: true,
+        owned: false,
+        provider: 'xtom',
         publicKey: 'relay-public-key-us-nyc-001',
         endpointIpv4: '185.213.154.3',
+        networkPortSpeed: 5000,
+        stboot: false,
         location: {
           countryCode: 'us',
           countryName: 'United States',
@@ -599,12 +608,18 @@ copy/paste hosts block
           kind: 'country',
           value: 'se',
           providers: [],
+          owner: 'all',
+          runMode: 'all',
+          minPortSpeed: null,
           requestedCount: 1,
         },
         {
           kind: 'region',
           value: 'europe',
           providers: [],
+          owner: 'all',
+          runMode: 'all',
+          minPortSpeed: null,
           requestedCount: 2,
         },
       ],
@@ -656,6 +671,9 @@ copy/paste hosts block
           value: 'sweden',
           city: 'gothenburg',
           providers: ['m247', 'xtom'],
+          owner: 'all',
+          runMode: 'all',
+          minPortSpeed: null,
           requestedCount: 2,
         },
         {
@@ -663,13 +681,49 @@ copy/paste hosts block
           value: 'austria',
           server: 'at-vie-wg-001',
           providers: [],
+          owner: 'all',
+          runMode: 'all',
+          minPortSpeed: null,
           requestedCount: 1,
         },
         {
           kind: 'region',
           value: 'europe',
           providers: ['datawagon'],
+          owner: 'all',
+          runMode: 'all',
+          minPortSpeed: null,
           requestedCount: 3,
+        },
+      ],
+    });
+  });
+
+  it('parses relay ownership, run mode, and minimum port speed filters', () => {
+    const result = parseProxyExportSelectors([
+      '--country',
+      'Sweden',
+      '--owner',
+      'mullvad',
+      '--run-mode',
+      'ram',
+      '--min-port-speed',
+      '10000',
+      '--count',
+      '1',
+    ]);
+
+    expect(result).toEqual({
+      ok: true,
+      selectors: [
+        {
+          kind: 'country',
+          value: 'sweden',
+          providers: [],
+          owner: 'mullvad',
+          runMode: 'ram',
+          minPortSpeed: 10000,
+          requestedCount: 1,
         },
       ],
     });
@@ -717,8 +771,24 @@ copy/paste hosts block
       config,
       protocol: 'http',
       selectors: [
-        { kind: 'country', value: 'se', providers: [], requestedCount: 1 },
-        { kind: 'region', value: 'europe', providers: [], requestedCount: 2 },
+        {
+          kind: 'country',
+          value: 'se',
+          providers: [],
+          owner: 'all',
+          runMode: 'all',
+          minPortSpeed: null,
+          requestedCount: 1,
+        },
+        {
+          kind: 'region',
+          value: 'europe',
+          providers: [],
+          owner: 'all',
+          runMode: 'all',
+          minPortSpeed: null,
+          requestedCount: 2,
+        },
       ],
       relayCatalog: createFixtureRelayCatalog(),
       configPath: '/tmp/mullgate-home/config/mullgate/config.json',
@@ -788,7 +858,17 @@ copy/paste hosts block
     const result = buildProxyExportPlan({
       config,
       protocol: 'socks5',
-      selectors: [{ kind: 'region', value: 'antarctica', providers: [], requestedCount: 1 }],
+      selectors: [
+        {
+          kind: 'region',
+          value: 'antarctica',
+          providers: [],
+          owner: 'all',
+          runMode: 'all',
+          minPortSpeed: null,
+          requestedCount: 1,
+        },
+      ],
       relayCatalog: createFixtureRelayCatalog(),
       configPath: '/tmp/mullgate-home/config/mullgate/config.json',
     });
@@ -801,6 +881,35 @@ copy/paste hosts block
         'Unknown region antarctica. Supported regions: americas, asia-pacific, europe, middle-east-africa.',
       configPath: '/tmp/mullgate-home/config/mullgate/config.json',
     });
+  });
+
+  it('filters planned proxy exports by ownership, run mode, and minimum port speed', () => {
+    const config = createFixtureConfig();
+    const result = buildProxyExportPlan({
+      config,
+      protocol: 'socks5',
+      selectors: [
+        {
+          kind: 'country',
+          value: 'se',
+          providers: [],
+          owner: 'mullvad',
+          runMode: 'ram',
+          minPortSpeed: 9000,
+          requestedCount: 1,
+        },
+      ],
+      relayCatalog: createFixtureRelayCatalog(),
+      configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.entries.map((entry) => entry.alias)).toEqual(['sweden-gothenburg']);
   });
 
   it('renders the curated region group report', () => {

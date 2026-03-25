@@ -24,9 +24,19 @@ const checks = [
     includes: '/images/demos/status-doctor.gif',
   },
   {
+    label: 'Usage relay recommendation demo reference',
+    file: path.join(repoRoot, 'docs/mullgate-docs/content/docs/guides/usage.mdx'),
+    includes: '/images/demos/relay-recommend.gif',
+  },
+  {
     label: 'Operations demos page reference',
     file: path.join(repoRoot, 'docs/mullgate-docs/content/docs/operations/demos.mdx'),
     includes: '/images/demos/status-doctor.gif',
+  },
+  {
+    label: 'Operations relay recommendation demo reference',
+    file: path.join(repoRoot, 'docs/mullgate-docs/content/docs/operations/demos.mdx'),
+    includes: '/images/demos/relay-recommend.gif',
   },
 ] as const;
 
@@ -34,9 +44,11 @@ const assetChecks = [
   path.join(repoRoot, 'images/demos/setup-guided.gif'),
   path.join(repoRoot, 'images/demos/exposure-private-network.gif'),
   path.join(repoRoot, 'images/demos/status-doctor.gif'),
+  path.join(repoRoot, 'images/demos/relay-recommend.gif'),
   path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/setup-guided.gif'),
   path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/exposure-private-network.gif'),
   path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/status-doctor.gif'),
+  path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/relay-recommend.gif'),
 ] as const;
 
 function main(): void {

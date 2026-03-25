@@ -19,6 +19,10 @@ These demos are fixture-backed on purpose. They do not require a live Mullvad ac
 
 ![Status and doctor demo](/images/demos/status-doctor.gif)
 
+### Relay discovery and recommendation
+
+![Relay recommendation demo](/images/demos/relay-recommend.gif)
+
 ## Regenerate
 
 Prerequisites:
@@ -42,4 +46,5 @@ The recording flow writes canonical assets to `images/demos/` and mirrors the sa
 - The setup GIF runs the real `mullgate setup --non-interactive` path against local fixture endpoints.
 - The exposure GIF seeds a local config first, then records the real `mullgate exposure ...` output.
 - The status and doctor GIF seeds a validated config plus a fake Docker Compose surface so the output stays deterministic and secret-safe.
+- The relay recommendation GIF seeds a deterministic relay catalog plus fake `ping` output so list, probe, and recommend runs stay stable without live network latency.
 - The GIF renderer uses a taller terminal plus a Mullvad-inspired dark navy, white, and yellow palette so long reports stay readable.

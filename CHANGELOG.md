@@ -13,6 +13,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.5.0] - 2026-03-25
+
+### Added
+
+- top-level `mullgate relays list`, `mullgate relays probe`, and `mullgate relays verify` commands for relay inspection, latency ranking, and configured-route exit verification
+- top-level `mullgate recommend` for probing broad selector batches, previewing exact relay recommendations, and optionally pinning them into saved config with `--apply`
+- richer selector filters across export and recommendation flows with `--owner`, `--run-mode`, and `--min-port-speed`
+
+### Changed
+
+- README, usage docs, and recorded demos now document the relay discovery and recommendation workflow alongside setup, export, and runtime inspection
+
+### Fixed
+
+- relay catalog loading now prefers cached rich catalogs and falls back cleanly to configured or legacy endpoints so setup, export, and recommendation flows stay aligned
+
 ## [0.4.0] - 2026-03-24
 
 ### Added

@@ -66,6 +66,8 @@ describe('mullgate help command contract', () => {
       doctorHelp,
       autostartHelp,
       configHelp,
+      relaysHelp,
+      recommendHelp,
       regionsHelp,
       exportHelp,
       hostsHelp,
@@ -79,6 +81,8 @@ describe('mullgate help command contract', () => {
       expectHelpOutput(['doctor', '--help']),
       expectHelpOutput(['autostart', '--help']),
       expectHelpOutput(['config', '--help']),
+      expectHelpOutput(['relays', '--help']),
+      expectHelpOutput(['recommend', '--help']),
       expectHelpOutput(['regions', '--help']),
       expectHelpOutput(['export', '--help']),
       expectHelpOutput(['hosts', '--help']),
@@ -93,36 +97,40 @@ describe('mullgate help command contract', () => {
       CLI-first Mullvad proxy provisioning and config management
 
       Options:
-        -h, --help          display help for command
+        -h, --help           display help for command
 
       Commands:
-        setup [options]     Run the guided Mullvad-backed setup flow and persist
-                            config plus derived runtime artifacts.
-        start               Re-render derived runtime artifacts from saved config,
-                            validate them, and launch the Docker runtime bundle.
-        status              Inspect saved Mullgate state, runtime artifacts, and live
-                            Docker Compose status in one report.
-        doctor              Run deterministic, route-aware diagnostics for config,
-                            runtime, bind, DNS, and last-start failures.
-        autostart           Manage Linux login-time Mullgate startup with a systemd
-                            user service.
-        path                Show the resolved Mullgate config, state, cache, and
-                            runtime paths.
-        locations           List routed location aliases, bind IPs, relay preferences,
-                            and runtime ids.
-        hosts               List configured proxy hostnames and their route bind-IP
-                            mappings.
-        regions             List the curated export region groups and their member
-                            country codes.
-        exposure [options]  Inspect or update how Mullgate publishes route hostnames,
-                            bind IPs, and restart guidance.
-        export [options]    Export proxy URLs to a text file with ordered country or
-                            region batches plus optional city, server, and provider
-                            filters.
-        validate [options]  Validate the saved or freshly rendered wireproxy config
-                            and persist the result metadata.
-        config              Inspect or edit the saved Mullgate config directly.
-        help [command]      display help for command"
+        setup [options]      Run the guided Mullvad-backed setup flow and persist
+                             config plus derived runtime artifacts.
+        start                Re-render derived runtime artifacts from saved config,
+                             validate them, and launch the Docker runtime bundle.
+        status               Inspect saved Mullgate state, runtime artifacts, and live
+                             Docker Compose status in one report.
+        doctor               Run deterministic, route-aware diagnostics for config,
+                             runtime, bind, DNS, and last-start failures.
+        autostart            Manage Linux login-time Mullgate startup with a systemd
+                             user service.
+        path                 Show the resolved Mullgate config, state, cache, and
+                             runtime paths.
+        locations            List routed location aliases, bind IPs, relay
+                             preferences, and runtime ids.
+        hosts                List configured proxy hostnames and their route bind-IP
+                             mappings.
+        regions              List the curated export region groups and their member
+                             country codes.
+        exposure [options]   Inspect or update how Mullgate publishes route hostnames,
+                             bind IPs, and restart guidance.
+        export [options]     Export proxy URLs to a text file with ordered country or
+                             region batches plus optional city, server, provider,
+                             ownership, run-mode, and port-speed filters.
+        validate [options]   Validate the saved or freshly rendered wireproxy config
+                             and persist the result metadata.
+        relays               Inspect, probe, and verify Mullvad relays plus configured
+                             route exits.
+        recommend [options]  Probe matching Mullvad relays, recommend exact exits for
+                             ordered selector batches, and optionally apply them.
+        config               Inspect or edit the saved Mullgate config directly.
+        help [command]       display help for command"
     `);
     expect(`\n${setupHelp}`).toMatchInlineSnapshot(`
       "
@@ -233,6 +241,54 @@ describe('mullgate help command contract', () => {
                                          JSON by hand.
         help [command]                   display help for command"
     `);
+    expect(`\n${relaysHelp}`).toMatchInlineSnapshot(`
+      "
+      Usage: mullgate relays [options] [command]
+
+      Inspect, probe, and verify Mullvad relays plus configured route exits.
+
+      Options:
+        -h, --help        display help for command
+
+      Commands:
+        list [options]    List matching Mullvad relays with location, provider,
+                          ownership, run mode, and port speed details.
+        probe [options]   Ping matching Mullvad relays and rank them by latency.
+        verify [options]  Verify one configured route exits through Mullvad for each
+                          published proxy protocol.
+        help [command]    display help for command"
+    `);
+    expect(`\n${recommendHelp}`).toMatchInlineSnapshot(`
+      "
+      Usage: mullgate recommend [options]
+
+      Probe matching Mullvad relays, recommend exact exits for ordered selector
+      batches, and optionally apply them.
+
+      Options:
+        --country <code-or-name>  Add a country selector. Pair it with optional
+                                  filters and a following --count.
+        --region <name>           Add a curated region selector (americas,
+                                  asia-pacific, europe, middle-east-africa). Pair it
+                                  with optional filters and a following --count.
+        --city <code-or-name>     Refine the immediately preceding --country selector
+                                  by city.
+        --server <hostname>       Pin the immediately preceding --country selector to
+                                  one exact relay hostname.
+        --provider <name>         Filter the immediately preceding selector by
+                                  provider. Repeat as needed.
+        --owner <owner>           Filter the immediately preceding selector by relay
+                                  ownership: mullvad, rented, or all.
+        --run-mode <mode>         Filter the immediately preceding selector by relay
+                                  run mode: ram, disk, or all.
+        --min-port-speed <mbps>   Filter the immediately preceding selector by minimum
+                                  advertised port speed in Mbps.
+        --count <number>          Apply a per-selector recommendation count to the
+                                  immediately preceding selector batch.
+        --apply                   Materialize the exact recommended relays into saved
+                                  config and refreshed runtime artifacts.
+        -h, --help                display help for command"
+    `);
     expect(`\n${regionsHelp}`).toMatchInlineSnapshot(`
       "
       Usage: mullgate regions [options]
@@ -247,7 +303,7 @@ describe('mullgate help command contract', () => {
       Usage: mullgate export [options]
 
       Export proxy URLs to a text file with ordered country or region batches plus
-      optional city, server, and provider filters.
+      optional city, server, provider, ownership, run-mode, and port-speed filters.
 
       Options:
         --protocol <protocol>     Export proxy URLs for socks5, http, or https.
@@ -263,6 +319,12 @@ describe('mullgate help command contract', () => {
                                   to one exact Mullvad relay hostname.
         --provider <name>         Filter the immediately preceding --country or
                                   --region selector by provider. Repeat as needed.
+        --owner <owner>           Filter the immediately preceding selector by relay
+                                  ownership: mullvad, rented, or all.
+        --run-mode <mode>         Filter the immediately preceding selector by relay
+                                  run mode: ram, disk, or all.
+        --min-port-speed <mbps>   Filter the immediately preceding selector by minimum
+                                  advertised port speed in Mbps.
         --count <number>          Apply a per-selector export cap to the immediately
                                   preceding --country or --region batch.
         --guided                  Launch a guided flow for creating proxy lists.
