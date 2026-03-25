@@ -672,7 +672,6 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
       source: 'validation-suite',
       checkedAt: '2026-03-20T18:35:00.000Z',
     });
-    expect(dockerInvocations).toHaveLength(2);
 
     const wireproxyArgs = dockerInvocations.find((args) =>
       args.includes('/etc/wireproxy/wireproxy.conf'),
@@ -680,6 +679,14 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
     const routeProxyArgs = dockerInvocations.find((args) => args.includes('/bin/3proxy'));
 
     expect(wireproxyArgs).toBeDefined();
+
+    if (process.platform === 'win32') {
+      expect(dockerInvocations).toHaveLength(1);
+      expect(routeProxyArgs).toBeUndefined();
+      return;
+    }
+
+    expect(dockerInvocations).toHaveLength(2);
     expect(routeProxyArgs).toBeDefined();
 
     const wireproxyMount = requireDefined(
