@@ -1,5 +1,5 @@
 import type { spawnSync } from 'node:child_process';
-import { mkdtempSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, statSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -17,8 +17,11 @@ import {
 import { fetchRelays, normalizeRelayPayload } from '../src/mullvad/fetch-relays.js';
 import { provisionWireguard } from '../src/mullvad/provision-wireguard.js';
 import { requireDefined } from '../src/required.js';
+import { renderRuntimeBundle } from '../src/runtime/render-runtime-bundle.js';
 import { renderWireproxyArtifacts } from '../src/runtime/render-wireproxy.js';
+import { validateRuntimeArtifacts } from '../src/runtime/validate-runtime.js';
 import { validateWireproxyConfig } from '../src/runtime/validate-wireproxy.js';
+import { createFixtureRoute, createFixtureRuntime } from './helpers/mullgate-fixtures.js';
 import { expectPrivateFileMode, normalizeFixtureHomePath } from './helpers/platform-test-utils.js';
 
 const fixturesDir = join(process.cwd(), 'test/fixtures/mullvad');
@@ -167,51 +170,25 @@ function createConfig(
     },
     routing: {
       locations: [
-        {
+        createFixtureRoute({
           alias: 'sweden-gothenburg',
           hostname: 'sweden-gothenburg',
           bindIp: '127.0.0.1',
-          relayPreference: {
-            requested: 'sweden-gothenburg',
-            resolvedAlias: null,
-          },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-lab',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard,
-          },
-          runtime: {
-            routeId: 'sweden-gothenburg',
-            wireproxyServiceName: 'wireproxy-sweden-gothenburg',
-            haproxyBackendName: 'route-sweden-gothenburg',
-            wireproxyConfigFile: 'wireproxy-sweden-gothenburg.conf',
-          },
-        },
+          requested: 'sweden-gothenburg',
+          resolvedAlias: null,
+          countryCode: 'se',
+          cityCode: 'got',
+        }),
       ],
     },
-    runtime: {
-      backend: 'wireproxy',
-      sourceConfigPath: paths.configFile,
-      wireproxyConfigPath: paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
-      relayCachePath: paths.provisioningCacheFile,
-      dockerComposePath: paths.dockerComposePath,
-      runtimeBundle: {
-        bundleDir: paths.runtimeBundleDir,
-        dockerComposePath: paths.runtimeComposeFile,
-        httpsSidecarConfigPath: paths.runtimeHttpsSidecarConfigFile,
-        manifestPath: paths.runtimeBundleManifestFile,
-      },
+    runtime: createFixtureRuntime({
+      paths,
       status: {
         phase: 'unvalidated',
         lastCheckedAt: null,
         message: 'Pending first validation.',
       },
-    },
+    }),
     diagnostics: {
       lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
@@ -488,20 +465,20 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
         }
 
         const wireproxyConfig = await readFile(
-          renderResult.artifactPaths.wireproxyConfigPath,
+          renderResult.artifactPaths.entryWireproxyConfigPath,
           'utf8',
         );
         const relayCache = JSON.parse(
           await readFile(renderResult.artifactPaths.relayCachePath, 'utf8'),
         ) as { relayCount: number };
-        const configStats = statSync(renderResult.artifactPaths.wireproxyConfigPath);
+        const configStats = statSync(renderResult.artifactPaths.entryWireproxyConfigPath);
 
         expectPrivateFileMode(configStats.mode);
         expect(relayCache.relayCount).toBe(5);
 
         const validation = await validateWireproxyConfig({
-          configPath: renderResult.artifactPaths.wireproxyConfigPath,
-          reportPath: renderResult.artifactPaths.configTestReportPath,
+          configPath: renderResult.artifactPaths.entryWireproxyConfigPath,
+          reportPath: paths.runtimeValidationReportFile,
           checkedAt: '2026-03-20T18:35:00.000Z',
           spawn: createSpawnStub({
             docker: (args) => {
@@ -521,14 +498,14 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
           source: 'docker',
           status: 'success',
           checkedAt: '2026-03-20T18:35:00.000Z',
-          target: renderResult.artifactPaths.wireproxyConfigPath,
-          reportPath: renderResult.artifactPaths.configTestReportPath,
+          target: renderResult.artifactPaths.entryWireproxyConfigPath,
+          reportPath: paths.runtimeValidationReportFile,
           validator: 'docker-wireproxy-configtest',
           issues: [],
         });
 
         const report = normalizePathInput(
-          await readFile(renderResult.artifactPaths.configTestReportPath, 'utf8'),
+          await readFile(paths.runtimeValidationReportFile, 'utf8'),
           requireDefined(env.HOME, 'Expected HOME in the test env.'),
         ).trimEnd();
         const normalizedConfig = normalizePathInput(
@@ -541,44 +518,42 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
           .join('PROXY_PASSWORD');
 
         expect(`\n${normalizedConfig}`).toMatchInlineSnapshot(`
-"\n# Generated by Mullgate. Derived artifact; edit canonical config instead.
-# Generated at 2026-03-20T18:34:00.000Z
-# Route sweden-gothenburg (sweden-gothenburg -> 127.0.0.1)
+          "
+          # Generated by Mullgate. Derived artifact; edit canonical config instead.
+          # Generated at 2026-03-20T18:34:00.000Z
+          # Shared entry relay se-got-wg-101
 
-[Interface]
-Address = 10.64.12.34/32, fc00:bbbb:bbbb:bb01::1:1234/128
-PrivateKey = WG_PRIVATE_KEY
-DNS = 10.64.0.1
+          [Interface]
+          Address = 10.64.12.34/32, fc00:bbbb:bbbb:bb01::1:1234/128
+          PrivateKey = WG_PRIVATE_KEY
+          DNS = 10.64.0.1
 
-[Peer]
-PublicKey = Wg5yKrVIO52wBIMNz+lQbZ3ZIDvJpQ6AqmrKa1iWLEg=
-Endpoint = se-got-wg-101.relays.mullvad.net:3401
-AllowedIPs = 0.0.0.0/0, ::/0
-PersistentKeepalive = 25
+          [Peer]
+          PublicKey = Wg5yKrVIO52wBIMNz+lQbZ3ZIDvJpQ6AqmrKa1iWLEg=
+          Endpoint = se-got-wg-101.relays.mullvad.net:3401
+          AllowedIPs = 0.0.0.0/0, ::/0
+          PersistentKeepalive = 25
 
-[Socks5]
-BindAddress = 127.0.0.1:1080
-Username = alice
-Password = PROXY_PASSWORD
+          [Socks5]
+          BindAddress = 127.0.0.1:39101
 
-[http]
-BindAddress = 127.0.0.1:8080
-Username = alice
-Password = PROXY_PASSWORD
-"
-`);
+          [http]
+          BindAddress = 127.0.0.1:39102
+          "
+        `);
         expect(`\n${report}`).toMatchInlineSnapshot(`
-"\n{
-  "ok": true,
-  "phase": "validation",
-  "source": "docker",
-  "status": "success",
-  "checkedAt": "2026-03-20T18:35:00.000Z",
-  "target": "/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf",
-  "validator": "docker-wireproxy-configtest",
-  "issues": []
-}"
-`);
+          "
+          {
+            "ok": true,
+            "phase": "validation",
+            "source": "docker",
+            "status": "success",
+            "checkedAt": "2026-03-20T18:35:00.000Z",
+            "target": "/tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf",
+            "validator": "docker-wireproxy-configtest",
+            "issues": []
+          }"
+        `);
       },
     );
   });
@@ -622,14 +597,160 @@ Password = PROXY_PASSWORD
     );
   });
 
-  it('persists multi-route setup state with distinct Mullvad device data', async () => {
+  it('stages docker validation copies instead of mounting the private runtime artifacts directly', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const appPayload = await readJsonFixture<unknown>('app-relays.json');
+    const relayResult = normalizeRelayPayload(appPayload, {
+      fetchedAt: '2026-03-20T18:33:00.000Z',
+      endpoint: 'fixture://app-relays.json',
+    });
+
+    expect(relayResult.ok).toBe(true);
+
+    if (!relayResult.ok) {
+      return;
+    }
+
+    const config = createConfig(paths, {
+      publicKey: 'PUBLIC_KEY_FOR_STAGE_TEST=',
+      privateKey: 'PRIVATE_KEY_FOR_STAGE_TEST=',
+      ipv4Address: '10.64.12.34/32',
+      ipv6Address: null,
+      gatewayIpv4: null,
+      gatewayIpv6: null,
+      dnsServers: ['10.64.0.1'],
+      peerPublicKey: null,
+      peerEndpoint: null,
+    });
+    const renderResult = await renderWireproxyArtifacts({
+      config,
+      relayCatalog: relayResult.value,
+      paths,
+      generatedAt: '2026-03-20T18:34:00.000Z',
+    });
+
+    expect(renderResult.ok).toBe(true);
+
+    if (!renderResult.ok) {
+      return;
+    }
+
+    const dockerInvocations: string[][] = [];
+    const validation = await validateRuntimeArtifacts({
+      entryWireproxyConfigPath: renderResult.artifactPaths.entryWireproxyConfigPath,
+      entryWireproxyConfigText: renderResult.entryWireproxyConfig,
+      routeProxyConfigPath: renderResult.artifactPaths.routeProxyConfigPath,
+      routeProxyConfigText: renderResult.routeProxyConfig,
+      routes: renderResult.routes,
+      bind: {
+        socksPort: config.setup.bind.socksPort,
+        httpPort: config.setup.bind.httpPort,
+      },
+      checkedAt: '2026-03-20T18:35:00.000Z',
+      spawn: createSpawnStub({
+        docker: (args) => {
+          dockerInvocations.push([...args]);
+
+          if (args.includes('/bin/3proxy')) {
+            return {
+              error: Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' }),
+            };
+          }
+
+          return {
+            status: 0,
+            stdout: 'docker wireproxy configtest ok\n',
+          };
+        },
+      }),
+    });
+
+    expect(validation).toMatchObject({
+      ok: true,
+      phase: 'validation',
+      source: 'validation-suite',
+      checkedAt: '2026-03-20T18:35:00.000Z',
+    });
+    expect(dockerInvocations).toHaveLength(2);
+
+    const wireproxyArgs = dockerInvocations.find((args) =>
+      args.includes('/etc/wireproxy/wireproxy.conf'),
+    );
+    const routeProxyArgs = dockerInvocations.find((args) => args.includes('/bin/3proxy'));
+
+    expect(wireproxyArgs).toBeDefined();
+    expect(routeProxyArgs).toBeDefined();
+
+    const wireproxyMount = requireDefined(
+      wireproxyArgs?.[
+        requireDefined(wireproxyArgs?.indexOf('-v'), 'Expected -v in wireproxy args.') + 1
+      ],
+      'Expected the staged wireproxy mount argument.',
+    );
+    const routeProxyMount = requireDefined(
+      routeProxyArgs?.[
+        requireDefined(routeProxyArgs?.indexOf('-v'), 'Expected -v in 3proxy args.') + 1
+      ],
+      'Expected the staged 3proxy mount argument.',
+    );
+    const wireproxyStagedPath = wireproxyMount.split(':')[0] ?? '';
+    const routeProxyStagedPath = routeProxyMount.split(':')[0] ?? '';
+
+    expect(wireproxyMount).toContain(':/etc/wireproxy/wireproxy.conf:ro');
+    expect(routeProxyMount).toContain(':/etc/3proxy/3proxy.cfg');
+    expect(routeProxyMount.endsWith(':ro')).toBe(false);
+    expect(wireproxyStagedPath).not.toBe(renderResult.artifactPaths.entryWireproxyConfigPath);
+    expect(routeProxyStagedPath).not.toBe(renderResult.artifactPaths.routeProxyConfigPath);
+    expect(existsSync(path.dirname(wireproxyStagedPath))).toBe(false);
+    expect(existsSync(path.dirname(routeProxyStagedPath))).toBe(false);
+    expect(renderResult.routeProxyConfig).toContain('parent 1000 socks5+ 127.0.0.1 39101');
+    expect(renderResult.routeProxyConfig).not.toContain('parent 1000 socks5 127.0.0.1 39101');
+  });
+
+  it('runs the shared runtime containers as root so they can read the private mounted configs', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const config = createConfig(paths, {
+      publicKey: 'PUBLIC_KEY_FOR_BUNDLE_TEST=',
+      privateKey: 'PRIVATE_KEY_FOR_BUNDLE_TEST=',
+      ipv4Address: '10.64.12.34/32',
+      ipv6Address: null,
+      gatewayIpv4: null,
+      gatewayIpv6: null,
+      dnsServers: ['10.64.0.1'],
+      peerPublicKey: null,
+      peerEndpoint: null,
+    });
+    const bundleResult = await renderRuntimeBundle({
+      config,
+      paths,
+      generatedAt: '2026-03-20T18:36:00.000Z',
+    });
+
+    expect(bundleResult.ok).toBe(true);
+
+    if (!bundleResult.ok) {
+      return;
+    }
+
+    const compose = await readFile(bundleResult.artifactPaths.dockerComposePath, 'utf8');
+    expect(compose).toContain('  entry-tunnel:\n');
+    expect(compose).toContain('    user: "0:0"\n');
+    expect(compose).toContain('  route-proxy:\n');
+    expect(compose).toContain(
+      '  route-proxy:\n    image: tarampampam/3proxy:latest\n    user: "0:0"\n',
+    );
+  });
+
+  it('persists multi-route setup state with one shared Mullvad device and per-route exits', async () => {
     const env = createTempEnvironment();
     const paths = resolveMullgatePaths(env);
     const store = new ConfigStore(paths);
     const provisionFixture = JSON.parse(
       await readTextFixture('wg-provision-response.txt'),
     ) as Record<string, unknown>;
-    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+    const relayFixture = await readJsonFixture<unknown>('www-relays-all.json');
     const provisionedNames: string[] = [];
     let provisionCount = 0;
 
@@ -684,10 +805,7 @@ Password = PROXY_PASSWORD
           return;
         }
 
-        expect(provisionedNames).toEqual([
-          'mullgate-lab-sweden-gothenburg',
-          'mullgate-lab-austria-vienna',
-        ]);
+        expect(provisionedNames).toEqual(['mullgate-lab']);
         expect(result.routes).toEqual([
           {
             index: 0,
@@ -695,10 +813,10 @@ Password = PROXY_PASSWORD
             alias: 'sweden-gothenburg',
             hostname: 'sweden-gothenburg',
             bindIp: '127.0.0.1',
-            deviceName: 'mullgate-lab-sweden-gothenburg',
-            publicKey: result.routes[0]?.publicKey,
-            ipv4Address: '10.64.12.34/32',
-            ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
+            deviceName: 'mullgate-lab',
+            exitRelayHostname: result.routes[0]?.exitRelayHostname,
+            exitSocksHostname: result.routes[0]?.exitSocksHostname,
+            exitSocksPort: result.routes[0]?.exitSocksPort,
           },
           {
             index: 1,
@@ -706,10 +824,10 @@ Password = PROXY_PASSWORD
             alias: 'austria-vienna',
             hostname: 'austria-vienna',
             bindIp: '127.0.0.2',
-            deviceName: 'mullgate-lab-austria-vienna',
-            publicKey: result.routes[1]?.publicKey,
-            ipv4Address: '10.64.12.35/32',
-            ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
+            deviceName: 'mullgate-lab',
+            exitRelayHostname: result.routes[1]?.exitRelayHostname,
+            exitSocksHostname: result.routes[1]?.exitSocksHostname,
+            exitSocksPort: result.routes[1]?.exitSocksPort,
           },
         ]);
 
@@ -721,38 +839,25 @@ Password = PROXY_PASSWORD
         });
         expect(savedConfig.setup.bind.host).toBe('127.0.0.1');
         expect(savedConfig.routing.locations).toHaveLength(2);
-        expect(savedConfig.routing.locations[0]?.mullvad.deviceName).toBe(
-          'mullgate-lab-sweden-gothenburg',
-        );
-        expect(savedConfig.routing.locations[1]?.mullvad.deviceName).toBe(
-          'mullgate-lab-austria-vienna',
-        );
         expect(savedConfig.routing.locations[0]?.bindIp).toBe('127.0.0.1');
         expect(savedConfig.routing.locations[1]?.bindIp).toBe('127.0.0.2');
-        expect(savedConfig.routing.locations[0]?.mullvad.wireguard.publicKey).not.toBe(
-          savedConfig.routing.locations[1]?.mullvad.wireguard.publicKey,
-        );
-        expect(savedConfig.routing.locations[0]?.mullvad.wireguard.ipv4Address).toBe(
-          '10.64.12.34/32',
-        );
-        expect(savedConfig.routing.locations[1]?.mullvad.wireguard.ipv4Address).toBe(
-          '10.64.12.35/32',
-        );
+        expect(savedConfig.routing.locations[0]?.mullvad.exit.relayHostname).toBe('se-got-wg-101');
+        expect(savedConfig.routing.locations[1]?.mullvad.exit.relayHostname).toBe('at-vie-wg-001');
         expect(savedConfig.setup.location.requested).toBe('sweden-gothenburg');
         expect(savedConfig.setup.location.resolvedAlias).toBe('sweden-gothenburg');
-        expect(savedConfig.mullvad.deviceName).toBe('mullgate-lab-sweden-gothenburg');
+        expect(savedConfig.mullvad.deviceName).toBeTruthy();
       },
     );
   });
 
-  it('retries a throttled second-route Mullvad provisioning call and still persists the multi-route setup', async () => {
+  it('retries a throttled shared-device Mullvad provisioning call and still persists the multi-route setup', async () => {
     const env = createTempEnvironment();
     const paths = resolveMullgatePaths(env);
     const store = new ConfigStore(paths);
     const provisionFixture = JSON.parse(
       await readTextFixture('wg-provision-response.txt'),
     ) as Record<string, unknown>;
-    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+    const relayFixture = await readJsonFixture<unknown>('www-relays-all.json');
     const attemptsByDevice = new Map<string, number>();
 
     await withJsonServer(
@@ -763,7 +868,7 @@ Password = PROXY_PASSWORD
           const attempt = (attemptsByDevice.get(deviceName) ?? 0) + 1;
           attemptsByDevice.set(deviceName, attempt);
 
-          if (deviceName === 'mullgate-lab-austria-vienna' && attempt === 1) {
+          if (deviceName === 'mullgate-lab' && attempt === 1) {
             return {
               status: 429,
               body: 'Request was throttled. Expected available in 1 second.',
@@ -771,16 +876,13 @@ Password = PROXY_PASSWORD
             };
           }
 
-          const ipv4Address =
-            deviceName === 'mullgate-lab-sweden-gothenburg' ? '10.64.12.34/32' : '10.64.12.35/32';
-
           return {
             body: JSON.stringify({
               ...provisionFixture,
               id: `${deviceName}-attempt-${attempt}`,
               pubkey: payload.pubkey,
               name: deviceName,
-              ipv4_address: ipv4Address,
+              ipv4_address: '10.64.12.34/32',
             }),
           };
         },
@@ -820,22 +922,16 @@ Password = PROXY_PASSWORD
           return;
         }
 
-        expect(attemptsByDevice.get('mullgate-lab-sweden-gothenburg')).toBe(1);
-        expect(attemptsByDevice.get('mullgate-lab-austria-vienna')).toBe(2);
+        expect(attemptsByDevice.get('mullgate-lab')).toBe(2);
         expect(elapsedMs).toBeGreaterThanOrEqual(900);
         expect(result.routes.map((route) => route.deviceName)).toEqual([
-          'mullgate-lab-sweden-gothenburg',
-          'mullgate-lab-austria-vienna',
+          'mullgate-lab',
+          'mullgate-lab',
         ]);
 
         const savedConfig = JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
         expect(savedConfig.routing.locations).toHaveLength(2);
-        expect(savedConfig.routing.locations[1]?.mullvad.deviceName).toBe(
-          'mullgate-lab-austria-vienna',
-        );
-        expect(savedConfig.routing.locations[1]?.mullvad.wireguard.ipv4Address).toBe(
-          '10.64.12.35/32',
-        );
+        expect(savedConfig.routing.locations[1]?.mullvad.exit.relayHostname).toBe('at-vie-wg-001');
       },
     );
   });
@@ -847,7 +943,7 @@ Password = PROXY_PASSWORD
     const provisionFixture = JSON.parse(
       await readTextFixture('wg-provision-response.txt'),
     ) as Record<string, unknown>;
-    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+    const relayFixture = await readJsonFixture<unknown>('www-relays-all.json');
 
     await withJsonServer(
       {
@@ -908,9 +1004,9 @@ Password = PROXY_PASSWORD
             hostname: '44.55.66.77',
             bindIp: '44.55.66.77',
             deviceName: 'mullgate-public',
-            publicKey: result.routes[0]?.publicKey,
-            ipv4Address: '10.64.30.44/32',
-            ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
+            exitRelayHostname: result.routes[0]?.exitRelayHostname,
+            exitSocksHostname: result.routes[0]?.exitSocksHostname,
+            exitSocksPort: result.routes[0]?.exitSocksPort,
           },
         ]);
 
@@ -965,37 +1061,23 @@ Password = PROXY_PASSWORD
     });
   });
 
-  it('returns route-specific provisioning failure metadata for the second route', async () => {
+  it('returns shared-device provisioning failure metadata when the first Mullvad device request fails', async () => {
     const env = createTempEnvironment();
     const store = new ConfigStore(resolveMullgatePaths(env));
-    const provisionFixture = JSON.parse(
+    const _provisionFixture = JSON.parse(
       await readTextFixture('wg-provision-response.txt'),
     ) as Record<string, unknown>;
-    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
-    let provisionCount = 0;
+    const relayFixture = await readJsonFixture<unknown>('www-relays-all.json');
 
     await withJsonServer(
       {
         '/wg': (request) => {
-          provisionCount += 1;
           const payload = parseFormBody(request.rawBody) as { pubkey: string; name?: string };
 
-          if (provisionCount === 2) {
-            return {
-              status: 500,
-              body: JSON.stringify({
-                detail: `account 123456789012 for ${payload.name ?? 'missing-device'} failed upstream`,
-              }),
-            };
-          }
-
           return {
+            status: 500,
             body: JSON.stringify({
-              ...provisionFixture,
-              id: 'device-1',
-              pubkey: payload.pubkey,
-              name: payload.name ?? 'mullgate-lab-sweden-gothenburg',
-              ipv4_address: '10.64.12.34/32',
+              detail: `account 123456789012 for ${payload.name ?? 'missing-device'} failed upstream`,
             }),
           };
         },
@@ -1028,16 +1110,15 @@ Password = PROXY_PASSWORD
           code: 'HTTP_ERROR',
           endpoint: new URL('/wg', baseUrl).toString(),
           route: {
-            index: 1,
-            requested: 'austria-vienna',
-            alias: 'austria-vienna',
-            hostname: 'austria-vienna',
-            bindIp: '127.0.0.2',
-            deviceName: 'mullgate-lab-austria-vienna',
+            index: 0,
+            requested: 'sweden-gothenburg',
+            alias: 'sweden-gothenburg',
+            hostname: 'sweden-gothenburg',
+            bindIp: '127.0.0.1',
+            deviceName: 'mullgate-lab',
           },
-          message:
-            'Provisioning failed for routed location austria-vienna (austria-vienna -> 127.0.0.2).',
-          cause: 'account 123456789012 for mullgate-lab-austria-vienna failed upstream',
+          message: 'Provisioning failed for the shared Mullvad WireGuard device.',
+          cause: 'account 123456789012 for mullgate-lab failed upstream',
         });
       },
     );
@@ -1176,14 +1257,9 @@ describe('failure metadata and redaction', () => {
       checkedAt: '2026-03-20T18:43:00.000Z',
       code: 'MISSING_WIREGUARD',
       message:
-        'Cannot render wireproxy artifacts for route sweden-gothenburg before Mullvad WireGuard credentials are fully provisioned.',
+        'Cannot render runtime proxy artifacts before the shared Mullvad WireGuard device is fully provisioned.',
       artifactPath: paths.configFile,
-      routeId: 'sweden-gothenburg',
-      routeAlias: 'sweden-gothenburg',
-      routeHostname: 'sweden-gothenburg',
-      routeBindIp: '127.0.0.1',
-      serviceName: 'wireproxy-sweden-gothenburg',
-      backendName: 'route-sweden-gothenburg',
+      serviceName: 'entry-tunnel',
     });
 
     await mkdir(paths.runtimeDir, { recursive: true });
@@ -1196,7 +1272,7 @@ describe('failure metadata and redaction', () => {
 
     const validationFailure = await validateWireproxyConfig({
       configPath: invalidWireproxyConfigPath,
-      reportPath: paths.wireproxyConfigTestReportFile,
+      reportPath: paths.runtimeValidationReportFile,
       checkedAt: '2026-03-20T18:44:00.000Z',
       spawn: createSpawnStub({}),
     });
@@ -1208,7 +1284,7 @@ describe('failure metadata and redaction', () => {
       status: 'failure',
       checkedAt: '2026-03-20T18:44:00.000Z',
       target: invalidWireproxyConfigPath,
-      reportPath: paths.wireproxyConfigTestReportFile,
+      reportPath: paths.runtimeValidationReportFile,
       validator: 'internal-syntax',
       issues: [
         {
@@ -1223,15 +1299,11 @@ describe('failure metadata and redaction', () => {
           target: invalidWireproxyConfigPath,
           message: 'Missing required [Socks5] section.',
         },
-        {
-          target: invalidWireproxyConfigPath,
-          message: 'Missing required [http] section.',
-        },
       ],
       cause: 'Missing required Address entry in [Interface].',
     });
 
-    const report = await readFile(paths.wireproxyConfigTestReportFile, 'utf8');
+    const report = await readFile(paths.runtimeValidationReportFile, 'utf8');
     expect(report).not.toContain('123456789012');
     expect(report).not.toContain('PRIVATE_KEY_FOR_FAILURE_CASE');
   });

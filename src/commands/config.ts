@@ -15,11 +15,9 @@ import {
 import type { Command } from 'commander';
 import {
   defaultDeviceName,
-  deriveRouteDeviceName,
   loadStoredRelayCatalog,
   type PlannedSetupRoute,
   planSetupRoutes,
-  provisionRouteWithRetries,
   summarizeValidationSource,
   verifyHttpsAssets,
   withRuntimeStatus,
@@ -32,8 +30,9 @@ import {
   normalizeExposureBaseDomain,
   validateExposureSettings,
 } from '../config/exposure-contract.js';
+import { formatRedactedConfig } from '../config/redact.js';
 import type { ExposureMode, MullgateConfig } from '../config/schema.js';
-import { ConfigStore, type LoadConfigResult, syncLegacyMirrorsToRouting } from '../config/store.js';
+import { ConfigStore, type LoadConfigResult, normalizeMullgateConfig } from '../config/store.js';
 import { createLocationAliasCatalog, normalizeLocationToken } from '../domain/location-aliases.js';
 import {
   listRegionGroupNames,
@@ -47,8 +46,11 @@ import {
 } from '../mullvad/fetch-relays.js';
 import { buildPlatformSupportContract } from '../platform/support-contract.js';
 import { requireArrayValue, requireDefined } from '../required.js';
-import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
-import { validateWireproxyConfig } from '../runtime/validate-wireproxy.js';
+import {
+  ENTRY_WIREPROXY_SOCKS_PORT,
+  renderRuntimeProxyArtifacts,
+} from '../runtime/render-runtime-proxies.js';
+import { validateRuntimeArtifacts } from '../runtime/validate-runtime.js';
 
 const DEFAULT_HTTPS_PORT = 8443;
 const EDITABLE_CONFIG_FIELDS = new Map<string, EditableFieldSpec>([
@@ -79,7 +81,7 @@ type EditableFieldSpec = {
 type ConfigValidationSuccess = {
   readonly ok: true;
   readonly phase: 'validation';
-  readonly source: 'wireproxy-binary' | 'docker' | 'internal-syntax';
+  readonly source: 'validation-suite';
   readonly refreshedArtifacts: boolean;
   readonly config: MullgateConfig;
   readonly artifactPath: string;
@@ -236,7 +238,7 @@ export type ProxyExportCommandOptions = {
 };
 
 const GUIDED_PROMPT_CANCELLED = Symbol('guided-prompt-cancelled');
-const PROVISIONING_URL_ENV = 'MULLGATE_MULLVAD_WG_URL';
+const _PROVISIONING_URL_ENV = 'MULLGATE_MULLVAD_WG_URL';
 const RELAYS_URL_ENV = 'MULLGATE_MULLVAD_RELAYS_URL';
 
 type PromptTextOptions = {
@@ -353,7 +355,7 @@ function registerConfigShowCommand(target: Command): void {
 
       writeCliRaw({
         sink: process.stdout,
-        text: `${JSON.stringify(result.config, null, 2)}\n`,
+        text: `${formatRedactedConfig(result.config)}\n`,
       });
     });
 }
@@ -885,7 +887,7 @@ function registerConfigSetCommand(target: Command): void {
           return;
         }
 
-        const canonicalConfig = syncLegacyMirrorsToRouting(updatedConfig);
+        const canonicalConfig = normalizeMullgateConfig(updatedConfig);
         const staleConfig = withRuntimeStatus(
           canonicalConfig,
           'unvalidated',
@@ -939,7 +941,7 @@ function registerValidateCommand(target: Command): void {
       'Re-render derived artifacts from saved config and relay cache before validating.',
     )
     .description(
-      'Validate the saved or freshly rendered wireproxy config and persist the result metadata.',
+      'Validate the saved or freshly rendered shared runtime artifacts and persist the result metadata.',
     )
     .action(async (options: { refresh?: boolean }) => {
       const store = new ConfigStore();
@@ -986,8 +988,9 @@ export function renderPathReport(report: Awaited<ReturnType<ConfigStore['inspect
     `state dir: ${paths.appStateDir}`,
     `cache dir: ${paths.appCacheDir}`,
     `runtime dir: ${paths.runtimeDir} (${exists.runtimeDir ? 'present' : 'missing'})`,
-    `wireproxy config: ${paths.wireproxyConfigFile}`,
-    `wireproxy configtest report: ${paths.wireproxyConfigTestReportFile}`,
+    `entry wireproxy config: ${paths.entryWireproxyConfigFile}`,
+    `route proxy config: ${paths.routeProxyConfigFile}`,
+    `runtime validation report: ${paths.runtimeValidationReportFile}`,
     `docker compose: ${paths.dockerComposePath}`,
     `relay cache: ${paths.provisioningCacheFile} (${exists.relayCacheFile ? 'present' : 'missing'})`,
     '',
@@ -1017,8 +1020,10 @@ export function renderLocationsReport(config: MullgateConfig, configPath: string
       `   resolved alias: ${location.relayPreference.resolvedAlias ?? 'n/a'}`,
       `   country: ${location.relayPreference.country ?? 'n/a'}`,
       `   city: ${location.relayPreference.city ?? 'n/a'}`,
+      `   exit relay: ${location.mullvad.exit.relayHostname}`,
+      `   exit socks: ${location.mullvad.exit.socksHostname}:${location.mullvad.exit.socksPort}`,
       `   route id: ${location.runtime.routeId}`,
-      `   wireproxy service: ${location.runtime.wireproxyServiceName}`,
+      `   https backend: ${location.runtime.httpsBackendName}`,
     ]),
   ].join('\n');
 }
@@ -1077,8 +1082,8 @@ export function renderExposureReport(config: MullgateConfig, configPath: string)
       `   route id: ${route.routeId}`,
       `   dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
       ...route.endpoints.flatMap((endpoint) => [
-        `   ${endpoint.protocol} hostname: ${createAuthenticatedEndpointUrl(config, endpoint.hostnameUrl)}`,
-        `   ${endpoint.protocol} direct ip: ${createAuthenticatedEndpointUrl(config, endpoint.bindUrl)}`,
+        `   ${endpoint.protocol} hostname: ${endpoint.redactedHostnameUrl}`,
+        `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`,
       ]),
     ]),
     '',
@@ -1140,7 +1145,7 @@ export function updateExposureConfig(
       validated.mode,
     ),
   }));
-  const canonicalConfig = syncLegacyMirrorsToRouting({
+  const canonicalConfig = normalizeMullgateConfig({
     ...config,
     setup: {
       ...config.setup,
@@ -2890,16 +2895,16 @@ export function describeConfiguredProxyExportRoutes(input: {
   );
 
   return input.config.routing.locations.map((location, routeIndex) => {
-    const matchedRelay = relayByHostname.get(location.relayPreference.hostnameLabel ?? '') ?? null;
+    const matchedRelay = relayByHostname.get(location.mullvad.exit.relayHostname) ?? null;
 
     return {
       routeIndex,
       routeId: location.runtime.routeId,
       routeAlias: location.alias,
       routeHostname: location.hostname,
-      countryCode: matchedRelay?.location.countryCode ?? location.relayPreference.country ?? null,
-      cityCode: matchedRelay?.location.cityCode ?? location.relayPreference.city ?? null,
-      relayHostname: matchedRelay?.hostname ?? location.relayPreference.hostnameLabel ?? null,
+      countryCode: matchedRelay?.location.countryCode ?? location.mullvad.exit.countryCode ?? null,
+      cityCode: matchedRelay?.location.cityCode ?? location.mullvad.exit.cityCode ?? null,
+      relayHostname: matchedRelay?.hostname ?? location.mullvad.exit.relayHostname,
       provider: matchedRelay?.provider ?? location.mullvad.relayConstraints.providers[0] ?? null,
       owner: matchedRelay ? (matchedRelay.owned ? 'mullvad' : 'rented') : null,
       runMode: matchedRelay ? (matchedRelay.stboot ? 'ram' : 'disk') : null,
@@ -3020,7 +3025,7 @@ export async function ensureProxyExportRoutes(input: {
     };
   }
 
-  const newRouteCount = input.config.routing.locations.length + plannedTargets.targets.length;
+  const _newRouteCount = input.config.routing.locations.length + plannedTargets.targets.length;
   const routeBindIpsResult = deriveAddedRouteBindIps({
     config: input.config,
     count: plannedTargets.targets.length,
@@ -3070,11 +3075,11 @@ export async function ensureProxyExportRoutes(input: {
 
   const plannedRoutes = plannedRoutesResult.value.map((route) => ({
     ...route,
-    deviceName: deriveRouteDeviceName(baseDeviceName, route.alias, newRouteCount),
+    deviceName: baseDeviceName,
   }));
 
   if (input.exportInput.writeMode === 'dry-run') {
-    const dryRunConfig = syncLegacyMirrorsToRouting({
+    const dryRunConfig = normalizeMullgateConfig({
       ...input.config,
       updatedAt: new Date().toISOString(),
       routing: {
@@ -3083,7 +3088,11 @@ export async function ensureProxyExportRoutes(input: {
           ...plannedRoutes.map((route, index) =>
             createProvisionedRouteConfig({
               route,
-              accountNumber: input.config.mullvad.accountNumber,
+              relay: requireArrayValue(
+                plannedTargets.targets,
+                index,
+                `Missing planned export target at index ${index}.`,
+              ).relay,
               providers: plannedTargets.targets[index]?.selector.providers ?? [],
             }),
           ),
@@ -3099,56 +3108,25 @@ export async function ensureProxyExportRoutes(input: {
     };
   }
 
-  const provisionedRoutes = [];
-
-  for (let index = 0; index < plannedRoutes.length; index += 1) {
-    const route = requireArrayValue(
-      plannedRoutes,
-      index,
-      `Missing planned export route at index ${index}.`,
-    );
-    const provisionResult = await provisionRouteWithRetries({
-      accountNumber: input.config.mullvad.accountNumber,
-      route,
-      ...(readOptionalString(process.env[PROVISIONING_URL_ENV])
-        ? { provisioningBaseUrl: readOptionalString(process.env[PROVISIONING_URL_ENV]) }
-        : {}),
-    });
-
-    if (!provisionResult.ok) {
-      return {
-        ok: false,
-        phase: provisionResult.phase,
-        source: provisionResult.source,
-        message: `Provisioning failed for routed location ${route.alias} (${route.hostname} -> ${route.bindIp}).`,
-        configPath: input.store.paths.configFile,
-        cause: provisionResult.cause ?? provisionResult.message,
-      };
-    }
-
-    provisionedRoutes.push({
-      route,
-      provisioning: provisionResult,
-      selector: requireArrayValue(
-        plannedTargets.targets,
-        index,
-        `Missing planned export selector at index ${index}.`,
-      ).selector,
-    });
-  }
-
-  const updatedConfig = syncLegacyMirrorsToRouting({
+  const updatedConfig = normalizeMullgateConfig({
     ...input.config,
     updatedAt: new Date().toISOString(),
     routing: {
       locations: [
         ...input.config.routing.locations,
-        ...provisionedRoutes.map(({ route, provisioning, selector }) =>
+        ...plannedRoutes.map((route, index) =>
           createProvisionedRouteConfig({
             route,
-            accountNumber: input.config.mullvad.accountNumber,
-            provisioning,
-            providers: selector.providers,
+            relay: requireArrayValue(
+              plannedTargets.targets,
+              index,
+              `Missing planned export target at index ${index}.`,
+            ).relay,
+            providers: requireArrayValue(
+              plannedTargets.targets,
+              index,
+              `Missing planned export target at index ${index}.`,
+            ).selector.providers,
           }),
         ),
       ],
@@ -3175,7 +3153,7 @@ export async function ensureProxyExportRoutes(input: {
     };
   }
 
-  const renderResult = await renderWireproxyArtifacts({
+  const renderResult = await renderRuntimeProxyArtifacts({
     config: pendingConfig,
     relayCatalog: input.relayCatalog,
     paths: input.store.paths,
@@ -3193,10 +3171,17 @@ export async function ensureProxyExportRoutes(input: {
     };
   }
 
-  const validationResult = await validateWireproxyConfig({
-    configPath: renderResult.artifactPaths.wireproxyConfigPath,
-    configText: renderResult.wireproxyConfig,
-    reportPath: input.store.paths.wireproxyConfigTestReportFile,
+  const validationResult = await validateRuntimeArtifacts({
+    entryWireproxyConfigPath: renderResult.artifactPaths.entryWireproxyConfigPath,
+    entryWireproxyConfigText: renderResult.entryWireproxyConfig,
+    routeProxyConfigPath: renderResult.artifactPaths.routeProxyConfigPath,
+    routeProxyConfigText: renderResult.routeProxyConfig,
+    routes: renderResult.routes,
+    bind: {
+      socksPort: pendingConfig.setup.bind.socksPort,
+      httpPort: pendingConfig.setup.bind.httpPort,
+    },
+    reportPath: input.store.paths.runtimeValidationReportFile,
   });
 
   const finalConfig = withRuntimeStatus(
@@ -3529,12 +3514,8 @@ function incrementIpv4Address(value: string): string {
 
 function createProvisionedRouteConfig(input: {
   readonly route: PlannedSetupRoute;
-  readonly accountNumber: string;
+  readonly relay: MullvadRelay;
   readonly providers: readonly string[];
-  readonly provisioning?: Extract<
-    Awaited<ReturnType<typeof provisionRouteWithRetries>>,
-    { ok: true }
-  >;
 }): MullgateConfig['routing']['locations'][number] {
   return {
     alias: input.route.alias,
@@ -3542,29 +3523,27 @@ function createProvisionedRouteConfig(input: {
     bindIp: input.route.bindIp,
     relayPreference: structuredClone(input.route.relayPreference),
     mullvad: {
-      accountNumber: input.accountNumber,
-      deviceName: input.route.deviceName,
-      lastProvisionedAt: input.provisioning?.checkedAt ?? null,
       relayConstraints: {
         providers: [...input.providers],
       },
-      wireguard: input.provisioning?.value.toConfigValue() ?? {
-        publicKey: null,
-        privateKey: null,
-        ipv4Address: null,
-        ipv6Address: null,
-        gatewayIpv4: null,
-        gatewayIpv6: null,
-        dnsServers: [],
-        peerPublicKey: null,
-        peerEndpoint: null,
+      exit: {
+        relayHostname: input.relay.hostname,
+        relayFqdn: input.relay.fqdn,
+        socksHostname: requireDefined(
+          input.relay.socksName,
+          `Expected relay ${input.relay.hostname} to include a SOCKS hostname.`,
+        ),
+        socksPort: requireDefined(
+          input.relay.socksPort,
+          `Expected relay ${input.relay.hostname} to include a SOCKS port.`,
+        ),
+        countryCode: input.relay.location.countryCode,
+        cityCode: input.relay.location.cityCode,
       },
     },
     runtime: {
       routeId: input.route.routeId,
-      wireproxyServiceName: `wireproxy-${input.route.routeId}`,
-      haproxyBackendName: `route-${input.route.routeId}`,
-      wireproxyConfigFile: `wireproxy-${input.route.routeId}.conf`,
+      httpsBackendName: `route-${input.route.routeId}`,
     },
   };
 }
@@ -4162,14 +4141,19 @@ async function validateSavedConfig(input: {
     };
   }
 
-  const hasExistingWireproxyConfig = await fileExists(input.store.paths.wireproxyConfigFile);
+  const hasExistingRuntimeArtifacts = await Promise.all([
+    fileExists(input.store.paths.entryWireproxyConfigFile),
+    fileExists(input.store.paths.routeProxyConfigFile),
+  ]).then(([entryExists, routeProxyExists]) => entryExists && routeProxyExists);
   const shouldRefresh =
     input.refresh ||
     loadResult.config.runtime.status.phase === 'unvalidated' ||
-    !hasExistingWireproxyConfig;
+    !hasExistingRuntimeArtifacts;
 
-  let configToValidatePath = input.store.paths.wireproxyConfigFile;
-  let configToValidateText: string | undefined;
+  let entryWireproxyConfigPath = input.store.paths.entryWireproxyConfigFile;
+  let entryWireproxyConfigText: string | undefined;
+  let routeProxyConfigPath = input.store.paths.routeProxyConfigFile;
+  let routeProxyConfigText: string | undefined;
   let refreshedArtifacts = false;
 
   if (shouldRefresh) {
@@ -4194,7 +4178,7 @@ async function validateSavedConfig(input: {
       };
     }
 
-    const renderResult = await renderWireproxyArtifacts({
+    const renderResult = await renderRuntimeProxyArtifacts({
       config: loadResult.config,
       relayCatalog: relayCatalog.value,
       paths: input.store.paths,
@@ -4219,17 +4203,43 @@ async function validateSavedConfig(input: {
       };
     }
 
-    configToValidatePath = renderResult.artifactPaths.wireproxyConfigPath;
-    configToValidateText = renderResult.wireproxyConfig;
+    entryWireproxyConfigPath = renderResult.artifactPaths.entryWireproxyConfigPath;
+    entryWireproxyConfigText = renderResult.entryWireproxyConfig;
+    routeProxyConfigPath = renderResult.artifactPaths.routeProxyConfigPath;
+    routeProxyConfigText = renderResult.routeProxyConfig;
     refreshedArtifacts = true;
   } else {
-    configToValidateText = await readFile(configToValidatePath, 'utf8');
+    [entryWireproxyConfigText, routeProxyConfigText] = await Promise.all([
+      readFile(entryWireproxyConfigPath, 'utf8'),
+      readFile(routeProxyConfigPath, 'utf8'),
+    ]);
   }
 
-  const validationResult = await validateWireproxyConfig({
-    configPath: configToValidatePath,
-    configText: configToValidateText,
-    reportPath: input.store.paths.wireproxyConfigTestReportFile,
+  const validationResult = await validateRuntimeArtifacts({
+    entryWireproxyConfigPath,
+    entryWireproxyConfigText,
+    routeProxyConfigPath,
+    routeProxyConfigText,
+    routes: loadResult.config.routing.locations.map((route) => ({
+      routeId: route.runtime.routeId,
+      routeAlias: route.alias,
+      routeHostname: route.hostname,
+      routeBindIp: route.bindIp,
+      httpsBackendName: route.runtime.httpsBackendName,
+      exitRelayHostname: route.mullvad.exit.relayHostname,
+      exitRelayFqdn: route.mullvad.exit.relayFqdn,
+      exitSocksHostname: route.mullvad.exit.socksHostname,
+      exitSocksPort: route.mullvad.exit.socksPort,
+      entryParent: {
+        host: '127.0.0.1',
+        port: ENTRY_WIREPROXY_SOCKS_PORT,
+      },
+    })),
+    bind: {
+      socksPort: loadResult.config.setup.bind.socksPort,
+      httpPort: loadResult.config.setup.bind.httpPort,
+    },
+    reportPath: input.store.paths.runtimeValidationReportFile,
   });
 
   const updatedConfig = withRuntimeStatus(
@@ -4264,8 +4274,8 @@ async function validateSavedConfig(input: {
     source: validationResult.source,
     refreshedArtifacts,
     config: updatedConfig,
-    artifactPath: validationResult.target,
-    reportPath: validationResult.reportPath ?? input.store.paths.wireproxyConfigTestReportFile,
+    artifactPath: input.store.paths.entryWireproxyConfigFile,
+    reportPath: validationResult.reportPath ?? input.store.paths.runtimeValidationReportFile,
     message: `Validated via ${summarizeValidationSource(validationResult)}.`,
   };
 }

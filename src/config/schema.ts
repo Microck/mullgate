@@ -1,15 +1,15 @@
 import { z } from 'zod';
 
-export const CONFIG_VERSION = 1 as const;
+export const CONFIG_VERSION = 2 as const;
 
 const nonEmptyString = z.string().trim().min(1);
 const timestampString = z.string().datetime({ offset: true });
 
 export const bindConfigSchema = z.object({
   host: nonEmptyString,
-  socksPort: z.number().int().min(1).max(65535),
-  httpPort: z.number().int().min(1).max(65535),
-  httpsPort: z.number().int().min(1).max(65535).nullable(),
+  socksPort: z.number().int().min(1).max(65_535),
+  httpPort: z.number().int().min(1).max(65_535),
+  httpsPort: z.number().int().min(1).max(65_535).nullable(),
 });
 
 export const authConfigSchema = z.object({
@@ -39,6 +39,18 @@ export const httpsConfigSchema = z.object({
   keyPath: nonEmptyString.optional(),
 });
 
+export const wireguardCredentialSchema = z.object({
+  publicKey: nonEmptyString.nullable(),
+  privateKey: nonEmptyString.nullable(),
+  ipv4Address: nonEmptyString.nullable(),
+  ipv6Address: nonEmptyString.nullable(),
+  gatewayIpv4: nonEmptyString.nullable(),
+  gatewayIpv6: nonEmptyString.nullable(),
+  dnsServers: z.array(nonEmptyString),
+  peerPublicKey: nonEmptyString.nullable(),
+  peerEndpoint: nonEmptyString.nullable(),
+});
+
 export const mullvadProvisioningSchema = z.object({
   accountNumber: z
     .string()
@@ -50,24 +62,28 @@ export const mullvadProvisioningSchema = z.object({
     ownership: nonEmptyString.optional(),
     providers: z.array(nonEmptyString).default([]),
   }),
-  wireguard: z.object({
-    publicKey: nonEmptyString.nullable(),
-    privateKey: nonEmptyString.nullable(),
-    ipv4Address: nonEmptyString.nullable(),
-    ipv6Address: nonEmptyString.nullable(),
-    gatewayIpv4: nonEmptyString.nullable(),
-    gatewayIpv6: nonEmptyString.nullable(),
-    dnsServers: z.array(nonEmptyString),
-    peerPublicKey: nonEmptyString.nullable(),
-    peerEndpoint: nonEmptyString.nullable(),
+  wireguard: wireguardCredentialSchema,
+});
+
+export const routedLocationExitSchema = z.object({
+  relayHostname: nonEmptyString,
+  relayFqdn: nonEmptyString,
+  socksHostname: nonEmptyString,
+  socksPort: z.number().int().min(1).max(65_535),
+  countryCode: nonEmptyString,
+  cityCode: nonEmptyString,
+});
+
+export const routedLocationMullvadSchema = z.object({
+  relayConstraints: z.object({
+    providers: z.array(nonEmptyString).default([]),
   }),
+  exit: routedLocationExitSchema,
 });
 
 export const routedLocationRuntimeSchema = z.object({
   routeId: nonEmptyString,
-  wireproxyServiceName: nonEmptyString,
-  haproxyBackendName: nonEmptyString,
-  wireproxyConfigFile: nonEmptyString,
+  httpsBackendName: nonEmptyString,
 });
 
 export const routedLocationSchema = z.object({
@@ -75,7 +91,7 @@ export const routedLocationSchema = z.object({
   hostname: nonEmptyString,
   bindIp: nonEmptyString,
   relayPreference: locationInputSchema,
-  mullvad: mullvadProvisioningSchema,
+  mullvad: routedLocationMullvadSchema,
   runtime: routedLocationRuntimeSchema,
 });
 
@@ -84,13 +100,11 @@ export const routedLocationInputSchema = z.object({
   hostname: nonEmptyString.optional(),
   bindIp: nonEmptyString.optional(),
   relayPreference: locationInputSchema,
-  mullvad: mullvadProvisioningSchema,
+  mullvad: routedLocationMullvadSchema,
   runtime: z
     .object({
       routeId: nonEmptyString.optional(),
-      wireproxyServiceName: nonEmptyString.optional(),
-      haproxyBackendName: nonEmptyString.optional(),
-      wireproxyConfigFile: nonEmptyString.optional(),
+      httpsBackendName: nonEmptyString.optional(),
     })
     .optional(),
 });
@@ -111,10 +125,11 @@ export const runtimeBundleArtifactSchema = z.object({
 });
 
 export const runtimeArtifactSchema = z.object({
-  backend: z.enum(['wireproxy']),
+  backend: z.literal('shared-entry-wireguard-route-proxy'),
   sourceConfigPath: nonEmptyString,
-  wireproxyConfigPath: nonEmptyString,
-  wireproxyConfigTestReportPath: nonEmptyString,
+  entryWireproxyConfigPath: nonEmptyString,
+  routeProxyConfigPath: nonEmptyString,
+  validationReportPath: nonEmptyString,
   relayCachePath: nonEmptyString,
   dockerComposePath: nonEmptyString.nullable(),
   runtimeBundle: runtimeBundleArtifactSchema,
@@ -176,13 +191,14 @@ export const mullgateConfigInputSchema = z.object({
   updatedAt: timestampString,
   setup: guidedSetupSchema,
   mullvad: mullvadProvisioningSchema,
-  routing: routingConfigInputSchema.optional(),
+  routing: routingConfigInputSchema,
   runtime: runtimeArtifactSchema,
   diagnostics: diagnosticsSchema,
 });
 
 export type ExposureMode = z.infer<typeof exposureModeSchema>;
 export type ExposureConfig = z.infer<typeof exposureConfigSchema>;
+export type RoutedLocationExit = z.infer<typeof routedLocationExitSchema>;
 export type RoutedLocation = z.infer<typeof routedLocationSchema>;
 export type RoutedLocationInput = z.infer<typeof routedLocationInputSchema>;
 export type MullgateConfig = z.infer<typeof mullgateConfigSchema>;

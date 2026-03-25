@@ -11,6 +11,10 @@ import {
   type RuntimeBundleManifest,
   renderRuntimeBundle,
 } from '../src/runtime/render-runtime-bundle.js';
+import {
+  createFixtureRuntime,
+  createFixtureRoute as createRoutedLocationFixture,
+} from '../test/helpers/mullgate-fixtures.js';
 
 type CommandResult = {
   readonly exitCode: number;
@@ -54,7 +58,6 @@ const scenarios: readonly ScenarioDefinition[] = [
     title: 'domain-backed private-network exposure',
     generatedAt: '2026-03-21T06:10:00.000Z',
     updateArgs: [
-      'config',
       'exposure',
       '--mode',
       'private-network',
@@ -71,13 +74,13 @@ const scenarios: readonly ScenarioDefinition[] = [
       allowLan: true,
       restartNeeded: true,
       guidance: [
-        'Private-network mode expects those bind IPs to be reachable from your LAN, VPN, or overlay network.',
+        'Private-network mode is the recommended remote posture for Tailscale, LAN, and other trusted overlays. Keep it private by ensuring every bind IP stays reachable only inside that trusted network.',
         'Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.',
         'Publish the DNS records below so every route hostname resolves to its matching bind IP.',
       ],
       warnings: [
         'info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.',
-        'warning: Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+        'warning: Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
       ],
       absentWarnings: [
         'warning: Public exposure publishes authenticated proxy listeners on publicly routable IPs.',
@@ -103,7 +106,6 @@ const scenarios: readonly ScenarioDefinition[] = [
     title: 'direct-IP public exposure without a base domain',
     generatedAt: '2026-03-21T06:20:00.000Z',
     updateArgs: [
-      'config',
       'exposure',
       '--mode',
       'public',
@@ -119,13 +121,13 @@ const scenarios: readonly ScenarioDefinition[] = [
       allowLan: true,
       restartNeeded: true,
       guidance: [
-        'Public mode expects those bind IPs to be reachable from the public internet.',
+        'Public mode is advanced operator territory. Only use it when you intentionally want internet-reachable listeners and are prepared to harden the host around them.',
         'Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.',
         'No base domain is configured, so clients must reach each route via the direct bind IP entrypoints below.',
       ],
       warnings: [
         'warning: Public exposure publishes authenticated proxy listeners on publicly routable IPs. Confirm firewalling, rate limits, and monitoring before enabling it on the open internet.',
-        'warning: Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+        'warning: Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
       ],
       absentWarnings: [
         'info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.',
@@ -190,7 +192,7 @@ function renderHelp(): string {
   return [
     'Usage: pnpm exec tsx scripts/verify-s04-exposure.ts [options]',
     '',
-    "Exercise S04's saved-config, config exposure, config hosts, and runtime-manifest surfaces",
+    "Exercise S04's saved-config, exposure, hosts, and runtime-manifest surfaces",
     'for one domain-backed scenario and one direct-IP scenario. Fail if mappings, guidance,',
     'warnings, restart-needed state, or redaction drift out of sync.',
     '',
@@ -228,13 +230,13 @@ async function verifyScenario(
 
     const config = await loadConfig(store);
     const savedConfig = await loadJsonFile<MullgateConfig>(paths.configFile, 'saved config');
-    const exposureResult = await runCliCommand(env, ['config', 'exposure']);
-    const hostsResult = await runCliCommand(env, ['config', 'hosts']);
+    const exposureResult = await runCliCommand(env, ['exposure']);
+    const hostsResult = await runCliCommand(env, ['hosts']);
 
     if (exposureResult.exitCode !== 0) {
       throw new Error(
         [
-          `${scenario.id}: \`mullgate config exposure\` failed.`,
+          `${scenario.id}: \`mullgate exposure\` failed.`,
           exposureResult.stderr || exposureResult.stdout || 'No CLI output.',
           `config: ${paths.configFile}`,
         ].join('\n'),
@@ -244,7 +246,7 @@ async function verifyScenario(
     if (hostsResult.exitCode !== 0) {
       throw new Error(
         [
-          `${scenario.id}: \`mullgate config hosts\` failed.`,
+          `${scenario.id}: \`mullgate hosts\` failed.`,
           hostsResult.stderr || hostsResult.stdout || 'No CLI output.',
           `config: ${paths.configFile}`,
         ].join('\n'),
@@ -281,8 +283,8 @@ async function verifyScenario(
 
     assertSavedConfigMatchesScenario(savedConfig, scenario);
     assertNoSecretLeaks(`${scenario.id} update output`, updateResult.stdout, config);
-    assertNoSecretLeaks(`${scenario.id} config exposure`, exposureResult.stdout, config);
-    assertNoSecretLeaks(`${scenario.id} config hosts`, hostsResult.stdout, config);
+    assertNoSecretLeaks(`${scenario.id} exposure`, exposureResult.stdout, config);
+    assertNoSecretLeaks(`${scenario.id} hosts`, hostsResult.stdout, config);
     assertNoSecretLeaks(
       `${scenario.id} runtime manifest`,
       JSON.stringify(manifestFile, null, 2),
@@ -293,7 +295,7 @@ async function verifyScenario(
     assertManifestSurface(scenario, manifest);
     assertCliAndManifestAgree(scenario, exposureResult.stdout, manifest);
 
-    return `- ${scenario.id}: ok (${scenario.title}; ${scenario.expected.routes.length} routes cross-checked across saved config, config exposure, config hosts, and runtime manifest)`;
+    return `- ${scenario.id}: ok (${scenario.title}; ${scenario.expected.routes.length} routes cross-checked across saved config, exposure, hosts, and runtime manifest)`;
   } catch (error) {
     preserveRoot = true;
     const message = error instanceof Error ? error.message : String(error);
@@ -316,7 +318,6 @@ async function verifyAmbiguousFailure(): Promise<string> {
     await store.save(createBaseFixtureConfig(env));
 
     const result = await runCliCommand(env, [
-      'config',
       'exposure',
       '--mode',
       'private-network',
@@ -362,7 +363,7 @@ async function verifyAmbiguousFailure(): Promise<string> {
       );
     }
 
-    return '- ambiguous-bind-ip rejection: ok (`mullgate config exposure` fails loudly with AMBIGUOUS_SHARED_BIND_IP and leaves the saved config unchanged)';
+    return '- ambiguous-bind-ip rejection: ok (`mullgate exposure` fails loudly with AMBIGUOUS_SHARED_BIND_IP and leaves the saved config unchanged)';
   } catch (error) {
     preserveRoot = true;
     const message = error instanceof Error ? error.message : String(error);
@@ -906,25 +907,14 @@ function createBaseFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
         }),
       ],
     },
-    runtime: {
-      backend: 'wireproxy',
-      sourceConfigPath: paths.configFile,
-      wireproxyConfigPath: paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
-      relayCachePath: paths.provisioningCacheFile,
-      dockerComposePath: paths.dockerComposePath,
-      runtimeBundle: {
-        bundleDir: paths.runtimeBundleDir,
-        dockerComposePath: paths.runtimeComposeFile,
-        httpsSidecarConfigPath: paths.runtimeHttpsSidecarConfigFile,
-        manifestPath: paths.runtimeBundleManifestFile,
-      },
+    runtime: createFixtureRuntime({
+      paths,
       status: {
         phase: 'validated',
         lastCheckedAt: timestamp,
         message: 'Fixture config already validated.',
       },
-    },
+    }),
     diagnostics: {
       lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
@@ -954,43 +944,26 @@ function createRouteFixture(input: {
   readonly accountNumber: string;
   readonly lastProvisionedAt: string;
 }): RoutedLocation {
-  return {
+  return createRoutedLocationFixture({
     alias: input.alias,
     hostname: input.hostname,
     bindIp: input.bindIp,
-    relayPreference: {
-      requested: input.requested,
-      country: input.country,
-      city: input.city,
-      hostnameLabel: input.hostnameLabel,
-      resolvedAlias: input.resolvedAlias,
+    requested: input.requested,
+    country: input.country,
+    city: input.city,
+    hostnameLabel: input.hostnameLabel,
+    resolvedAlias: input.resolvedAlias,
+    routeId: input.routeId,
+    httpsBackendName: input.haproxyBackendName,
+    exit: {
+      relayHostname: input.hostnameLabel,
+      relayFqdn: input.peerEndpoint.split(':')[0] ?? `${input.hostnameLabel}.relays.mullvad.net`,
+      socksHostname: `${input.hostnameLabel}.mullvad.net`,
+      socksPort: 1080,
+      countryCode: input.country,
+      cityCode: input.city,
     },
-    mullvad: {
-      accountNumber: input.accountNumber,
-      deviceName: input.deviceName,
-      lastProvisionedAt: input.lastProvisionedAt,
-      relayConstraints: {
-        providers: [],
-      },
-      wireguard: {
-        publicKey: input.publicKey,
-        privateKey: input.privateKey,
-        ipv4Address: input.ipv4Address,
-        ipv6Address: input.ipv6Address,
-        gatewayIpv4: '10.64.0.1',
-        gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-        dnsServers: ['10.64.0.1'],
-        peerPublicKey: `peer-${input.publicKey}`,
-        peerEndpoint: input.peerEndpoint,
-      },
-    },
-    runtime: {
-      routeId: input.routeId,
-      wireproxyServiceName: input.wireproxyServiceName,
-      haproxyBackendName: input.haproxyBackendName,
-      wireproxyConfigFile: input.wireproxyConfigFile,
-    },
-  };
+  });
 }
 
 function assertNoSecretLeaks(surface: string, text: string, config: MullgateConfig): void {
@@ -1007,10 +980,6 @@ function collectSecrets(config: MullgateConfig): string[] {
     config.setup.auth.password,
     config.mullvad.accountNumber,
     config.mullvad.wireguard.privateKey,
-    ...config.routing.locations.flatMap((route) => [
-      route.mullvad.accountNumber,
-      route.mullvad.wireguard.privateKey,
-    ]),
   ];
 
   return [

@@ -27,6 +27,7 @@ if you want Mullvad-backed proxy access without replacing your computer's normal
 
 - expose authenticated SOCKS5, HTTP, and HTTPS proxy endpoints from your own Mullvad subscription
 - route only the traffic you choose instead of tunneling the whole machine
+- scale many routed exits from one shared Mullvad WireGuard device instead of spending one device slot per route
 - keep one CLI for setup, relay selection, named exits, runtime checks, and diagnostics
 - stay in control of the host and credentials instead of depending on a hosted relay service
 
@@ -38,7 +39,7 @@ mullgate is a local operator layer built around a mullvad subscription. it provi
 
 the goal is not "replace mullvad's proxy page with another set of manual steps." the goal is to give self-hosters a managed proxy gateway that uses mullvad exits without forcing the whole machine through the vpn.
 
-the hard part is that mullvad only gives each account 5 wireguard devices. once you want multiple real routed exits, that limit becomes an architectural constraint, which is why mullgate is more than a thin wrapper around mullvad's socks5 proxy.
+mullgate solves mullvad's device cap by provisioning one shared wireguard entry device and fanning out to exact mullvad socks5 exits per route. the current linux runtime has been live-verified with 50 routed exits on one shared mullvad device.
 
 ## architecture
 
@@ -65,7 +66,7 @@ flowchart TB
     subgraph state[Canonical config and saved state]
         config[config.json\nroutes plus credentials plus exposure posture]
         cache[relay cache plus exact relay choices]
-        artifacts[derived runtime artifacts\nwireproxy configs plus docker-compose plus runtime-manifest plus validation metadata plus last-start]
+        artifacts[derived runtime artifacts\nentry-wireproxy plus route-proxy plus docker-compose plus runtime-manifest plus validation metadata plus last-start]
     end
 
     subgraph planner[Route and exposure planning]
@@ -90,8 +91,8 @@ flowchart TB
 
     subgraph upstream[Mullvad-backed upstream path]
         relayCatalog[Mullvad relay catalog]
-        selectedRelay[selected Mullvad relay per route]
-        wg[one WireGuard identity per route]
+        wg[one shared Mullvad WireGuard entry device]
+        selectedRelay[selected Mullvad SOCKS5 exit per route]
         destination[destination and observed exit]
     end
 
@@ -134,9 +135,9 @@ flowchart TB
     docker --> listeners
     listeners --> router
     router --> backends
-    backends --> selectedRelay
-    selectedRelay --> wg
-    wg --> destination
+    backends --> wg
+    wg --> selectedRelay
+    selectedRelay --> destination
 
     localClient --> listeners
     remoteClient --> dns
@@ -155,10 +156,10 @@ flowchart TB
 
     bindPlan -.non-loopback multi-route requires one distinct bind IP per route.-> listeners
     hostnamePlan -.hostname-selected routing stays truthful only when the hostname resolves to that route's bind IP.-> dns
-    wg -.current scaling limit: one Mullvad WireGuard device or key per route.-> destination
+    wg -.one shared Mullvad device powers many routed exits.-> selectedRelay
 ```
 
-the diagram above shows the current shipped Mullgate model end to end: setup writes canonical config, exposure defines bind-IP and hostname truth, relay tooling can pin exact exits, `start` renders and launches the Docker runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces.
+the diagram above shows the current shipped mullgate model end to end: setup writes canonical config, exposure defines bind-ip and hostname truth, relay tooling can pin exact exits, `start` renders and launches the shared-entry runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces. on linux, this runtime has been live-proven with 50 routes on one shared mullvad device.
 
 ## quickstart
 

@@ -1,49 +1,50 @@
 ---
 title: Current Runtime Model
-description: Summary of the current Mullgate runtime architecture and its scaling limit.
+description: Summary of the shared-entry multi-exit runtime that Mullgate ships today.
 ---
 
-The current Mullgate runtime, as described by the architecture spec and usage material, is built around a route-per-backend model.
+The current Mullgate runtime is a shared-entry multi-exit model.
 
 ## Core characteristics
 
-The documented current design includes:
+The shipped design includes:
 
 - canonical routed config in `routing.locations[]`
-- one rendered backend per configured route
-- one Mullvad-provisioned WireGuard identity per route
-- routing by destination bind IP
-- a Docker-first runtime bundle that connects local proxy surfaces to route-specific upstream backends
+- one shared Mullvad-provisioned WireGuard entry device
+- one shared entry tunnel inside the runtime
+- one logical Mullvad SOCKS5 exit selection per configured route
+- routing by destination bind IP so hostname-selected behavior stays truthful across SOCKS5, HTTP, and HTTPS
+- a Docker-first runtime bundle that wires together `entry-tunnel`, `route-proxy`, and `routing-layer`
 
 ## Why this model is coherent
 
-This design is operationally understandable because it keeps route identity explicit:
+This design keeps route identity explicit while avoiding the old route-per-key scaling problem:
 
-- each route maps to a specific local entrypoint
-- each local entrypoint maps to a specific upstream backend
-- the diagnostic surfaces can report route behavior consistently
-- the runtime bundle can be rendered and verified in a deterministic way
+- each route still maps to its own local entrypoint
+- each route still maps to its own exact Mullvad exit
+- one real Mullvad device powers many routes
+- `status`, `doctor`, runtime manifests, and validation reports can describe the topology directly
 
-## The scaling limit
+## Scaling result
 
-The architecture spec also explains the central limitation:
+Fresh setup now consumes one Mullvad WireGuard device slot total for the shared entry path, not one slot per route.
 
-- 1 location = 1 Mullvad WireGuard key or device
-- 2 locations = 2 Mullvad WireGuard keys or devices
-- 10 locations = 10 Mullvad WireGuard keys or devices
+That means route count is driven by:
 
-Because Mullvad limits the number of WireGuard keys per account, this model does not scale to many simultaneous country-specific proxies on one account.
+- bind-IP planning
+- runtime capacity
+- upstream relay behavior
+
+not by one Mullvad WireGuard key per route.
+
+The current Linux runtime has been live-validated with a 50-route sweep on one shared Mullvad device.
 
 ## Practical consequence
 
-The current design works for a small number of routes, but it cannot satisfy the target use case of exposing many concurrent country-specific local proxies from a single Mullvad account.
-
-## Why the project needs a new architecture investigation
-
-That scaling ceiling is not just an implementation detail. It is the reason the repository contains a dedicated [Multi-exit Architecture Spec](/docs/architecture/multi-exit) for the next milestone.
+Mullgate can expose many concurrent country-specific local proxies from one Mullvad account without taking over the host's default routing.
 
 ## See also
 
 - [Architecture Overview](/docs/architecture/overview)
+- [Multi-exit Architecture](/docs/architecture/multi-exit)
 - [Usage](/docs/guides/usage)
-- [FAQ](/docs/faq)

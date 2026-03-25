@@ -12,7 +12,7 @@ import {
   type ExposureContract,
   validateExposureSettings,
 } from '../config/exposure-contract.js';
-import { resolveRouteWireproxyPaths } from '../config/paths.js';
+import { redactSensitiveText } from '../config/redact.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
 import { ConfigStore, type LoadConfigResult } from '../config/store.js';
 import {
@@ -25,7 +25,8 @@ import {
   queryDockerComposeStatus,
 } from '../runtime/docker-runtime.js';
 import type { RuntimeBundleManifest } from '../runtime/render-runtime-bundle.js';
-import type { ValidateWireproxyResult } from '../runtime/validate-wireproxy.js';
+import { ENTRY_TUNNEL_SERVICE, ROUTE_PROXY_SERVICE } from '../runtime/render-runtime-proxies.js';
+import type { ValidateRuntimeResult } from '../runtime/validate-runtime.js';
 import {
   type ArtifactReadResult,
   classifyContainerState,
@@ -77,32 +78,11 @@ type RouteArtifactTarget = {
   readonly hostname: string;
   readonly bindIp: string;
   readonly serviceName: string;
+};
+
+type RuntimeValidationArtifact = {
   readonly reportPath: string;
-};
-
-type RouteValidationReport = RouteArtifactTarget & {
-  readonly result: ArtifactReadResult<ValidateWireproxyResult>;
-};
-
-type FailedValidationReport = RouteValidationReport & {
-  readonly result: {
-    readonly kind: 'present';
-    readonly value: Extract<ValidateWireproxyResult, { ok: false }>;
-  };
-};
-
-type SuccessfulValidationReport = RouteValidationReport & {
-  readonly result: {
-    readonly kind: 'present';
-    readonly value: Extract<ValidateWireproxyResult, { ok: true }>;
-  };
-};
-
-type InvalidValidationReport = RouteValidationReport & {
-  readonly result: {
-    readonly kind: 'invalid';
-    readonly reason: string;
-  };
+  readonly result: ArtifactReadResult<ValidateRuntimeResult>;
 };
 
 export function registerDoctorCommand(
@@ -153,7 +133,9 @@ export async function runDoctorFlow(
     lastStartResultRaw,
     composeStatus,
     relayCacheResult,
-    primaryWireproxyExists,
+    entryWireproxyExists,
+    routeProxyExists,
+    runtimeValidationResultRaw,
   ] = await Promise.all([
     readJsonArtifact<RuntimeBundleManifest>(manifestPath),
     readJsonArtifact<RuntimeStartDiagnostic>(lastStartReportPath),
@@ -162,7 +144,9 @@ export async function runDoctorFlow(
       ...(dependencies.checkedAt ? { checkedAt: dependencies.checkedAt } : {}),
     }),
     loadStoredRelayCatalog(config.runtime.relayCachePath),
-    fileExists(config.runtime.wireproxyConfigPath),
+    fileExists(config.runtime.entryWireproxyConfigPath),
+    fileExists(config.runtime.routeProxyConfigPath),
+    readJsonArtifact<ValidateRuntimeResult>(config.runtime.validationReportPath),
   ]);
 
   const manifestResult = normalizeManifestResult(manifestResultRaw);
@@ -172,19 +156,22 @@ export async function runDoctorFlow(
   const platform = manifest?.platform ?? buildPlatformSupportContract({ paths: store.paths });
   const lastStart = resolveLastStartDiagnostic(config, lastStartResult);
   const routeTargets = buildRouteArtifactTargets(config, manifest);
-  const routeValidationReports = await Promise.all(
-    routeTargets.map(async (target) => ({
-      ...target,
-      result: normalizeValidationReportResult(
-        await readJsonArtifact<ValidateWireproxyResult>(target.reportPath),
-      ),
-    })),
-  );
+  const runtimeValidationReport: RuntimeValidationArtifact = {
+    reportPath: config.runtime.validationReportPath,
+    result: normalizeValidationReportResult(runtimeValidationResultRaw),
+  };
 
   const checks = await Promise.all([
     Promise.resolve(buildConfigCheck(config, store.paths.configFile)),
     Promise.resolve(buildPlatformCheck(platform)),
-    Promise.resolve(buildValidationCheck(config, primaryWireproxyExists, routeValidationReports)),
+    Promise.resolve(
+      buildValidationCheck({
+        config,
+        entryWireproxyExists,
+        routeProxyExists,
+        runtimeValidationReport,
+      }),
+    ),
     Promise.resolve(
       buildRelayCacheCheck(config.runtime.relayCachePath, relayCacheResult, checkedAt),
     ),
@@ -244,7 +231,9 @@ function renderLoadFailure(
       configPath: store.paths.configFile,
       runtimeDir: store.paths.runtimeDir,
       relayCachePath: store.paths.provisioningCacheFile,
-      wireproxyConfigPath: store.paths.wireproxyConfigFile,
+      entryWireproxyConfigPath: store.paths.entryWireproxyConfigFile,
+      routeProxyConfigPath: store.paths.routeProxyConfigFile,
+      validationReportPath: store.paths.runtimeValidationReportFile,
       manifestPath: store.paths.runtimeBundleManifestFile,
       lastStartReportPath: store.paths.runtimeStartDiagnosticsFile,
       checks: [check],
@@ -277,7 +266,9 @@ function renderUnconfiguredFailure(
       configPath: store.paths.configFile,
       runtimeDir: store.paths.runtimeDir,
       relayCachePath: store.paths.provisioningCacheFile,
-      wireproxyConfigPath: store.paths.wireproxyConfigFile,
+      entryWireproxyConfigPath: store.paths.entryWireproxyConfigFile,
+      routeProxyConfigPath: store.paths.routeProxyConfigFile,
+      validationReportPath: store.paths.runtimeValidationReportFile,
       manifestPath: store.paths.runtimeBundleManifestFile,
       lastStartReportPath: store.paths.runtimeStartDiagnosticsFile,
       checks: [check],
@@ -337,105 +328,136 @@ function buildPlatformCheck(platform: PlatformSupportContract): DoctorCheck {
   };
 }
 
-function buildValidationCheck(
-  config: MullgateConfig,
-  primaryWireproxyExists: boolean,
-  routeReports: readonly RouteValidationReport[],
-): DoctorCheck {
-  const failingReports = routeReports.filter(
-    (report): report is FailedValidationReport =>
-      report.result.kind === 'present' && report.result.value.ok === false,
-  );
-  const invalidReports = routeReports.filter(
-    (report): report is InvalidValidationReport => report.result.kind === 'invalid',
-  );
-  const missingReports = routeReports.filter((report) => report.result.kind === 'missing');
-  const successfulReports = routeReports.filter(
-    (report): report is SuccessfulValidationReport =>
-      report.result.kind === 'present' && report.result.value.ok,
-  );
-
+function buildValidationCheck(input: {
+  readonly config: MullgateConfig;
+  readonly entryWireproxyExists: boolean;
+  readonly routeProxyExists: boolean;
+  readonly runtimeValidationReport: RuntimeValidationArtifact;
+}): DoctorCheck {
   const details = [
-    `saved-runtime-phase=${config.runtime.status.phase}`,
-    `saved-runtime-message=${config.runtime.status.message ?? 'n/a'}`,
-    `wireproxy-config=${config.runtime.wireproxyConfigPath} (${primaryWireproxyExists ? 'present' : 'missing'})`,
-    ...successfulReports.map(
-      (report) => `report[${report.routeId}]=ok via ${report.result.value.source}`,
-    ),
-    ...failingReports.map(
-      (report) =>
-        `report[${report.routeId}]=failure via ${report.result.value.source}: ${report.result.value.cause}`,
-    ),
-    ...invalidReports.map((report) => `report[${report.routeId}]=invalid: ${report.result.reason}`),
-    ...missingReports.map((report) => `report[${report.routeId}]=missing (${report.reportPath})`),
+    `saved-runtime-phase=${input.config.runtime.status.phase}`,
+    `saved-runtime-message=${input.config.runtime.status.message ?? 'n/a'}`,
+    `entry-wireproxy-config=${input.config.runtime.entryWireproxyConfigPath} (${input.entryWireproxyExists ? 'present' : 'missing'})`,
+    `route-proxy-config=${input.config.runtime.routeProxyConfigPath} (${input.routeProxyExists ? 'present' : 'missing'})`,
   ];
 
-  if (!primaryWireproxyExists) {
-    return {
-      name: 'validation-artifacts',
-      outcome: 'fail',
-      summary: 'The primary wireproxy config artifact is missing from the runtime directory.',
-      details,
-      remediation:
-        'Run `mullgate validate` or `mullgate start` to regenerate the derived runtime artifacts before trusting the saved runtime state.',
-    };
-  }
-
-  if (failingReports.length > 0 || config.runtime.status.phase === 'error') {
+  if (!input.entryWireproxyExists || !input.routeProxyExists) {
     return {
       name: 'validation-artifacts',
       outcome: 'fail',
       summary:
-        failingReports.length > 0
-          ? 'At least one persisted wireproxy validation report recorded a failure.'
+        'One or more shared runtime config artifacts are missing from the runtime directory.',
+      details,
+      remediation:
+        'Run `mullgate validate` or `mullgate start` to regenerate the shared entry-wireproxy and route-proxy artifacts before trusting the saved runtime state.',
+    };
+  }
+
+  if (input.runtimeValidationReport.result.kind === 'invalid') {
+    return {
+      name: 'validation-artifacts',
+      outcome: 'fail',
+      summary:
+        'The persisted runtime validation report could not be parsed back into the expected shared-runtime shape.',
+      details: [
+        ...details,
+        `validation-report=invalid (${input.runtimeValidationReport.reportPath})`,
+        `reason=${input.runtimeValidationReport.result.reason}`,
+      ],
+      remediation:
+        'Delete the broken runtime validation report and rerun `mullgate validate` so doctor can trust the persisted validation surface again.',
+    };
+  }
+
+  if (input.runtimeValidationReport.result.kind === 'present') {
+    const report = input.runtimeValidationReport.result.value;
+    const reportDetails = [
+      ...details,
+      `validation-report=${input.runtimeValidationReport.reportPath}`,
+      `validation-status=${report.status}`,
+      `validation-source=${report.source}`,
+      ...report.checks.map((check) =>
+        check.ok
+          ? `check[${check.artifact}]=ok via ${check.source}/${check.validator}`
+          : `check[${check.artifact}]=failure via ${check.source}/${check.validator}: ${check.cause ?? check.issues[0]?.message ?? 'validation failed'}`,
+      ),
+    ];
+
+    if (!report.ok || input.config.runtime.status.phase === 'error') {
+      return {
+        name: 'validation-artifacts',
+        outcome: 'fail',
+        summary: !report.ok
+          ? 'The persisted shared runtime validation report recorded a failure.'
           : 'Saved runtime status is `error`, so the current runtime artifacts should not be trusted.',
-      details,
-      remediation:
-        'Fix the reported wireproxy/config issue, then rerun `mullgate validate` or `mullgate start` to refresh the runtime artifacts.',
+        details: reportDetails,
+        remediation:
+          'Fix the reported entry-wireproxy or route-proxy config issue, then rerun `mullgate validate` or `mullgate start` to refresh the shared runtime artifacts.',
+      };
+    }
+
+    if (input.config.runtime.status.phase === 'unvalidated') {
+      return {
+        name: 'validation-artifacts',
+        outcome: 'degraded',
+        summary:
+          'Saved config is marked `unvalidated`, so runtime artifacts may lag behind recent config or exposure edits.',
+        details: reportDetails,
+        remediation:
+          'Run `mullgate validate` or `mullgate start` to regenerate the shared runtime artifacts and capture a fresh validation report.',
+      };
+    }
+
+    return {
+      name: 'validation-artifacts',
+      outcome: 'pass',
+      summary:
+        'Shared entry-wireproxy and route-proxy artifacts are present, and the persisted runtime validation report passed.',
+      details: reportDetails,
     };
   }
 
-  if (invalidReports.length > 0) {
+  if (input.config.runtime.status.phase === 'error') {
     return {
       name: 'validation-artifacts',
       outcome: 'fail',
       summary:
-        'At least one persisted validation report could not be parsed back into the expected shape.',
-      details,
+        'Saved runtime status is `error`, but the shared runtime validation report is missing.',
+      details: [
+        ...details,
+        `validation-report=missing (${input.runtimeValidationReport.reportPath})`,
+      ],
       remediation:
-        'Delete the broken validation report and rerun `mullgate validate` so doctor can trust the persisted validation surface again.',
+        'Rerun `mullgate validate` or `mullgate start` so the saved error state has a fresh shared-runtime validation report behind it.',
     };
   }
 
-  if (config.runtime.status.phase === 'unvalidated') {
+  if (input.config.runtime.status.phase === 'unvalidated') {
     return {
       name: 'validation-artifacts',
       outcome: 'degraded',
       summary:
-        'Saved config is marked `unvalidated`, so runtime artifacts may lag behind recent config or exposure edits.',
-      details,
+        'Saved config is marked `unvalidated`, and the shared runtime validation report is missing.',
+      details: [
+        ...details,
+        `validation-report=missing (${input.runtimeValidationReport.reportPath})`,
+      ],
       remediation:
-        'Run `mullgate validate` or `mullgate start` to regenerate wireproxy artifacts and capture a fresh validation report.',
-    };
-  }
-
-  if (missingReports.length > 0) {
-    return {
-      name: 'validation-artifacts',
-      outcome: 'degraded',
-      summary:
-        'One or more per-route validation reports are missing, so doctor cannot fully prove the rendered wireproxy configs are still in sync.',
-      details,
-      remediation:
-        'Rerun `mullgate validate` to recreate the missing configtest reports before relying on the saved validation metadata.',
+        'Run `mullgate validate` or `mullgate start` to generate the shared runtime validation report before relying on the saved validation metadata.',
     };
   }
 
   return {
     name: 'validation-artifacts',
-    outcome: 'pass',
-    summary: 'Wireproxy config artifacts and persisted validation reports are present.',
-    details,
+    outcome: 'degraded',
+    summary:
+      'The shared runtime validation report is missing, so doctor cannot fully prove the rendered artifacts are still in sync.',
+    details: [
+      ...details,
+      `validation-report=missing (${input.runtimeValidationReport.reportPath})`,
+    ],
+    remediation:
+      'Rerun `mullgate validate` to recreate the missing shared runtime validation report before relying on the saved validation metadata.',
   };
 }
 
@@ -690,16 +712,29 @@ function buildRuntimeCheck(
     };
   }
 
-  const routingLayerState = classifyContainerState(
-    findContainerForService(composeStatus.containers, ROUTING_LAYER_SERVICE),
+  const sharedServiceStates = [
+    {
+      serviceName: ENTRY_TUNNEL_SERVICE,
+      state: classifyContainerState(
+        findContainerForService(composeStatus.containers, ENTRY_TUNNEL_SERVICE),
+      ),
+    },
+    {
+      serviceName: ROUTE_PROXY_SERVICE,
+      state: classifyContainerState(
+        findContainerForService(composeStatus.containers, ROUTE_PROXY_SERVICE),
+      ),
+    },
+    {
+      serviceName: ROUTING_LAYER_SERVICE,
+      state: classifyContainerState(
+        findContainerForService(composeStatus.containers, ROUTING_LAYER_SERVICE),
+      ),
+    },
+  ];
+  const unhealthyServices = sharedServiceStates.filter(
+    (service) => service.state.liveState !== 'running',
   );
-  const routeStates = routeTargets.map((target) => ({
-    ...target,
-    state: classifyContainerState(
-      findContainerForService(composeStatus.containers, target.serviceName),
-    ),
-  }));
-  const unhealthyRoutes = routeStates.filter((route) => route.state.liveState !== 'running');
   const details = [
     `compose-command=${composeStatus.command.rendered}`,
     `containers=${composeStatus.summary.total}`,
@@ -707,9 +742,10 @@ function buildRuntimeCheck(
     `starting=${composeStatus.summary.starting}`,
     `stopped=${composeStatus.summary.stopped}`,
     `unhealthy=${composeStatus.summary.unhealthy}`,
-    `routing-layer=${routingLayerState.detail}`,
-    ...routeStates.map(
-      (route) => `route ${route.routeId} (${route.serviceName})=${route.state.detail}`,
+    ...sharedServiceStates.map((service) => `${service.serviceName}=${service.state.detail}`),
+    ...routeTargets.map(
+      (route) =>
+        `route ${route.routeId} publishes ${route.hostname} -> ${route.bindIp} via ${route.serviceName}`,
     ),
   ];
 
@@ -730,15 +766,15 @@ function buildRuntimeCheck(
     };
   }
 
-  if (routingLayerState.liveState !== 'running' || unhealthyRoutes.length > 0) {
+  if (unhealthyServices.length > 0) {
     return {
       name: 'runtime',
       outcome: 'fail',
       summary:
-        'Live Docker Compose state shows one or more expected Mullgate services are stopped or degraded.',
+        'Live Docker Compose state shows one or more expected shared Mullgate services are stopped or degraded.',
       details,
       remediation:
-        'Inspect `docker compose ps` / `docker compose logs` for the named services, fix the failing route or routing layer, then rerun `mullgate start`.',
+        'Inspect `docker compose ps` / `docker compose logs` for the named shared services, fix the failing entry tunnel, route proxy, or routing layer, then rerun `mullgate start`.',
     };
   }
 
@@ -746,7 +782,7 @@ function buildRuntimeCheck(
     name: 'runtime',
     outcome: 'pass',
     summary:
-      'Live Docker Compose status matches the expected Mullgate routing-layer and per-route services.',
+      'Live Docker Compose status matches the expected shared entry-tunnel, route-proxy, and routing-layer services.',
     details,
   };
 }
@@ -826,18 +862,13 @@ function buildRouteArtifactTargets(
 
   return config.routing.locations.map((location) => {
     const manifestRoute = manifestRoutes.get(location.runtime.routeId);
-    const artifactPaths = resolveRouteWireproxyPaths(
-      { runtimeDir: config.runtime.runtimeBundle.bundleDir },
-      location.runtime,
-    );
 
     return {
       routeId: location.runtime.routeId,
       alias: location.alias,
       hostname: manifestRoute?.hostname ?? location.hostname,
       bindIp: manifestRoute?.bindIp ?? location.bindIp,
-      serviceName: manifestRoute?.services.wireproxy.name ?? location.runtime.wireproxyServiceName,
-      reportPath: manifestRoute?.configTestReportPath ?? artifactPaths.configTestReportPath,
+      serviceName: manifestRoute?.services.routeProxy.name ?? ROUTE_PROXY_SERVICE,
     };
   });
 }
@@ -871,7 +902,9 @@ function renderDoctorSummary(input: {
     `config: ${input.store.paths.configFile}`,
     `runtime dir: ${input.store.paths.runtimeDir}`,
     `relay cache: ${input.config.runtime.relayCachePath}`,
-    `wireproxy config: ${input.config.runtime.wireproxyConfigPath}`,
+    `entry wireproxy config: ${input.config.runtime.entryWireproxyConfigPath}`,
+    `route proxy config: ${input.config.runtime.routeProxyConfigPath}`,
+    `runtime validation report: ${input.config.runtime.validationReportPath}`,
     `runtime manifest: ${formatArtifactPresence(input.config.runtime.runtimeBundle.manifestPath, input.manifestResult)}`,
     `last start report: ${formatArtifactPresence(input.config.diagnostics.lastRuntimeStartReportPath, input.lastStartResult)}`,
     '',
@@ -892,7 +925,7 @@ function renderDoctorSummary(input: {
     }
   }
 
-  return lines.join('\n');
+  return redactSensitiveText(lines.join('\n'), input.config);
 }
 
 function renderDoctorFailureSummary(input: {
@@ -902,7 +935,9 @@ function renderDoctorFailureSummary(input: {
   readonly configPath: string;
   readonly runtimeDir: string;
   readonly relayCachePath: string;
-  readonly wireproxyConfigPath: string;
+  readonly entryWireproxyConfigPath: string;
+  readonly routeProxyConfigPath: string;
+  readonly validationReportPath: string;
   readonly manifestPath: string;
   readonly lastStartReportPath: string;
   readonly checks: readonly DoctorCheck[];
@@ -915,7 +950,9 @@ function renderDoctorFailureSummary(input: {
     `config: ${input.configPath}`,
     `runtime dir: ${input.runtimeDir}`,
     `relay cache: ${input.relayCachePath}`,
-    `wireproxy config: ${input.wireproxyConfigPath}`,
+    `entry wireproxy config: ${input.entryWireproxyConfigPath}`,
+    `route proxy config: ${input.routeProxyConfigPath}`,
+    `runtime validation report: ${input.validationReportPath}`,
     `runtime manifest: ${input.manifestPath}`,
     `last start report: ${input.lastStartReportPath}`,
     '',
@@ -984,12 +1021,12 @@ function normalizeLastStartResult(
 }
 
 function normalizeValidationReportResult(
-  result: ArtifactReadResult<ValidateWireproxyResult>,
-): ArtifactReadResult<ValidateWireproxyResult> {
+  result: ArtifactReadResult<ValidateRuntimeResult>,
+): ArtifactReadResult<ValidateRuntimeResult> {
   return normalizeArtifact(
     result,
-    isValidateWireproxyResult,
-    'Validation report did not match the expected wireproxy configtest shape.',
+    isValidateRuntimeResult,
+    'Validation report did not match the expected shared runtime validation shape.',
   );
 }
 
@@ -1033,7 +1070,7 @@ function isRuntimeStartDiagnostic(value: unknown): value is RuntimeStartDiagnost
   );
 }
 
-function isValidateWireproxyResult(value: unknown): value is ValidateWireproxyResult {
+function isValidateRuntimeResult(value: unknown): value is ValidateRuntimeResult {
   return (
     isObject(value) &&
     typeof value.ok === 'boolean' &&
@@ -1041,8 +1078,7 @@ function isValidateWireproxyResult(value: unknown): value is ValidateWireproxyRe
     typeof value.source === 'string' &&
     typeof value.status === 'string' &&
     typeof value.checkedAt === 'string' &&
-    typeof value.target === 'string' &&
-    Array.isArray(value.issues)
+    Array.isArray(value.checks)
   );
 }
 

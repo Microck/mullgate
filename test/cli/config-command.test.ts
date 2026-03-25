@@ -18,6 +18,7 @@ import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js'
 import { ConfigStore } from '../../src/config/store.js';
 import type { MullvadRelayCatalog } from '../../src/mullvad/fetch-relays.js';
 import { requireDefined } from '../../src/required.js';
+import { createFixtureRoute, createFixtureRuntime } from '../helpers/mullgate-fixtures.js';
 
 function requireRoute(
   config: MullgateConfig,
@@ -94,101 +95,46 @@ function createFixtureConfig(): MullgateConfig {
     },
     routing: {
       locations: [
-        {
+        createFixtureRoute({
           alias: 'sweden-gothenburg',
           hostname: 'sweden-gothenburg',
           bindIp: '127.0.0.1',
-          relayPreference: {
-            requested: 'sweden-gothenburg',
-            country: 'se',
-            city: 'got',
-            hostnameLabel: 'se-got-wg-101',
-            resolvedAlias: 'sweden-gothenburg',
+          requested: 'sweden-gothenburg',
+          country: 'se',
+          city: 'got',
+          hostnameLabel: 'se-got-wg-101',
+          resolvedAlias: 'sweden-gothenburg',
+          exit: {
+            relayHostname: 'se-got-wg-101',
+            relayFqdn: 'se-got-wg-101.relays.mullvad.net',
+            socksHostname: 'se-got-wg-101-socks.relays.mullvad.net',
           },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-runtime-test-1',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard: {
-              publicKey: 'public-key-value-1',
-              privateKey: 'private-key-value-1',
-              ipv4Address: '10.64.12.34/32',
-              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
-              gatewayIpv4: '10.64.0.1',
-              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-              dnsServers: ['10.64.0.1'],
-              peerPublicKey: 'peer-public-key-value-1',
-              peerEndpoint: 'se-got-wg-101.relays.mullvad.net:3401',
-            },
-          },
-          runtime: {
-            routeId: 'sweden-gothenburg',
-            wireproxyServiceName: 'wireproxy-sweden-gothenburg',
-            haproxyBackendName: 'route-sweden-gothenburg',
-            wireproxyConfigFile: 'wireproxy-sweden-gothenburg.conf',
-          },
-        },
-        {
+        }),
+        createFixtureRoute({
           alias: 'austria-vienna',
           hostname: 'austria-vienna',
           bindIp: '127.0.0.2',
-          relayPreference: {
-            requested: 'austria-vienna',
-            country: 'at',
-            city: 'vie',
-            hostnameLabel: 'at-vie-wg-001',
-            resolvedAlias: 'austria-vienna',
+          requested: 'austria-vienna',
+          country: 'at',
+          city: 'vie',
+          hostnameLabel: 'at-vie-wg-001',
+          resolvedAlias: 'austria-vienna',
+          exit: {
+            relayHostname: 'at-vie-wg-001',
+            relayFqdn: 'at-vie-wg-001.relays.mullvad.net',
+            socksHostname: 'at-vie-wg-001-socks.relays.mullvad.net',
           },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-runtime-test-2',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard: {
-              publicKey: 'public-key-value-2',
-              privateKey: 'private-key-value-2',
-              ipv4Address: '10.64.12.35/32',
-              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1235/128',
-              gatewayIpv4: '10.64.0.1',
-              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-              dnsServers: ['10.64.0.1'],
-              peerPublicKey: 'peer-public-key-value-2',
-              peerEndpoint: 'at-vie-wg-001.relays.mullvad.net:51820',
-            },
-          },
-          runtime: {
-            routeId: 'austria-vienna',
-            wireproxyServiceName: 'wireproxy-austria-vienna',
-            haproxyBackendName: 'route-austria-vienna',
-            wireproxyConfigFile: 'wireproxy-austria-vienna.conf',
-          },
-        },
+        }),
       ],
     },
-    runtime: {
-      backend: 'wireproxy',
-      sourceConfigPath: paths.configFile,
-      wireproxyConfigPath: paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
-      relayCachePath: paths.provisioningCacheFile,
-      dockerComposePath: paths.dockerComposePath,
-      runtimeBundle: {
-        bundleDir: paths.runtimeBundleDir,
-        dockerComposePath: paths.runtimeComposeFile,
-        httpsSidecarConfigPath: paths.runtimeHttpsSidecarConfigFile,
-        manifestPath: paths.runtimeBundleManifestFile,
-      },
+    runtime: createFixtureRuntime({
+      paths,
       status: {
         phase: 'validated',
         lastCheckedAt: timestamp,
         message: 'Fixture config already validated.',
       },
-    },
+    }),
     diagnostics: {
       lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
@@ -310,8 +256,9 @@ describe('config inspection helpers', () => {
         "state dir: /Users/alice/Library/Application Support/mullgate",
         "cache dir: /Users/alice/Library/Caches/mullgate",
         "runtime dir: /Users/alice/Library/Application Support/mullgate/runtime (missing)",
-        "wireproxy config: /Users/alice/Library/Application Support/mullgate/runtime/wireproxy.conf",
-        "wireproxy configtest report: /Users/alice/Library/Application Support/mullgate/runtime/wireproxy-configtest.json",
+        "entry wireproxy config: /Users/alice/Library/Application Support/mullgate/runtime/entry-wireproxy.conf",
+        "route proxy config: /Users/alice/Library/Application Support/mullgate/runtime/route-proxy.cfg",
+        "runtime validation report: /Users/alice/Library/Application Support/mullgate/runtime/runtime-validation.json",
         "docker compose: /Users/alice/Library/Application Support/mullgate/runtime/docker-compose.yml",
         "relay cache: /Users/alice/Library/Caches/mullgate/relays.json (missing)",
         "",
@@ -374,11 +321,11 @@ copy/paste hosts block
 
     const report = renderExposureReport(config, '/tmp/mullgate-home/config/mullgate/config.json');
 
-    expect(report).toContain('multi-route-secret');
+    expect(report).not.toContain('multi-route-secret');
     expect(report).not.toContain('123456789012');
     expect(report).not.toContain('private-key-value-1');
     expect(report).toContain(
-      'socks5://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:1080',
+      'socks5://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080',
     );
     expect(`\n${report}`).toMatchInlineSnapshot(`
       "
@@ -412,22 +359,22 @@ copy/paste hosts block
          alias: sweden-gothenburg
          route id: sweden-gothenburg
          dns: sweden-gothenburg.proxy.example.com A 192.168.10.10
-         socks5 hostname: socks5://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:1080
-         socks5 direct ip: socks5://alice:multi-route-secret@192.168.10.10:1080
-         http hostname: http://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:8080
-         http direct ip: http://alice:multi-route-secret@192.168.10.10:8080
-         https hostname: https://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:8443
-         https direct ip: https://alice:multi-route-secret@192.168.10.10:8443
+         socks5 hostname: socks5://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.10:1080
+         http hostname: http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080
+         http direct ip: http://[redacted]:[redacted]@192.168.10.10:8080
+         https hostname: https://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8443
+         https direct ip: https://[redacted]:[redacted]@192.168.10.10:8443
       2. austria-vienna.proxy.example.com -> 192.168.10.11
          alias: austria-vienna
          route id: austria-vienna
          dns: austria-vienna.proxy.example.com A 192.168.10.11
-         socks5 hostname: socks5://alice:multi-route-secret@austria-vienna.proxy.example.com:1080
-         socks5 direct ip: socks5://alice:multi-route-secret@192.168.10.11:1080
-         http hostname: http://alice:multi-route-secret@austria-vienna.proxy.example.com:8080
-         http direct ip: http://alice:multi-route-secret@192.168.10.11:8080
-         https hostname: https://alice:multi-route-secret@austria-vienna.proxy.example.com:8443
-         https direct ip: https://alice:multi-route-secret@192.168.10.11:8443
+         socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.11:1080
+         http hostname: http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080
+         http direct ip: http://[redacted]:[redacted]@192.168.10.11:8080
+         https hostname: https://[redacted]:[redacted]@austria-vienna.proxy.example.com:8443
+         https direct ip: https://[redacted]:[redacted]@192.168.10.11:8443
 
       warnings
       - info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
@@ -461,10 +408,10 @@ copy/paste hosts block
 
     const report = renderExposureReport(config, '/tmp/mullgate-home/config/mullgate/config.json');
 
-    expect(report).toContain('multi-route-secret');
+    expect(report).not.toContain('multi-route-secret');
     expect(report).not.toContain('123456789012');
     expect(report).not.toContain('private-key-value-1');
-    expect(report).toContain('socks5://alice:multi-route-secret@203.0.113.10:1080');
+    expect(report).toContain('socks5://[redacted]:[redacted]@203.0.113.10:1080');
     expect(`\n${report}`).toMatchInlineSnapshot(`
       "
       Mullgate exposure report
@@ -497,22 +444,22 @@ copy/paste hosts block
          alias: sweden-gothenburg
          route id: sweden-gothenburg
          dns: not required; use direct bind IP entrypoints
-         socks5 hostname: socks5://alice:multi-route-secret@203.0.113.10:1080
-         socks5 direct ip: socks5://alice:multi-route-secret@203.0.113.10:1080
-         http hostname: http://alice:multi-route-secret@203.0.113.10:8080
-         http direct ip: http://alice:multi-route-secret@203.0.113.10:8080
-         https hostname: https://alice:multi-route-secret@203.0.113.10:8443
-         https direct ip: https://alice:multi-route-secret@203.0.113.10:8443
+         socks5 hostname: socks5://[redacted]:[redacted]@203.0.113.10:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@203.0.113.10:1080
+         http hostname: http://[redacted]:[redacted]@203.0.113.10:8080
+         http direct ip: http://[redacted]:[redacted]@203.0.113.10:8080
+         https hostname: https://[redacted]:[redacted]@203.0.113.10:8443
+         https direct ip: https://[redacted]:[redacted]@203.0.113.10:8443
       2. 203.0.113.11 -> 203.0.113.11
          alias: austria-vienna
          route id: austria-vienna
          dns: not required; use direct bind IP entrypoints
-         socks5 hostname: socks5://alice:multi-route-secret@203.0.113.11:1080
-         socks5 direct ip: socks5://alice:multi-route-secret@203.0.113.11:1080
-         http hostname: http://alice:multi-route-secret@203.0.113.11:8080
-         http direct ip: http://alice:multi-route-secret@203.0.113.11:8080
-         https hostname: https://alice:multi-route-secret@203.0.113.11:8443
-         https direct ip: https://alice:multi-route-secret@203.0.113.11:8443
+         socks5 hostname: socks5://[redacted]:[redacted]@203.0.113.11:1080
+         socks5 direct ip: socks5://[redacted]:[redacted]@203.0.113.11:1080
+         http hostname: http://[redacted]:[redacted]@203.0.113.11:8080
+         http direct ip: http://[redacted]:[redacted]@203.0.113.11:8080
+         https hostname: https://[redacted]:[redacted]@203.0.113.11:8443
+         https direct ip: https://[redacted]:[redacted]@203.0.113.11:8443
 
       warnings
       - warning: Public exposure publishes authenticated proxy listeners on publicly routable IPs. Confirm firewalling, rate limits, and monitoring before enabling it on the open internet.
@@ -745,26 +692,22 @@ copy/paste hosts block
     secondRoute.bindIp = '192.168.10.11';
     config.routing.locations.push({
       ...structuredClone(firstRoute),
-      alias: 'usa-new-york',
-      hostname: 'usa-new-york.proxy.example.com',
-      bindIp: '192.168.10.12',
-      relayPreference: {
+      ...createFixtureRoute({
+        alias: 'usa-new-york',
+        hostname: 'usa-new-york.proxy.example.com',
+        bindIp: '192.168.10.12',
         requested: 'usa-new-york',
         country: 'us',
         city: 'nyc',
         hostnameLabel: 'us-nyc-wg-001',
         resolvedAlias: 'usa-new-york',
-      },
-      mullvad: {
-        ...structuredClone(firstRoute.mullvad),
-        deviceName: 'mullgate-runtime-test-3',
-      },
-      runtime: {
-        routeId: 'usa-new-york',
-        wireproxyServiceName: 'wireproxy-usa-new-york',
-        haproxyBackendName: 'route-usa-new-york',
-        wireproxyConfigFile: 'wireproxy-usa-new-york.conf',
-      },
+        providers: firstRoute.mullvad.relayConstraints.providers,
+        exit: {
+          relayHostname: 'us-nyc-wg-001',
+          relayFqdn: 'us-nyc-wg-001.relays.mullvad.net',
+          socksHostname: 'us-nyc-wg-001-socks.relays.mullvad.net',
+        },
+      }),
     });
 
     const result = buildProxyExportPlan({

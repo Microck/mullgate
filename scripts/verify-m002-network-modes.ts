@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { buildExposureContract, type ExposureContract } from '../src/config/exposure-contract.js';
-import { resolveMullgatePaths, resolveRouteWireproxyPaths } from '../src/config/paths.js';
+import { resolveMullgatePaths } from '../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig, type RoutedLocation } from '../src/config/schema.js';
 import { ConfigStore } from '../src/config/store.js';
 import type { MullvadRelayCatalog } from '../src/mullvad/fetch-relays.js';
@@ -15,6 +15,10 @@ import {
   type RuntimeBundleManifest,
   renderRuntimeBundle,
 } from '../src/runtime/render-runtime-bundle.js';
+import {
+  createFixtureRuntime,
+  createFixtureRoute as createRoutedLocationFixture,
+} from '../test/helpers/mullgate-fixtures.js';
 
 type CommandResult = {
   readonly exitCode: number;
@@ -55,7 +59,6 @@ const scenarios: readonly ScenarioDefinition[] = [
     id: 'private-network-direct',
     title: 'recommended private-network remote posture',
     updateArgs: [
-      'config',
       'exposure',
       '--mode',
       'private-network',
@@ -71,7 +74,6 @@ const scenarios: readonly ScenarioDefinition[] = [
     id: 'public-direct',
     title: 'advanced public direct-IP posture',
     updateArgs: [
-      'config',
       'exposure',
       '--mode',
       'public',
@@ -130,8 +132,8 @@ function renderHelp(): string {
     '',
     'Exercise the real Mullgate CLI across loopback, private-network, and public exposure',
     'postures. For each mode the verifier checks the immediate restart-required exposure',
-    'report, runs `mullgate config validate` to regenerate runtime artifacts, then asserts',
-    '`config exposure`, `config hosts`, `status`, `doctor`, and the runtime manifest all',
+    'report, runs `mullgate validate` to regenerate runtime artifacts, then asserts',
+    '`mullgate exposure`, `mullgate hosts`, `status`, `doctor`, and the runtime manifest all',
     'agree on the assembled network-mode contract.',
     '',
     'Options:',
@@ -172,11 +174,11 @@ async function verifyScenario(input: {
         config: updatedConfig,
       });
 
-      preValidateExposure = await runCliCommand({ env: seeded.env, args: ['config', 'exposure'] });
+      preValidateExposure = await runCliCommand({ env: seeded.env, args: ['exposure'] });
       assertExitCode({
         result: preValidateExposure,
         expected: 0,
-        message: `${input.scenario.id}: pre-validation config exposure failed.`,
+        message: `${input.scenario.id}: pre-validation exposure failed.`,
       });
       assertExposureRestartRequired({
         scenario: input.scenario,
@@ -190,11 +192,11 @@ async function verifyScenario(input: {
       });
     }
 
-    const validate = await runCliCommand({ env: seeded.env, args: ['config', 'validate'] });
+    const validate = await runCliCommand({ env: seeded.env, args: ['validate'] });
     assertExitCode({
       result: validate,
       expected: 0,
-      message: `${input.scenario.id}: config validate failed.`,
+      message: `${input.scenario.id}: validate failed.`,
     });
 
     const config = await loadConfig({ store: seeded.store });
@@ -212,8 +214,8 @@ async function verifyScenario(input: {
       );
     }
 
-    const configExposure = await runCliCommand({ env: seeded.env, args: ['config', 'exposure'] });
-    const configHosts = await runCliCommand({ env: seeded.env, args: ['config', 'hosts'] });
+    const configExposure = await runCliCommand({ env: seeded.env, args: ['exposure'] });
+    const configHosts = await runCliCommand({ env: seeded.env, args: ['hosts'] });
     const status = await runCliCommand({ env: seeded.env, args: ['status'] });
     const doctor = await runCliCommand({ env: seeded.env, args: ['doctor'] });
     const manifestFile = await loadJsonFile<RuntimeBundleManifest>(
@@ -242,12 +244,12 @@ async function verifyScenario(input: {
     assertExitCode({
       result: configExposure,
       expected: 0,
-      message: `${input.scenario.id}: config exposure failed.`,
+      message: `${input.scenario.id}: exposure failed.`,
     });
     assertExitCode({
       result: configHosts,
       expected: 0,
-      message: `${input.scenario.id}: config hosts failed.`,
+      message: `${input.scenario.id}: hosts failed.`,
     });
     assertExitCode({
       result: status,
@@ -320,7 +322,7 @@ async function verifyScenario(input: {
       exposureContract,
     });
 
-    return `- ${input.scenario.id}: ok (${input.scenario.title}; config exposure restart hint, config validate, status, doctor, hosts, and runtime-manifest all agree after artifact refresh)`;
+    return `- ${input.scenario.id}: ok (${input.scenario.title}; exposure restart hint, validate, status, doctor, hosts, and runtime-manifest all agree after artifact refresh)`;
   } catch (error) {
     preserveRoot = true;
     throw withPreservedRoot({ root, error });
@@ -467,25 +469,14 @@ function createBaseFixtureConfig(input: { readonly env: NodeJS.ProcessEnv }): Mu
         }),
       ],
     },
-    runtime: {
-      backend: 'wireproxy',
-      sourceConfigPath: paths.configFile,
-      wireproxyConfigPath: paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
-      relayCachePath: paths.provisioningCacheFile,
-      dockerComposePath: paths.dockerComposePath,
-      runtimeBundle: {
-        bundleDir: paths.runtimeBundleDir,
-        dockerComposePath: paths.runtimeComposeFile,
-        httpsSidecarConfigPath: paths.runtimeHttpsSidecarConfigFile,
-        manifestPath: paths.runtimeBundleManifestFile,
-      },
+    runtime: createFixtureRuntime({
+      paths,
       status: {
         phase: 'validated',
         lastCheckedAt: timestamp,
         message: 'Fixture config already validated.',
       },
-    },
+    }),
     diagnostics: {
       lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
@@ -515,43 +506,26 @@ function createRouteFixture(input: {
   readonly accountNumber: string;
   readonly lastProvisionedAt: string;
 }): RoutedLocation {
-  return {
+  return createRoutedLocationFixture({
     alias: input.alias,
     hostname: input.hostname,
     bindIp: input.bindIp,
-    relayPreference: {
-      requested: input.requested,
-      country: input.country,
-      city: input.city,
-      hostnameLabel: input.hostnameLabel,
-      resolvedAlias: input.resolvedAlias,
+    requested: input.requested,
+    country: input.country,
+    city: input.city,
+    hostnameLabel: input.hostnameLabel,
+    resolvedAlias: input.resolvedAlias,
+    routeId: input.routeId,
+    httpsBackendName: input.haproxyBackendName,
+    exit: {
+      relayHostname: input.hostnameLabel,
+      relayFqdn: input.peerEndpoint.split(':')[0] ?? `${input.hostnameLabel}.relays.mullvad.net`,
+      socksHostname: `${input.hostnameLabel}.mullvad.net`,
+      socksPort: 1080,
+      countryCode: input.country,
+      cityCode: input.city,
     },
-    mullvad: {
-      accountNumber: input.accountNumber,
-      deviceName: input.deviceName,
-      lastProvisionedAt: input.lastProvisionedAt,
-      relayConstraints: {
-        providers: [],
-      },
-      wireguard: {
-        publicKey: input.publicKey,
-        privateKey: input.privateKey,
-        ipv4Address: input.ipv4Address,
-        ipv6Address: input.ipv6Address,
-        gatewayIpv4: '10.64.0.1',
-        gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-        dnsServers: ['10.64.0.1'],
-        peerPublicKey: `peer-${input.publicKey}`,
-        peerEndpoint: input.peerEndpoint,
-      },
-    },
-    runtime: {
-      routeId: input.routeId,
-      wireproxyServiceName: input.wireproxyServiceName,
-      haproxyBackendName: input.haproxyBackendName,
-      wireproxyConfigFile: input.wireproxyConfigFile,
-    },
-  };
+  });
 }
 
 async function seedPrerequisiteArtifacts(input: {
@@ -564,18 +538,13 @@ async function seedPrerequisiteArtifacts(input: {
     `${JSON.stringify(createRelayCatalog(), null, 2)}\n`,
     { mode: 0o600 },
   );
-  await mkdir(path.dirname(input.paths.wireproxyConfigFile), { recursive: true, mode: 0o700 });
-  await writeFile(input.paths.wireproxyConfigFile, '# primary wireproxy fixture\n', {
+  await mkdir(path.dirname(input.paths.entryWireproxyConfigFile), { recursive: true, mode: 0o700 });
+  await writeFile(input.paths.entryWireproxyConfigFile, '# primary wireproxy fixture\n', {
     mode: 0o600,
   });
-
-  for (const route of input.config.routing.locations) {
-    const routePaths = resolveRouteWireproxyPaths(input.paths, route.runtime);
-    await mkdir(path.dirname(routePaths.wireproxyConfigPath), { recursive: true, mode: 0o700 });
-    await writeFile(routePaths.wireproxyConfigPath, `# verifier route ${route.runtime.routeId}\n`, {
-      mode: 0o600,
-    });
-  }
+  await writeFile(input.paths.routeProxyConfigFile, '# shared route proxy fixture\n', {
+    mode: 0o600,
+  });
 }
 
 function createRelayCatalog(): MullvadRelayCatalog {
@@ -670,8 +639,12 @@ EOF
   esac
   exit 0
 fi
-if [ "\${1:-}" = "run" ] && [ "\${2:-}" = "--rm" ] && [ "\${3:-}" = "-v" ] && [ "\${5:-}" = "ghcr.io/windtf/wireproxy:latest" ] && [ "\${6:-}" = "--configtest" ]; then
+if [ "\${1:-}" = "run" ] && [ "\${2:-}" = "--rm" ] && [ "\${3:-}" = "-v" ] && [ "\${5:-}" = "ghcr.io/windtf/wireproxy:latest" ] && [ "\${6:-}" = "--config" ] && [ "\${8:-}" = "--configtest" ]; then
   printf '%s\n' 'wireproxy configtest ok'
+  exit 0
+fi
+if [ "\${1:-}" = "run" ] && [ "\${2:-}" = "--rm" ] && [ "\${3:-}" = "-v" ] && [ "\${5:-}" = "tarampampam/3proxy:latest" ] && [ "\${6:-}" = "/bin/3proxy" ]; then
+  printf '%s\n' '3proxy startup ok'
   exit 0
 fi
 printf '%s\n' "unsupported fake docker invocation: $*" >&2
@@ -815,7 +788,7 @@ function assertValidationSurface(input: {
 }): void {
   assertContains({
     text: input.output,
-    expected: 'Mullgate config validated.',
+    expected: 'Mullgate validate complete.',
     message: `${input.scenario.id}: validation success header missing.`,
   });
   assertContains({
@@ -825,7 +798,7 @@ function assertValidationSurface(input: {
   });
   assertContains({
     text: input.output,
-    expected: `report: ${input.config.runtime.wireproxyConfigTestReportPath}`,
+    expected: `report: ${input.config.runtime.validationReportPath}`,
     message: `${input.scenario.id}: validation report path missing.`,
   });
 
@@ -1274,9 +1247,19 @@ function assertCliAndManifestAgree(input: {
         message: `${input.scenarioId}: exposure/manifest hostname endpoint drifted.`,
       });
       assertContains({
+        text: input.exposureOutput,
+        expected: endpoint.redactedBindUrl,
+        message: `${input.scenarioId}: exposure/manifest direct-IP endpoint drifted.`,
+      });
+      assertContains({
         text: input.statusOutput,
-        expected: endpoint.redactedHostnameUrl,
+        expected: endpoint.hostnameUrl,
         message: `${input.scenarioId}: status/manifest hostname endpoint drifted.`,
+      });
+      assertContains({
+        text: input.statusOutput,
+        expected: endpoint.bindUrl,
+        message: `${input.scenarioId}: status/manifest direct-IP endpoint drifted.`,
       });
     }
   }
@@ -1374,10 +1357,6 @@ function collectSecrets(input: { readonly config: MullgateConfig }): string[] {
     input.config.setup.auth.password,
     input.config.mullvad.accountNumber,
     input.config.mullvad.wireguard.privateKey,
-    ...input.config.routing.locations.flatMap((route) => [
-      route.mullvad.accountNumber,
-      route.mullvad.wireguard.privateKey,
-    ]),
   ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 }
 

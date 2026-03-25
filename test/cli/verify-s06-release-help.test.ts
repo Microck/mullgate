@@ -57,7 +57,7 @@ describe('verify-s06-release help contract', () => {
       Usage: pnpm exec tsx scripts/verify-s06-release.ts [options]
 
       Run the integrated Linux-first Mullgate proof in a temp XDG home: perform
-      non-interactive setup, print/check \`config hosts\`, start the Docker runtime,
+      non-interactive setup, print/check \`hosts\`, start the Docker runtime,
       verify \`status\` + \`doctor\`, prove SOCKS5/HTTP/HTTPS traffic, confirm the host
       route to a direct-check IP did not change, and compare the exits for two routed
       hostnames when they resolve locally to distinct bind IPs.
@@ -87,8 +87,10 @@ describe('verify-s06-release help contract', () => {
       If HTTPS cert/key paths are not provided, the verifier requires \`openssl\` so it can
       generate a temporary self-signed pair without persisting raw private-key material in
       the saved failure bundle.
-      The verifier also needs one free Mullvad WireGuard device slot per routed location unless
-      you resume from a previously preserved temp home with --reuse-temp-home.
+      The verifier needs one free Mullvad WireGuard device slot for each fresh proof run because
+      setup provisions a single shared entry device for all routes.
+      Use --reuse-temp-home to avoid provisioning another shared device when rerunning a
+      preserved proof.
 
       Options:
         --target-url <url>        Exit-check endpoint to query (default: https://am.i.mullvad.net/json)

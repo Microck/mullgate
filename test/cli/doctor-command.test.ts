@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createDoctorCommandAction } from '../../src/commands/doctor.js';
-import { resolveMullgatePaths, resolveRouteWireproxyPaths } from '../../src/config/paths.js';
+import { resolveMullgatePaths } from '../../src/config/paths.js';
 import {
   CONFIG_VERSION,
   type MullgateConfig,
@@ -16,7 +16,8 @@ import { ConfigStore } from '../../src/config/store.js';
 import type { MullvadRelayCatalog } from '../../src/mullvad/fetch-relays.js';
 import type { DockerComposeStatusResult } from '../../src/runtime/docker-runtime.js';
 import { renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
-import type { ValidateWireproxyResult } from '../../src/runtime/validate-wireproxy.js';
+import type { ValidateRuntimeResult } from '../../src/runtime/validate-runtime.js';
+import { createFixtureRoute, createFixtureRuntime } from '../helpers/mullgate-fixtures.js';
 import {
   cleanupWindowsFixtureArtifacts,
   normalizeFixtureHomePath,
@@ -121,101 +122,36 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
     },
     routing: {
       locations: [
-        {
+        createFixtureRoute({
           alias: 'sweden-gothenburg',
           hostname: 'se-got-wg-101',
           bindIp: '127.0.0.1',
-          relayPreference: {
-            requested: 'sweden-gothenburg',
-            country: 'se',
-            city: 'got',
-            hostnameLabel: 'se-got-wg-101',
-            resolvedAlias: 'sweden-gothenburg',
-          },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-doctor-test-1',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard: {
-              publicKey: 'public-key-value-1',
-              privateKey: 'private-key-value-1',
-              ipv4Address: '10.64.12.34/32',
-              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
-              gatewayIpv4: '10.64.0.1',
-              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-              dnsServers: ['10.64.0.1'],
-              peerPublicKey: 'peer-public-key-value-1',
-              peerEndpoint: 'se-got-wg-101.relays.mullvad.net:3401',
-            },
-          },
-          runtime: {
-            routeId: 'se-got-wg-101',
-            wireproxyServiceName: 'wireproxy-se-got-wg-101',
-            haproxyBackendName: 'route-se-got-wg-101',
-            wireproxyConfigFile: 'wireproxy-se-got-wg-101.conf',
-          },
-        },
-        {
+          requested: 'sweden-gothenburg',
+          country: 'se',
+          city: 'got',
+          hostnameLabel: 'se-got-wg-101',
+          resolvedAlias: 'sweden-gothenburg',
+        }),
+        createFixtureRoute({
           alias: 'austria-vienna',
           hostname: 'at-vie-wg-001',
           bindIp: '127.0.0.2',
-          relayPreference: {
-            requested: 'austria-vienna',
-            country: 'at',
-            city: 'vie',
-            hostnameLabel: 'at-vie-wg-001',
-            resolvedAlias: 'austria-vienna',
-          },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-doctor-test-2',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard: {
-              publicKey: 'public-key-value-2',
-              privateKey: 'private-key-value-2',
-              ipv4Address: '10.64.12.35/32',
-              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1235/128',
-              gatewayIpv4: '10.64.0.1',
-              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-              dnsServers: ['10.64.0.1'],
-              peerPublicKey: 'peer-public-key-value-2',
-              peerEndpoint: 'at-vie-wg-001.relays.mullvad.net:51820',
-            },
-          },
-          runtime: {
-            routeId: 'at-vie-wg-001',
-            wireproxyServiceName: 'wireproxy-at-vie-wg-001',
-            haproxyBackendName: 'route-at-vie-wg-001',
-            wireproxyConfigFile: 'wireproxy-at-vie-wg-001.conf',
-          },
-        },
+          requested: 'austria-vienna',
+          country: 'at',
+          city: 'vie',
+          hostnameLabel: 'at-vie-wg-001',
+          resolvedAlias: 'austria-vienna',
+        }),
       ],
     },
-    runtime: {
-      backend: 'wireproxy',
-      sourceConfigPath: paths.configFile,
-      wireproxyConfigPath: paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
-      relayCachePath: paths.provisioningCacheFile,
-      dockerComposePath: paths.dockerComposePath,
-      runtimeBundle: {
-        bundleDir: paths.runtimeBundleDir,
-        dockerComposePath: paths.runtimeComposeFile,
-        httpsSidecarConfigPath: paths.runtimeHttpsSidecarConfigFile,
-        manifestPath: paths.runtimeBundleManifestFile,
-      },
+    runtime: createFixtureRuntime({
+      paths,
       status: {
         phase: 'validated',
         lastCheckedAt: timestamp,
         message: 'Fixture config already validated.',
       },
-    },
+    }),
     diagnostics: {
       lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
@@ -278,17 +214,36 @@ function createRelayCatalog(fetchedAt: string): MullvadRelayCatalog {
   };
 }
 
-function createValidationSuccess(targetPath: string): ValidateWireproxyResult {
+function createValidationSuccess(input: {
+  readonly entryWireproxyConfigPath: string;
+  readonly routeProxyConfigPath: string;
+  readonly reportPath: string;
+}): ValidateRuntimeResult {
   return {
     ok: true,
     phase: 'validation',
-    source: 'internal-syntax',
+    source: 'validation-suite',
     status: 'success',
     checkedAt: '2026-03-21T07:05:00.000Z',
-    target: targetPath,
-    reportPath: targetPath,
-    validator: 'internal-syntax',
-    issues: [],
+    reportPath: input.reportPath,
+    checks: [
+      {
+        artifact: 'entry-wireproxy',
+        ok: true,
+        source: 'internal-syntax',
+        validator: 'internal-syntax',
+        target: input.entryWireproxyConfigPath,
+        issues: [],
+      },
+      {
+        artifact: 'route-proxy',
+        ok: true,
+        source: 'internal-syntax',
+        validator: 'internal-syntax',
+        target: input.routeProxyConfigPath,
+        issues: [],
+      },
+    ],
   };
 }
 
@@ -299,8 +254,8 @@ async function seedSavedConfig(
     readonly lastStart?: RuntimeStartDiagnostic | null;
     readonly renderManifest?: boolean;
     readonly relayCatalog?: MullvadRelayCatalog;
-    readonly writeValidationReports?: boolean;
-    readonly validationReports?: Record<string, ValidateWireproxyResult>;
+    readonly writeValidationReport?: boolean;
+    readonly validationReport?: ValidateRuntimeResult;
   } = {},
 ): Promise<{
   readonly store: ConfigStore;
@@ -327,19 +282,16 @@ async function seedSavedConfig(
     }
   }
 
-  await mkdir(path.dirname(config.runtime.wireproxyConfigPath), { recursive: true, mode: 0o700 });
-  await writeFile(config.runtime.wireproxyConfigPath, '# primary wireproxy fixture\n', {
+  await mkdir(path.dirname(config.runtime.entryWireproxyConfigPath), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await writeFile(config.runtime.entryWireproxyConfigPath, '# primary wireproxy fixture\n', {
     mode: 0o600,
   });
-
-  for (const location of config.routing.locations) {
-    const routePaths = resolveRouteWireproxyPaths(paths, location.runtime);
-    await writeFile(
-      routePaths.wireproxyConfigPath,
-      `# route fixture ${location.runtime.routeId}\n`,
-      { mode: 0o600 },
-    );
-  }
+  await writeFile(config.runtime.routeProxyConfigPath, '# shared route proxy fixture\n', {
+    mode: 0o600,
+  });
 
   const relayCatalog = options.relayCatalog ?? createRelayCatalog('2026-03-21T07:55:00.000Z');
   await mkdir(path.dirname(paths.provisioningCacheFile), { recursive: true, mode: 0o700 });
@@ -347,16 +299,17 @@ async function seedSavedConfig(
     mode: 0o600,
   });
 
-  if (options.writeValidationReports ?? true) {
-    for (const location of config.routing.locations) {
-      const routePaths = resolveRouteWireproxyPaths(paths, location.runtime);
-      const report =
-        options.validationReports?.[location.runtime.routeId] ??
-        createValidationSuccess(routePaths.configTestReportPath);
-      await writeFile(routePaths.configTestReportPath, `${JSON.stringify(report, null, 2)}\n`, {
-        mode: 0o600,
+  if (options.writeValidationReport ?? true) {
+    const report =
+      options.validationReport ??
+      createValidationSuccess({
+        entryWireproxyConfigPath: config.runtime.entryWireproxyConfigPath,
+        routeProxyConfigPath: config.runtime.routeProxyConfigPath,
+        reportPath: config.runtime.validationReportPath,
       });
-    }
+    await writeFile(config.runtime.validationReportPath, `${JSON.stringify(report, null, 2)}\n`, {
+      mode: 0o600,
+    });
   }
 
   if (options.lastStart) {
@@ -482,28 +435,28 @@ describe('mullgate doctor command', () => {
       inspectRuntime: async () =>
         createComposeStatusSuccess(paths.runtimeComposeFile, [
           {
+            name: 'mullgate-entry-tunnel-1',
+            service: 'entry-tunnel',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 40 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
+            name: 'mullgate-route-proxy-1',
+            service: 'route-proxy',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 40 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
             name: 'mullgate-routing-layer-1',
             service: 'routing-layer',
-            project: 'mullgate',
-            state: 'running',
-            health: 'healthy',
-            status: 'Up 40 seconds',
-            exitCode: 0,
-            publishers: [],
-          },
-          {
-            name: 'mullgate-wireproxy-se-got-wg-101-1',
-            service: 'wireproxy-se-got-wg-101',
-            project: 'mullgate',
-            state: 'running',
-            health: 'healthy',
-            status: 'Up 40 seconds',
-            exitCode: 0,
-            publishers: [],
-          },
-          {
-            name: 'mullgate-wireproxy-at-vie-wg-001-1',
-            service: 'wireproxy-at-vie-wg-001',
             project: 'mullgate',
             state: 'running',
             health: 'healthy',
@@ -527,7 +480,9 @@ describe('mullgate doctor command', () => {
       config: /tmp/mullgate-home/config/mullgate/config.json
       runtime dir: /tmp/mullgate-home/state/mullgate/runtime
       relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-      wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+      entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+      route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+      runtime validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
       runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
       last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (present)
 
@@ -553,17 +508,21 @@ describe('mullgate doctor command', () => {
          detail: runtime-execution=supported
          detail: diagnostics=supported
          detail: host-networking=Native host networking available
-         detail: host-networking-summary=Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
+         detail: host-networking-summary=Docker host networking behaves as expected on Linux, so the routing layer and shared route-proxy listeners can bind directly to the saved route IPs.
          detail: guidance=Linux is the reference runtime target for the current Mullgate topology and verification flow.
          detail: guidance=Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
 
       3. validation-artifacts: pass
-         summary: Wireproxy config artifacts and persisted validation reports are present.
+         summary: Shared entry-wireproxy and route-proxy artifacts are present, and the persisted runtime validation report passed.
          detail: saved-runtime-phase=running
          detail: saved-runtime-message=Runtime is already up.
-         detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
-         detail: report[se-got-wg-101]=ok via internal-syntax
-         detail: report[at-vie-wg-001]=ok via internal-syntax
+         detail: entry-wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf (present)
+         detail: route-proxy-config=/tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg (present)
+         detail: validation-report=/tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+         detail: validation-status=success
+         detail: validation-source=validation-suite
+         detail: check[entry-wireproxy]=ok via internal-syntax/internal-syntax
+         detail: check[route-proxy]=ok via internal-syntax/internal-syntax
 
       4. relay-cache: pass
          summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
@@ -602,16 +561,18 @@ describe('mullgate doctor command', () => {
          detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
 
       8. runtime: pass
-         summary: Live Docker Compose status matches the expected Mullgate routing-layer and per-route services.
+         summary: Live Docker Compose status matches the expected shared entry-tunnel, route-proxy, and routing-layer services.
          detail: compose-command=docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
          detail: containers=3
          detail: running=3
          detail: starting=0
          detail: stopped=0
          detail: unhealthy=0
+         detail: entry-tunnel=running (status=Up 40 seconds, health=healthy, exit=0)
+         detail: route-proxy=running (status=Up 40 seconds, health=healthy, exit=0)
          detail: routing-layer=running (status=Up 40 seconds, health=healthy, exit=0)
-         detail: route se-got-wg-101 (wireproxy-se-got-wg-101)=running (status=Up 40 seconds, health=healthy, exit=0)
-         detail: route at-vie-wg-001 (wireproxy-at-vie-wg-001)=running (status=Up 40 seconds, health=healthy, exit=0)
+         detail: route se-got-wg-101 publishes se-got-wg-101 -> 127.0.0.1 via route-proxy
+         detail: route at-vie-wg-001 publishes at-vie-wg-001 -> 127.0.0.2 via route-proxy
 
       9. last-start: pass
          summary: The last recorded \`mullgate start\` attempt completed successfully.
@@ -642,23 +603,26 @@ describe('mullgate doctor command', () => {
     expect(process.exitCode).toBe(1);
     expect(stdout.value.current).toBe('');
     expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
-"\nMullgate doctor
-overall: fail
-checked at: 2026-03-21T08:00:00.000Z
-mode: offline-default
-config: /tmp/mullgate-home/config/mullgate/config.json
-runtime dir: /tmp/mullgate-home/state/mullgate/runtime
-relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
-runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json
-last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json
+      "
+      Mullgate doctor
+      overall: fail
+      checked at: 2026-03-21T08:00:00.000Z
+      mode: offline-default
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      runtime dir: /tmp/mullgate-home/state/mullgate/runtime
+      relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+      entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+      route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+      runtime validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json
+      last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json
 
-checks
-1. config: fail
-   summary: Mullgate is not configured yet, so doctor cannot inspect runtime or exposure state.
-   detail: Mullgate is not configured yet. Run \`mullgate setup\` to create /tmp/mullgate-home/config/mullgate/config.json.
-   remediation: Run \`mullgate setup\` first, then rerun \`mullgate doctor\` once a canonical config exists."
-`);
+      checks
+      1. config: fail
+         summary: Mullgate is not configured yet, so doctor cannot inspect runtime or exposure state.
+         detail: Mullgate is not configured yet. Run \`mullgate setup\` to create /tmp/mullgate-home/config/mullgate/config.json.
+         remediation: Run \`mullgate setup\` first, then rerun \`mullgate doctor\` once a canonical config exists."
+    `);
   });
 
   it('explains missing Docker/Compose tooling as a named runtime failure', async () => {
@@ -719,7 +683,9 @@ checks
       config: /tmp/mullgate-home/config/mullgate/config.json
       runtime dir: /tmp/mullgate-home/state/mullgate/runtime
       relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-      wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+      entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+      route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+      runtime validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
       runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
       last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (missing)
 
@@ -745,17 +711,21 @@ checks
          detail: runtime-execution=supported
          detail: diagnostics=supported
          detail: host-networking=Native host networking available
-         detail: host-networking-summary=Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
+         detail: host-networking-summary=Docker host networking behaves as expected on Linux, so the routing layer and shared route-proxy listeners can bind directly to the saved route IPs.
          detail: guidance=Linux is the reference runtime target for the current Mullgate topology and verification flow.
          detail: guidance=Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
 
       3. validation-artifacts: pass
-         summary: Wireproxy config artifacts and persisted validation reports are present.
+         summary: Shared entry-wireproxy and route-proxy artifacts are present, and the persisted runtime validation report passed.
          detail: saved-runtime-phase=running
          detail: saved-runtime-message=Runtime is already up.
-         detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
-         detail: report[se-got-wg-101]=ok via internal-syntax
-         detail: report[at-vie-wg-001]=ok via internal-syntax
+         detail: entry-wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf (present)
+         detail: route-proxy-config=/tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg (present)
+         detail: validation-report=/tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+         detail: validation-status=success
+         detail: validation-source=validation-suite
+         detail: check[entry-wireproxy]=ok via internal-syntax/internal-syntax
+         detail: check[route-proxy]=ok via internal-syntax/internal-syntax
 
       4. relay-cache: pass
          summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
@@ -880,7 +850,7 @@ checks
         },
       }),
       relayCatalog: createRelayCatalog('2026-03-10T08:00:00.000Z'),
-      writeValidationReports: false,
+      writeValidationReport: false,
     });
     const stdout = createBufferSink();
     const stderr = createBufferSink();
@@ -915,7 +885,9 @@ checks
       config: /tmp/mullgate-home/config/mullgate/config.json
       runtime dir: /tmp/mullgate-home/state/mullgate/runtime
       relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-      wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+      entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+      route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+      runtime validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
       runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
       last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (missing)
 
@@ -941,18 +913,18 @@ checks
          detail: runtime-execution=supported
          detail: diagnostics=supported
          detail: host-networking=Native host networking available
-         detail: host-networking-summary=Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
+         detail: host-networking-summary=Docker host networking behaves as expected on Linux, so the routing layer and shared route-proxy listeners can bind directly to the saved route IPs.
          detail: guidance=Linux is the reference runtime target for the current Mullgate topology and verification flow.
          detail: guidance=Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
 
       3. validation-artifacts: degraded
-         summary: Saved config is marked \`unvalidated\`, so runtime artifacts may lag behind recent config or exposure edits.
+         summary: Saved config is marked \`unvalidated\`, and the shared runtime validation report is missing.
          detail: saved-runtime-phase=unvalidated
          detail: saved-runtime-message=Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
-         detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
-         detail: report[se-got-wg-101]=missing (/tmp/mullgate-home/state/mullgate/runtime/wireproxy-se-got-wg-101-configtest.json)
-         detail: report[at-vie-wg-001]=missing (/tmp/mullgate-home/state/mullgate/runtime/wireproxy-at-vie-wg-001-configtest.json)
-         remediation: Run \`mullgate validate\` or \`mullgate start\` to regenerate wireproxy artifacts and capture a fresh validation report.
+         detail: entry-wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf (present)
+         detail: route-proxy-config=/tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg (present)
+         detail: validation-report=missing (/tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json)
+         remediation: Run \`mullgate validate\` or \`mullgate start\` to generate the shared runtime validation report before relying on the saved validation metadata.
 
       4. relay-cache: degraded
          summary: Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.
@@ -1003,9 +975,11 @@ checks
          detail: starting=0
          detail: stopped=0
          detail: unhealthy=0
+         detail: entry-tunnel=not present in live compose status
+         detail: route-proxy=not present in live compose status
          detail: routing-layer=not present in live compose status
-         detail: route se-got-wg-101 (wireproxy-se-got-wg-101)=not present in live compose status
-         detail: route at-vie-wg-001 (wireproxy-at-vie-wg-001)=not present in live compose status
+         detail: route se-got-wg-101 publishes se-got-wg-101 -> 127.0.0.1 via route-proxy
+         detail: route at-vie-wg-001 publishes at-vie-wg-001 -> 127.0.0.2 via route-proxy
          remediation: Run \`mullgate start\` after fixing any validation, bind, or last-start issues reported above.
 
       9. last-start: degraded
@@ -1026,14 +1000,14 @@ checks
       message:
         'Docker Compose failed for proxy-password / 123456789012 / private-key-value-2 while authenticating route at-vie-wg-001.',
       cause:
-        'service wireproxy-at-vie-wg-001 rejected username alice password proxy-password while reading -----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----',
+        'service route-proxy rejected username alice password proxy-password while reading -----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----',
       artifactPath: null,
       composeFilePath: null,
       validationSource: 'internal-syntax',
       routeId: 'at-vie-wg-001',
       routeHostname: 'at-vie-wg-001',
       routeBindIp: '127.0.0.2',
-      serviceName: 'wireproxy-at-vie-wg-001',
+      serviceName: 'route-proxy',
       command: null,
     } satisfies RuntimeStartDiagnostic;
     const { store, paths } = await seedSavedConfig(env, {
@@ -1063,6 +1037,26 @@ checks
       inspectRuntime: async () =>
         createComposeStatusSuccess(paths.runtimeComposeFile, [
           {
+            name: 'mullgate-entry-tunnel-1',
+            service: 'entry-tunnel',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 2 minutes',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
+            name: 'mullgate-route-proxy-1',
+            service: 'route-proxy',
+            project: 'mullgate',
+            state: 'exited',
+            health: null,
+            status: 'Exited (2) 5 seconds ago',
+            exitCode: 2,
+            publishers: [],
+          },
+          {
             name: 'mullgate-routing-layer-1',
             service: 'routing-layer',
             project: 'mullgate',
@@ -1070,26 +1064,6 @@ checks
             health: 'healthy',
             status: 'Up 2 minutes',
             exitCode: 0,
-            publishers: [],
-          },
-          {
-            name: 'mullgate-wireproxy-se-got-wg-101-1',
-            service: 'wireproxy-se-got-wg-101',
-            project: 'mullgate',
-            state: 'running',
-            health: 'healthy',
-            status: 'Up 2 minutes',
-            exitCode: 0,
-            publishers: [],
-          },
-          {
-            name: 'mullgate-wireproxy-at-vie-wg-001-1',
-            service: 'wireproxy-at-vie-wg-001',
-            project: 'mullgate',
-            state: 'exited',
-            health: null,
-            status: 'Exited (2) 5 seconds ago',
-            exitCode: 2,
             publishers: [],
           },
         ]),
@@ -1108,7 +1082,9 @@ checks
       config: /tmp/mullgate-home/config/mullgate/config.json
       runtime dir: /tmp/mullgate-home/state/mullgate/runtime
       relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-      wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf
+      entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+      route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+      runtime validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
       runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
       last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (present)
 
@@ -1134,17 +1110,21 @@ checks
          detail: runtime-execution=supported
          detail: diagnostics=supported
          detail: host-networking=Native host networking available
-         detail: host-networking-summary=Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
+         detail: host-networking-summary=Docker host networking behaves as expected on Linux, so the routing layer and shared route-proxy listeners can bind directly to the saved route IPs.
          detail: guidance=Linux is the reference runtime target for the current Mullgate topology and verification flow.
          detail: guidance=Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
 
       3. validation-artifacts: pass
-         summary: Wireproxy config artifacts and persisted validation reports are present.
+         summary: Shared entry-wireproxy and route-proxy artifacts are present, and the persisted runtime validation report passed.
          detail: saved-runtime-phase=running
          detail: saved-runtime-message=Runtime is already up.
-         detail: wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/wireproxy.conf (present)
-         detail: report[se-got-wg-101]=ok via internal-syntax
-         detail: report[at-vie-wg-001]=ok via internal-syntax
+         detail: entry-wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf (present)
+         detail: route-proxy-config=/tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg (present)
+         detail: validation-report=/tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+         detail: validation-status=success
+         detail: validation-source=validation-suite
+         detail: check[entry-wireproxy]=ok via internal-syntax/internal-syntax
+         detail: check[route-proxy]=ok via internal-syntax/internal-syntax
 
       4. relay-cache: pass
          summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
@@ -1183,17 +1163,19 @@ checks
          detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
 
       8. runtime: fail
-         summary: Live Docker Compose state shows one or more expected Mullgate services are stopped or degraded.
+         summary: Live Docker Compose state shows one or more expected shared Mullgate services are stopped or degraded.
          detail: compose-command=docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
          detail: containers=3
          detail: running=2
          detail: starting=0
          detail: stopped=1
          detail: unhealthy=0
+         detail: entry-tunnel=running (status=Up 2 minutes, health=healthy, exit=0)
+         detail: route-proxy=exited (status=Exited (2) 5 seconds ago, exit=2)
          detail: routing-layer=running (status=Up 2 minutes, health=healthy, exit=0)
-         detail: route se-got-wg-101 (wireproxy-se-got-wg-101)=running (status=Up 2 minutes, health=healthy, exit=0)
-         detail: route at-vie-wg-001 (wireproxy-at-vie-wg-001)=exited (status=Exited (2) 5 seconds ago, exit=2)
-         remediation: Inspect \`docker compose ps\` / \`docker compose logs\` for the named services, fix the failing route or routing layer, then rerun \`mullgate start\`.
+         detail: route se-got-wg-101 publishes se-got-wg-101 -> 127.0.0.1 via route-proxy
+         detail: route at-vie-wg-001 publishes at-vie-wg-001 -> 127.0.0.2 via route-proxy
+         remediation: Inspect \`docker compose ps\` / \`docker compose logs\` for the named shared services, fix the failing entry tunnel, route proxy, or routing layer, then rerun \`mullgate start\`.
 
       9. last-start: fail
          summary: The last recorded \`mullgate start\` attempt failed with an auth-related route/runtime error.
@@ -1205,12 +1187,10 @@ checks
          detail: route-id=at-vie-wg-001
          detail: route-hostname=at-vie-wg-001
          detail: route-bind-ip=127.0.0.2
-         detail: service=wireproxy-at-vie-wg-001
-         detail: reason=Docker Compose failed for proxy-password / 123456789012 / private-key-value-2 while authenticating route at-vie-wg-001.
-         detail: cause=service wireproxy-at-vie-wg-001 rejected username alice password proxy-password while reading -----BEGIN PRIVATE KEY-----
-      fixture
-      -----END PRIVATE KEY-----
-         remediation: Check route at-vie-wg-001, service wireproxy-at-vie-wg-001, hostname at-vie-wg-001, bind 127.0.0.2 for rejected proxy auth or stale rendered credentials. If credentials changed, update \`setup.auth.username\` / \`setup.auth.password\` with \`mullgate config set\`, then rerun \`mullgate validate\` and \`mullgate start\`."
+         detail: service=route-proxy
+         detail: reason=Docker Compose failed for [redacted] / [redacted] / private-key-value-2 while authenticating route at-vie-wg-001.
+         detail: cause=service route-proxy rejected username alice password [redacted] while reading [redacted]
+         remediation: Check route at-vie-wg-001, service route-proxy, hostname at-vie-wg-001, bind 127.0.0.2 for rejected proxy auth or stale rendered credentials. If credentials changed, update \`setup.auth.username\` / \`setup.auth.password\` with \`mullgate config set\`, then rerun \`mullgate validate\` and \`mullgate start\`."
     `);
   });
 });

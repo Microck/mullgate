@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { requireDefined } from '../required.js';
+import { createDockerValidationStage } from './docker-validation-stage.js';
 
 export type WireproxyValidationIssue = {
   target: string;
@@ -56,6 +57,7 @@ const CIDR_PATTERN = /^[^\s]+\/\d+$/;
 const DEFAULT_WIREPROXY_BINARY = 'wireproxy';
 const DEFAULT_DOCKER_BINARY = 'docker';
 const DEFAULT_DOCKER_IMAGE = 'ghcr.io/windtf/wireproxy:latest';
+const DOCKER_WIREPROXY_CONFIG_PATH = '/etc/wireproxy/wireproxy.conf';
 
 export async function validateWireproxyConfig(
   options: ValidateWireproxyOptions,
@@ -68,7 +70,7 @@ export async function validateWireproxyConfig(
   const localResult = runConfigTest({
     runner,
     command: wireproxyBinary,
-    args: ['--configtest', options.configPath],
+    args: ['--config', options.configPath, '--configtest'],
     checkedAt,
     source: 'wireproxy-binary',
     validator: 'wireproxy-configtest',
@@ -76,33 +78,40 @@ export async function validateWireproxyConfig(
   });
 
   if (localResult.kind === 'result') {
-    return persistValidationReport(localResult.result, options.reportPath);
+    if (localResult.result.ok || !looksLikeOldStyleConfigtestUsageError(localResult.result)) {
+      return persistValidationReport(localResult.result, options.reportPath);
+    }
+
+    const legacyLocalResult = runConfigTest({
+      runner,
+      command: wireproxyBinary,
+      args: ['--configtest', options.configPath],
+      checkedAt,
+      source: 'wireproxy-binary',
+      validator: 'wireproxy-configtest',
+      target: options.configPath,
+    });
+
+    if (legacyLocalResult.kind === 'result') {
+      return persistValidationReport(legacyLocalResult.result, options.reportPath);
+    }
   }
 
-  const dockerResult = runConfigTest({
-    runner,
-    command: dockerBinary,
-    args: [
-      'run',
-      '--rm',
-      '-v',
-      `${options.configPath}:/etc/wireproxy/wireproxy.conf:ro`,
-      options.dockerImage ?? DEFAULT_DOCKER_IMAGE,
-      '--configtest',
-      '/etc/wireproxy/wireproxy.conf',
-    ],
+  const dockerConfigText = options.configText ?? readFileSync(options.configPath, 'utf8');
+  const dockerStageResult = createDockerStageResult({
+    configText: dockerConfigText,
     checkedAt,
-    source: 'docker',
-    validator: 'docker-wireproxy-configtest',
+    dockerBinary,
+    dockerImage: options.dockerImage ?? DEFAULT_DOCKER_IMAGE,
+    runner,
     target: options.configPath,
   });
 
-  if (dockerResult.kind === 'result') {
-    return persistValidationReport(dockerResult.result, options.reportPath);
+  if (dockerStageResult.kind === 'result') {
+    return persistValidationReport(dockerStageResult.result, options.reportPath);
   }
 
-  const configText = options.configText ?? readFileSync(options.configPath, 'utf8');
-  const parsed = parseWireproxyConfig(configText, options.configPath);
+  const parsed = parseWireproxyConfig(dockerConfigText, options.configPath);
   const issues = validateParsedConfig(parsed, options.configPath);
 
   const internalResult: ValidateWireproxyResult =
@@ -132,6 +141,71 @@ export async function validateWireproxyConfig(
         };
 
   return persistValidationReport(internalResult, options.reportPath);
+}
+
+function createDockerStageResult(input: {
+  readonly configText: string;
+  readonly checkedAt: string;
+  readonly dockerBinary: string;
+  readonly dockerImage: string;
+  readonly runner: typeof spawnSync;
+  readonly target: string;
+}): { kind: 'result'; result: ValidateWireproxyResult } | { kind: 'missing-binary' } {
+  const stage = createDockerValidationStage({
+    prefix: 'mullgate-wireproxy-validate-',
+    fileName: 'wireproxy.conf',
+    content: input.configText,
+    fileMode: 0o644,
+  });
+
+  try {
+    const dockerResult = runConfigTest({
+      runner: input.runner,
+      command: input.dockerBinary,
+      args: [
+        'run',
+        '--rm',
+        '-v',
+        `${stage.hostFilePath}:${DOCKER_WIREPROXY_CONFIG_PATH}:ro`,
+        input.dockerImage,
+        '--config',
+        DOCKER_WIREPROXY_CONFIG_PATH,
+        '--configtest',
+      ],
+      checkedAt: input.checkedAt,
+      source: 'docker',
+      validator: 'docker-wireproxy-configtest',
+      target: input.target,
+    });
+
+    if (dockerResult.kind === 'missing-binary') {
+      return dockerResult;
+    }
+
+    if (dockerResult.result.ok || !looksLikeOldStyleConfigtestUsageError(dockerResult.result)) {
+      return dockerResult;
+    }
+
+    return runConfigTest({
+      runner: input.runner,
+      command: input.dockerBinary,
+      args: [
+        'run',
+        '--rm',
+        '-v',
+        `${stage.hostFilePath}:${DOCKER_WIREPROXY_CONFIG_PATH}:ro`,
+        input.dockerImage,
+        '--configtest',
+        DOCKER_WIREPROXY_CONFIG_PATH,
+      ],
+      checkedAt: input.checkedAt,
+      source: 'docker',
+      validator: 'docker-wireproxy-configtest',
+      target: input.target,
+    });
+  } finally {
+    stage.cleanup();
+  }
 }
 
 function runConfigTest(input: {
@@ -285,12 +359,9 @@ function validateParsedConfig(parsed: ParsedConfig, target: string): WireproxyVa
 
   validateRequiredSection(parsed, issues, target, 'Interface', ['Address', 'PrivateKey']);
   validateRequiredSection(parsed, issues, target, 'Peer', ['PublicKey', 'Endpoint', 'AllowedIPs']);
-  validateRequiredSection(parsed, issues, target, 'Socks5', [
-    'BindAddress',
-    'Username',
-    'Password',
-  ]);
-  validateRequiredSection(parsed, issues, target, 'http', ['BindAddress', 'Username', 'Password']);
+  validateRequiredSection(parsed, issues, target, 'Socks5', ['BindAddress']);
+  validateOptionalAuthSection(parsed, issues, target, 'Socks5');
+  validateOptionalAuthSection(parsed, issues, target, 'http');
 
   validateAddressList(parsed, issues, target);
   validateEndpoint(parsed, issues, target);
@@ -302,6 +373,29 @@ function validateParsedConfig(parsed: ParsedConfig, target: string): WireproxyVa
   }
 
   return issues;
+}
+
+function validateOptionalAuthSection(
+  parsed: ParsedConfig,
+  issues: WireproxyValidationIssue[],
+  target: string,
+  sectionName: string,
+): void {
+  const section = parsed.get(sectionName);
+
+  if (!section) {
+    return;
+  }
+
+  const username = section.get('Username')?.[0];
+  const password = section.get('Password')?.[0];
+
+  if ((username && !password) || (!username && password)) {
+    issues.push({
+      target,
+      message: `[${sectionName}] must include both Username and Password when auth is configured.`,
+    });
+  }
 }
 
 function validateRequiredSection(
@@ -383,4 +477,14 @@ function validateBindAddress(
       message: `[${sectionName}] bind address ${bindAddress} is not in host:port form.`,
     });
   }
+}
+
+function looksLikeOldStyleConfigtestUsageError(
+  result: ValidateWireproxyResult,
+): result is ValidateWireproxyFailure {
+  if (result.ok) {
+    return false;
+  }
+
+  return /unknown arguments|usage:\s+wireproxy/i.test(result.cause);
 }

@@ -27,9 +27,13 @@ Use a Linux machine and start with a two-route loopback setup. Then run `mullgat
 
 The CLI, config inspection, and diagnostic surfaces are supported, but the current shipped multi-route Docker runtime is Linux-first. Docker Desktop host networking does not match Linux networking behavior closely enough to treat it as equivalent.
 
-## Why is there a multi-exit architecture spec?
+## Does each route consume its own Mullvad WireGuard device?
 
-Because the current route-per-WireGuard-key model does not scale to many simultaneous country-specific routes on a single Mullvad account. The spec documents the next feasibility question and the proposed direction.
+No. The current runtime provisions one shared Mullvad WireGuard entry device and fans out to route-specific Mullvad SOCKS5 exits from inside that tunnel. On Linux, that shared-entry runtime has been live-validated with 50 routed exits on one shared device.
+
+## Why is there still a multi-exit architecture page?
+
+That page now explains the redesign history and the live proof that closed the original slot-limit problem. It is no longer an aspirational next-step document.
 
 ## Which pages should I read first?
 
@@ -39,7 +43,7 @@ A good path is:
 2. [Usage](/docs/guides/usage)
 3. [Setup and Exposure](/docs/guides/setup-and-exposure)
 4. [Current Runtime Model](/docs/architecture/current-runtime)
-5. [Multi-exit Architecture Spec](/docs/architecture/multi-exit)
+5. [Multi-exit Architecture](/docs/architecture/multi-exit)
 
 ## What if hostname-based routing is not working?
 

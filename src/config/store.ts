@@ -11,9 +11,9 @@ import {
 import path from 'node:path';
 
 import { normalizeLocationToken } from '../domain/location-aliases.js';
-import { requireDefined } from '../required.js';
 import { type MullgatePaths, resolveMullgatePaths } from './paths.js';
 import {
+  CONFIG_VERSION,
   type MullgateConfig,
   type MullgateConfigInput,
   mullgateConfigInputSchema,
@@ -21,6 +21,18 @@ import {
   type RoutedLocation,
   type RoutedLocationInput,
 } from './schema.js';
+
+class UnsupportedConfigVersionError extends Error {
+  readonly version: number;
+
+  constructor(version: number) {
+    super(
+      `Config version ${version} is no longer supported. Mullgate now requires a version ${CONFIG_VERSION} config with one shared WireGuard device and exact per-route exits. Re-run \`mullgate setup\` to create a fresh config.`,
+    );
+    this.name = 'UnsupportedConfigVersionError';
+    this.version = version;
+  }
+}
 
 export type LoadConfigResult =
   | {
@@ -117,6 +129,17 @@ export class ConfigStore {
         };
       }
 
+      if (error instanceof UnsupportedConfigVersionError) {
+        return {
+          ok: false,
+          phase: 'parse-config',
+          source: 'file',
+          paths: this.paths,
+          artifactPath: this.paths.configFile,
+          message: error.message,
+        };
+      }
+
       if (error instanceof Error && error.name === 'ZodError') {
         return {
           ok: false,
@@ -178,101 +201,53 @@ export class ConfigStore {
 }
 
 export function normalizeMullgateConfig(input: unknown): MullgateConfig {
-  const parsed = mullgateConfigInputSchema.parse(input);
-  const locations = normalizeRoutingLocations(parsed);
-  const primaryLocation = requireDefined(
-    locations[0],
-    'Expected at least one routed location in the Mullgate config.',
-  );
+  const version = readConfigVersion(input);
 
-  const normalized: MullgateConfig = {
+  if (version !== null && version !== CONFIG_VERSION) {
+    throw new UnsupportedConfigVersionError(version);
+  }
+
+  const parsed = mullgateConfigInputSchema.parse(hydrateLegacyConfigInput(input));
+  const locations = normalizeRoutingLocations(parsed);
+  const primaryRoute = locations[0];
+
+  return mullgateConfigSchema.parse({
     ...parsed,
     setup: {
       ...parsed.setup,
       bind: {
         ...parsed.setup.bind,
-        host: primaryLocation.bindIp,
+        host: primaryRoute?.bindIp ?? parsed.setup.bind.host,
       },
-      location: structuredClone(primaryLocation.relayPreference),
+      location: structuredClone(primaryRoute?.relayPreference ?? parsed.setup.location),
     },
-    mullvad: structuredClone(primaryLocation.mullvad),
     routing: {
       locations,
     },
-  };
-
-  return mullgateConfigSchema.parse(normalized);
+  });
 }
 
 export function syncLegacyMirrorsToRouting(config: MullgateConfig): MullgateConfig {
-  const [firstLocation, ...remainingLocations] = config.routing.locations;
-
-  if (!firstLocation) {
-    return config;
-  }
-
-  const updatedPrimary = normalizeRoutedLocation(
-    {
-      hostname: firstLocation.hostname,
-      bindIp: firstLocation.bindIp,
-      relayPreference: structuredClone(config.setup.location),
-      mullvad: structuredClone(config.mullvad),
-      runtime: structuredClone(firstLocation.runtime),
-    },
-    0,
-    new Set(),
-    { bindIp: firstLocation.bindIp },
-  );
-
-  return normalizeMullgateConfig({
-    ...config,
-    setup: {
-      ...config.setup,
-      bind: {
-        ...config.setup.bind,
-        host: firstLocation.bindIp,
-      },
-    },
-    routing: {
-      locations: [updatedPrimary, ...remainingLocations],
-    },
-  });
+  return normalizeMullgateConfig(config);
 }
 
 function normalizeRoutingLocations(config: MullgateConfigInput): RoutedLocation[] {
   const usedRouteIds = new Set<string>();
 
-  if (config.routing?.locations.length) {
-    return config.routing.locations.map((location, index) =>
-      normalizeRoutedLocation(location, index, usedRouteIds, {
-        bindIp: index === 0 ? config.setup.bind.host : undefined,
-      }),
-    );
-  }
-
-  return [
-    normalizeRoutedLocation(
-      {
-        relayPreference: structuredClone(config.setup.location),
-        mullvad: structuredClone(config.mullvad),
-      },
-      0,
-      usedRouteIds,
-      { bindIp: config.setup.bind.host },
-    ),
-  ];
+  return config.routing.locations.map((location, index) =>
+    normalizeRoutedLocation(location, index, usedRouteIds),
+  );
 }
 
 function normalizeRoutedLocation(
   location: RoutedLocationInput,
   index: number,
   usedRouteIds: Set<string>,
-  fallbacks: { bindIp?: string },
 ): RoutedLocation {
   const relayPreference = structuredClone(location.relayPreference);
   const alias = chooseAlias(location, relayPreference, index);
   const hostname = chooseHostname(location, relayPreference, alias);
-  const bindIp = location.bindIp?.trim() || fallbacks.bindIp || '127.0.0.1';
+  const bindIp = location.bindIp?.trim() || '127.0.0.1';
   const routeId = chooseUniqueRouteId(location, alias, hostname, index, usedRouteIds);
 
   return {
@@ -283,11 +258,7 @@ function normalizeRoutedLocation(
     mullvad: structuredClone(location.mullvad),
     runtime: {
       routeId,
-      wireproxyServiceName:
-        location.runtime?.wireproxyServiceName?.trim() || `wireproxy-${routeId}`,
-      haproxyBackendName: location.runtime?.haproxyBackendName?.trim() || `route-${routeId}`,
-      wireproxyConfigFile:
-        location.runtime?.wireproxyConfigFile?.trim() || `wireproxy-${routeId}.conf`,
+      httpsBackendName: location.runtime?.httpsBackendName?.trim() || `route-${routeId}`,
     },
   };
 }
@@ -348,6 +319,98 @@ function chooseUniqueRouteId(
   return candidate;
 }
 
+function readConfigVersion(input: unknown): number | null {
+  if (!input || typeof input !== 'object' || !('version' in input)) {
+    return null;
+  }
+
+  const version = (input as Record<string, unknown>).version;
+  return typeof version === 'number' ? version : null;
+}
+
+function hydrateLegacyConfigInput(input: unknown): unknown {
+  if (!isRecord(input) || 'routing' in input) {
+    return input;
+  }
+
+  const setup = input.setup;
+  const mullvad = input.mullvad;
+
+  if (!isRecord(setup) || !isRecord(mullvad)) {
+    return input;
+  }
+
+  const location = setup.location;
+  const bind = setup.bind;
+  const relayConstraints = mullvad.relayConstraints;
+
+  if (!isRecord(location) || !isRecord(bind) || !isRecord(relayConstraints)) {
+    return input;
+  }
+
+  const requested =
+    readNonEmptyString(location.requested) ??
+    readNonEmptyString(location.hostnameLabel) ??
+    DEFAULT_ROUTE_ID;
+  const hostnameLabel = readNonEmptyString(location.hostnameLabel);
+  const relayHostname = hostnameLabel ?? (normalizeLocationToken(requested) || DEFAULT_ROUTE_ID);
+  const countryAndCity = deriveLegacyRelayCodes({
+    hostnameLabel,
+    requested,
+  });
+
+  return {
+    ...input,
+    routing: {
+      locations: [
+        {
+          bindIp: readNonEmptyString(bind.host) ?? '127.0.0.1',
+          relayPreference: location,
+          mullvad: {
+            relayConstraints: {
+              providers: Array.isArray(relayConstraints.providers)
+                ? relayConstraints.providers
+                : [],
+            },
+            exit: {
+              relayHostname,
+              relayFqdn: `${relayHostname}.relays.mullvad.net`,
+              socksHostname: `${relayHostname}-socks.relays.mullvad.net`,
+              socksPort: 1080,
+              countryCode: countryAndCity.countryCode,
+              cityCode: countryAndCity.cityCode,
+            },
+          },
+        },
+      ],
+    },
+  };
+}
+
+function deriveLegacyRelayCodes(input: {
+  readonly hostnameLabel: string | null;
+  readonly requested: string;
+}): {
+  readonly countryCode: string;
+  readonly cityCode: string;
+} {
+  const token = normalizeLocationToken(input.hostnameLabel ?? input.requested) || DEFAULT_ROUTE_ID;
+  const [countryCode = 'xx', cityCode = 'test'] = token.split('-');
+
+  return {
+    countryCode,
+    cityCode,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
 async function ensureDirectory(directoryPath: string): Promise<void> {
   await mkdir(directoryPath, { recursive: true, mode: 0o700 });
   await chmod(directoryPath, 0o700);
@@ -374,8 +437,6 @@ async function writeFileAtomic(filePath: string, content: string, mode: number):
     await rename(temporaryPath, filePath);
     await chmod(filePath, mode);
 
-    // Windows does not support syncing directory handles the same way POSIX does.
-    // The rename still gives us the atomic replacement we need for this config file.
     if (process.platform === 'win32') {
       return;
     }

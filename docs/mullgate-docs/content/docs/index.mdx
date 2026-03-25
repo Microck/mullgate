@@ -14,6 +14,7 @@ Mullgate is built around a few stable ideas:
 - expose local proxy endpoints concurrently
 - choose routes by stable hostnames or direct bind IPs
 - support SOCKS5, HTTP, and HTTPS-capable proxy surfaces
+- scale many routed exits from one shared Mullvad device
 - keep host routing unchanged instead of acting like a full-device VPN
 - make runtime and diagnostic state visible through the CLI
 - preserve truthful documentation for platform support and routing behavior
@@ -49,7 +50,7 @@ Mullgate is built around a few stable ideas:
 ### Architecture
 - [Overview](/docs/architecture/overview)
 - [Current Runtime Model](/docs/architecture/current-runtime)
-- [Multi-exit Architecture Spec](/docs/architecture/multi-exit)
+- [Multi-exit Architecture](/docs/architecture/multi-exit)
 
 ### Reference
 - [Commands](/docs/reference/commands)
@@ -79,4 +80,4 @@ The docs emphasize:
 - practical setup examples
 - clear exposure and hostname guidance
 - runtime lifecycle and validation workflows
-- a transparent explanation of the current scaling limit and the proposed next step
+- a transparent explanation of the shared-entry scaling model and the redesign that produced it

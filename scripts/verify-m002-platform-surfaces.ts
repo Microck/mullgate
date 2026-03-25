@@ -11,7 +11,6 @@ import {
   type MullgatePaths,
   type MullgatePlatform,
   resolveMullgatePaths,
-  resolveRouteWireproxyPaths,
 } from '../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig, type RoutedLocation } from '../src/config/schema.js';
 import { ConfigStore } from '../src/config/store.js';
@@ -19,7 +18,11 @@ import type { MullvadRelayCatalog } from '../src/mullvad/fetch-relays.js';
 import { buildPlatformSupportContract } from '../src/platform/support-contract.js';
 import type { RuntimeBundleManifest } from '../src/runtime/render-runtime-bundle.js';
 import { renderRuntimeBundle } from '../src/runtime/render-runtime-bundle.js';
-import type { ValidateWireproxyResult } from '../src/runtime/validate-wireproxy.js';
+import type { ValidateRuntimeResult } from '../src/runtime/validate-runtime.js';
+import {
+  createFixtureRuntime,
+  createFixtureRoute as createRoutedLocationFixture,
+} from '../test/helpers/mullgate-fixtures.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
@@ -480,25 +483,14 @@ function createFixtureConfig(input: { readonly env: NodeJS.ProcessEnv }): Mullga
         }),
       ],
     },
-    runtime: {
-      backend: 'wireproxy',
-      sourceConfigPath: paths.configFile,
-      wireproxyConfigPath: paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
-      relayCachePath: paths.provisioningCacheFile,
-      dockerComposePath: paths.dockerComposePath,
-      runtimeBundle: {
-        bundleDir: paths.runtimeBundleDir,
-        dockerComposePath: paths.runtimeComposeFile,
-        httpsSidecarConfigPath: paths.runtimeHttpsSidecarConfigFile,
-        manifestPath: paths.runtimeBundleManifestFile,
-      },
+    runtime: createFixtureRuntime({
+      paths,
       status: {
         phase: 'validated',
         lastCheckedAt: timestamp,
         message: 'Fixture config already validated.',
       },
-    },
+    }),
     diagnostics: {
       lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
@@ -528,43 +520,26 @@ function createRouteFixture(input: {
   readonly accountNumber: string;
   readonly lastProvisionedAt: string;
 }): RoutedLocation {
-  return {
+  return createRoutedLocationFixture({
     alias: input.alias,
     hostname: input.hostname,
     bindIp: input.bindIp,
-    relayPreference: {
-      requested: input.requested,
-      country: input.country,
-      city: input.city,
-      hostnameLabel: input.hostnameLabel,
-      resolvedAlias: input.resolvedAlias,
+    requested: input.requested,
+    country: input.country,
+    city: input.city,
+    hostnameLabel: input.hostnameLabel,
+    resolvedAlias: input.resolvedAlias,
+    routeId: input.routeId,
+    httpsBackendName: input.haproxyBackendName,
+    exit: {
+      relayHostname: input.hostnameLabel,
+      relayFqdn: input.peerEndpoint.split(':')[0] ?? `${input.hostnameLabel}.relays.mullvad.net`,
+      socksHostname: `${input.hostnameLabel}.mullvad.net`,
+      socksPort: 1080,
+      countryCode: input.country,
+      cityCode: input.city,
     },
-    mullvad: {
-      accountNumber: input.accountNumber,
-      deviceName: input.deviceName,
-      lastProvisionedAt: input.lastProvisionedAt,
-      relayConstraints: {
-        providers: [],
-      },
-      wireguard: {
-        publicKey: input.publicKey,
-        privateKey: input.privateKey,
-        ipv4Address: input.ipv4Address,
-        ipv6Address: input.ipv6Address,
-        gatewayIpv4: '10.64.0.1',
-        gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-        dnsServers: ['10.64.0.1'],
-        peerPublicKey: `peer-${input.publicKey}`,
-        peerEndpoint: input.peerEndpoint,
-      },
-    },
-    runtime: {
-      routeId: input.routeId,
-      wireproxyServiceName: input.wireproxyServiceName,
-      haproxyBackendName: input.haproxyBackendName,
-      wireproxyConfigFile: input.wireproxyConfigFile,
-    },
-  };
+  });
 }
 
 async function seedPrerequisiteArtifacts(input: {
@@ -582,33 +557,31 @@ async function seedPrerequisiteArtifacts(input: {
   );
 
   await ensureParentDirectory(
-    resolveArtifactPath({ cwd: input.root, targetPath: input.paths.wireproxyConfigFile }),
+    resolveArtifactPath({ cwd: input.root, targetPath: input.paths.entryWireproxyConfigFile }),
   );
   await writeFile(
-    resolveArtifactPath({ cwd: input.root, targetPath: input.paths.wireproxyConfigFile }),
+    resolveArtifactPath({ cwd: input.root, targetPath: input.paths.entryWireproxyConfigFile }),
     '# primary wireproxy fixture\n',
     { mode: 0o600 },
   );
-
-  for (const route of input.config.routing.locations) {
-    const routePaths = resolveRouteWireproxyPaths(input.paths, route.runtime);
-    await ensureParentDirectory(
-      resolveArtifactPath({ cwd: input.root, targetPath: routePaths.wireproxyConfigPath }),
-    );
-    await writeFile(
-      resolveArtifactPath({ cwd: input.root, targetPath: routePaths.wireproxyConfigPath }),
-      `# verifier route ${route.runtime.routeId}\n`,
-      { mode: 0o600 },
-    );
-    await ensureParentDirectory(
-      resolveArtifactPath({ cwd: input.root, targetPath: routePaths.configTestReportPath }),
-    );
-    await writeFile(
-      resolveArtifactPath({ cwd: input.root, targetPath: routePaths.configTestReportPath }),
-      `${JSON.stringify(createValidationSuccess(routePaths.configTestReportPath), null, 2)}\n`,
-      { mode: 0o600 },
-    );
-  }
+  await writeFile(
+    resolveArtifactPath({ cwd: input.root, targetPath: input.paths.routeProxyConfigFile }),
+    '# shared route proxy fixture\n',
+    { mode: 0o600 },
+  );
+  await writeFile(
+    resolveArtifactPath({ cwd: input.root, targetPath: input.paths.runtimeValidationReportFile }),
+    `${JSON.stringify(
+      createValidationSuccess({
+        entryWireproxyConfigPath: input.paths.entryWireproxyConfigFile,
+        routeProxyConfigPath: input.paths.routeProxyConfigFile,
+        reportPath: input.paths.runtimeValidationReportFile,
+      }),
+      null,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
 }
 
 function createRelayCatalog(): MullvadRelayCatalog {
@@ -666,17 +639,36 @@ function createRelayCatalog(): MullvadRelayCatalog {
   };
 }
 
-function createValidationSuccess(targetPath: string): ValidateWireproxyResult {
+function createValidationSuccess(input: {
+  readonly entryWireproxyConfigPath: string;
+  readonly routeProxyConfigPath: string;
+  readonly reportPath: string;
+}): ValidateRuntimeResult {
   return {
     ok: true,
     phase: 'validation',
-    source: 'internal-syntax',
+    source: 'validation-suite',
     status: 'success',
     checkedAt: '2026-03-22T19:56:00.000Z',
-    target: targetPath,
-    reportPath: targetPath,
-    validator: 'internal-syntax',
-    issues: [],
+    reportPath: input.reportPath,
+    checks: [
+      {
+        artifact: 'entry-wireproxy',
+        ok: true,
+        source: 'internal-syntax',
+        validator: 'internal-syntax',
+        target: input.entryWireproxyConfigPath,
+        issues: [],
+      },
+      {
+        artifact: 'route-proxy',
+        ok: true,
+        source: 'internal-syntax',
+        validator: 'internal-syntax',
+        target: input.routeProxyConfigPath,
+        issues: [],
+      },
+    ],
   };
 }
 
@@ -729,8 +721,12 @@ if [ "\${1:-}" = "compose" ] && [ "\${2:-}" = "--file" ] && [ "\${4:-}" = "ps" ]
   printf '%s\n' '[]'
   exit 0
 fi
-if [ "\${1:-}" = "run" ] && [ "\${2:-}" = "--rm" ] && [ "\${3:-}" = "-v" ] && [ "\${5:-}" = "ghcr.io/windtf/wireproxy:latest" ] && [ "\${6:-}" = "--configtest" ]; then
+if [ "\${1:-}" = "run" ] && [ "\${2:-}" = "--rm" ] && [ "\${3:-}" = "-v" ] && [ "\${5:-}" = "ghcr.io/windtf/wireproxy:latest" ] && [ "\${6:-}" = "--config" ] && [ "\${8:-}" = "--configtest" ]; then
   printf '%s\n' 'wireproxy configtest ok'
+  exit 0
+fi
+if [ "\${1:-}" = "run" ] && [ "\${2:-}" = "--rm" ] && [ "\${3:-}" = "-v" ] && [ "\${5:-}" = "tarampampam/3proxy:latest" ] && [ "\${6:-}" = "/bin/3proxy" ]; then
+  printf '%s\n' '3proxy startup ok'
   exit 0
 fi
 printf '%s\n' "unsupported fake docker invocation: $*" >&2
@@ -761,8 +757,8 @@ function renderExpectedConfigPathSurface(input: {
     `state dir: ${input.paths.appStateDir}`,
     `cache dir: ${input.paths.appCacheDir}`,
     `runtime dir: ${input.paths.runtimeDir} (present)`,
-    `wireproxy config: ${input.paths.wireproxyConfigFile}`,
-    `wireproxy configtest report: ${input.paths.wireproxyConfigTestReportFile}`,
+    `entry wireproxy config: ${input.paths.entryWireproxyConfigFile}`,
+    `runtime validation report: ${input.paths.runtimeValidationReportFile}`,
     `docker compose: ${input.paths.dockerComposePath}`,
     `relay cache: ${input.paths.provisioningCacheFile} (present)`,
     '',
@@ -1046,10 +1042,6 @@ function collectSecrets(input: { readonly config: MullgateConfig }): string[] {
     input.config.setup.auth.password,
     input.config.mullvad.accountNumber,
     input.config.mullvad.wireguard.privateKey,
-    ...input.config.routing.locations.flatMap((route) => [
-      route.mullvad.accountNumber,
-      route.mullvad.wireguard.privateKey,
-    ]),
   ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 }
 

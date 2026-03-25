@@ -123,8 +123,8 @@ describe('mullgate help command contract', () => {
         export [options]     Export proxy URLs to a text file with ordered country or
                              region batches plus optional city, server, provider,
                              ownership, run-mode, and port-speed filters.
-        validate [options]   Validate the saved or freshly rendered wireproxy config
-                             and persist the result metadata.
+        validate [options]   Validate the saved or freshly rendered shared runtime
+                             artifacts and persist the result metadata.
         relays               Inspect, probe, and verify Mullvad relays plus configured
                              route exits.
         recommend [options]  Probe matching Mullvad relays, recommend exact exits for
@@ -367,8 +367,8 @@ describe('mullgate help command contract', () => {
       "
       Usage: mullgate validate [options]
 
-      Validate the saved or freshly rendered wireproxy config and persist the result
-      metadata.
+      Validate the saved or freshly rendered shared runtime artifacts and persist the
+      result metadata.
 
       Options:
         --refresh   Re-render derived artifacts from saved config and relay cache

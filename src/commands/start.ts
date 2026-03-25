@@ -13,7 +13,6 @@ import { writeCliReport } from '../cli-output.js';
 import type { MullgatePaths } from '../config/paths.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
 import { ConfigStore } from '../config/store.js';
-import { requireDefined } from '../required.js';
 import {
   type DockerRuntimeResult,
   type StartDockerRuntimeOptions,
@@ -24,13 +23,14 @@ import {
   renderRuntimeBundle,
 } from '../runtime/render-runtime-bundle.js';
 import {
-  type RenderedWireproxyRoute,
-  renderWireproxyArtifacts,
-} from '../runtime/render-wireproxy.js';
+  ENTRY_TUNNEL_SERVICE,
+  ROUTE_PROXY_SERVICE,
+  renderRuntimeProxyArtifacts,
+} from '../runtime/render-runtime-proxies.js';
 import {
-  type ValidateWireproxyOptions,
-  validateWireproxyConfig,
-} from '../runtime/validate-wireproxy.js';
+  type ValidateRuntimeOptions,
+  validateRuntimeArtifacts,
+} from '../runtime/validate-runtime.js';
 
 type ValidationSourceSummary = string;
 
@@ -59,9 +59,9 @@ type RouteValidationFailure = {
   readonly cause: string;
   readonly artifactPath: string;
   readonly validationSource: ValidationSourceSummary;
-  readonly routeId: string;
-  readonly routeHostname: string;
-  readonly routeBindIp: string;
+  readonly routeId: string | null;
+  readonly routeHostname: string | null;
+  readonly routeBindIp: string | null;
   readonly serviceName: string;
   readonly reportPath: string;
 };
@@ -120,8 +120,8 @@ export type StartCommandDependencies = {
   readonly checkedAt?: string;
   readonly startRuntime?: (options: StartDockerRuntimeOptions) => Promise<DockerRuntimeResult>;
   readonly validateOptions?: Pick<
-    ValidateWireproxyOptions,
-    'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'spawn'
+    ValidateRuntimeOptions,
+    'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'routeProxyDockerImage' | 'spawn'
   >;
   readonly stdout?: WritableTextSink;
   readonly stderr?: WritableTextSink;
@@ -219,29 +219,29 @@ export async function runStartFlow(
     });
   }
 
-  const wireproxyRender = await renderWireproxyArtifacts({
+  const runtimeProxyRender = await renderRuntimeProxyArtifacts({
     config: baseConfig,
     relayCatalog: relayCatalog.value,
     paths: store.paths,
     generatedAt: attemptedAt,
   });
 
-  if (!wireproxyRender.ok) {
+  if (!runtimeProxyRender.ok) {
     return persistFailureOutcome({
       store,
       config: baseConfig,
       attemptedAt,
-      phase: wireproxyRender.phase,
-      source: wireproxyRender.source,
-      code: wireproxyRender.code,
-      message: wireproxyRender.message,
-      cause: wireproxyRender.cause,
-      artifactPath: wireproxyRender.artifactPath,
+      phase: runtimeProxyRender.phase,
+      source: runtimeProxyRender.source,
+      code: runtimeProxyRender.code,
+      message: runtimeProxyRender.message,
+      cause: runtimeProxyRender.cause,
+      artifactPath: runtimeProxyRender.artifactPath,
       composeFilePath: store.paths.runtimeComposeFile,
-      routeId: wireproxyRender.routeId,
-      routeHostname: wireproxyRender.routeHostname,
-      routeBindIp: wireproxyRender.routeBindIp,
-      serviceName: wireproxyRender.serviceName,
+      routeId: runtimeProxyRender.routeId,
+      routeHostname: runtimeProxyRender.routeHostname,
+      routeBindIp: runtimeProxyRender.routeBindIp,
+      serviceName: runtimeProxyRender.serviceName,
     });
   }
 
@@ -266,8 +266,12 @@ export async function runStartFlow(
     });
   }
 
-  const validationResult = await validateRenderedRoutes(
-    wireproxyRender.routes,
+  const validationResult = await validateRenderedRuntime(
+    {
+      renderResult: runtimeProxyRender,
+      bind: baseConfig.setup.bind,
+      reportPath: store.paths.runtimeValidationReportFile,
+    },
     attemptedAt,
     dependencies.validateOptions,
   );
@@ -295,7 +299,7 @@ export async function runStartFlow(
     baseConfig,
     'starting',
     attemptedAt,
-    `Validated ${wireproxyRender.routes.length} route configs via ${validationResult.validationSource}; launching Docker Compose from ${runtimeBundle.artifactPaths.dockerComposePath}.`,
+    `Validated shared entry tunnel plus ${runtimeProxyRender.routes.length} routed exits via ${validationResult.validationSource}; launching Docker Compose from ${runtimeBundle.artifactPaths.dockerComposePath}.`,
   );
   const startingPersist = await persistConfigOnly(store, startingConfig);
 
@@ -403,10 +407,11 @@ export async function runStartFlow(
       'phase: compose-launch',
       'source: docker-compose',
       `attempted at: ${report.attemptedAt}`,
-      `routes: ${wireproxyRender.routes.length}`,
+      `routes: ${runtimeProxyRender.routes.length}`,
       `config: ${store.paths.configFile}`,
-      `primary wireproxy config: ${wireproxyRender.artifactPaths.wireproxyConfigPath}`,
-      `relay cache: ${wireproxyRender.artifactPaths.relayCachePath}`,
+      `entry wireproxy config: ${runtimeProxyRender.artifactPaths.entryWireproxyConfigPath}`,
+      `route proxy config: ${runtimeProxyRender.artifactPaths.routeProxyConfigPath}`,
+      `relay cache: ${runtimeProxyRender.artifactPaths.relayCachePath}`,
       `docker compose: ${refreshedRuntimeBundle.artifactPaths.dockerComposePath}`,
       `runtime manifest: ${refreshedRuntimeBundle.artifactPaths.manifestPath}`,
       `validation report: ${validationResult.reportPath}`,
@@ -428,8 +433,8 @@ function renderExposureInventory(manifest: RuntimeBundleManifest): string[] {
       `   alias: ${route.alias}`,
       `   dns: ${route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
       ...route.endpoints.flatMap((endpoint) => [
-        `   ${endpoint.protocol} hostname: ${endpoint.hostnameUrl}`,
-        `   ${endpoint.protocol} direct ip: ${endpoint.bindUrl}`,
+        `   ${endpoint.protocol} hostname: ${endpoint.redactedHostnameUrl}`,
+        `   ${endpoint.protocol} direct ip: ${endpoint.redactedBindUrl}`,
       ]),
     ]),
     'warnings:',
@@ -481,8 +486,9 @@ function synchronizeRuntimePaths(config: MullgateConfig, paths: MullgatePaths): 
     runtime: {
       ...config.runtime,
       sourceConfigPath: paths.configFile,
-      wireproxyConfigPath: paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
+      entryWireproxyConfigPath: paths.entryWireproxyConfigFile,
+      routeProxyConfigPath: paths.routeProxyConfigFile,
+      validationReportPath: paths.runtimeValidationReportFile,
       relayCachePath: paths.provisioningCacheFile,
       dockerComposePath: paths.runtimeComposeFile,
       runtimeBundle: {
@@ -517,59 +523,59 @@ function withStartOutcome(
   };
 }
 
-async function validateRenderedRoutes(
-  routes: readonly RenderedWireproxyRoute[],
+async function validateRenderedRuntime(
+  input: {
+    readonly renderResult: Awaited<ReturnType<typeof renderRuntimeProxyArtifacts>> & { ok: true };
+    readonly bind: MullgateConfig['setup']['bind'];
+    readonly reportPath: string;
+  },
   checkedAt: string,
   validateOptions?: StartCommandDependencies['validateOptions'],
 ): Promise<RouteValidationSuccess | RouteValidationFailure> {
-  const validationSources: string[] = [];
-  let primaryReportPath = routes[0]?.artifactPaths.configTestReportPath;
+  const result = await validateRuntimeArtifacts({
+    entryWireproxyConfigPath: input.renderResult.artifactPaths.entryWireproxyConfigPath,
+    entryWireproxyConfigText: input.renderResult.entryWireproxyConfig,
+    routeProxyConfigPath: input.renderResult.artifactPaths.routeProxyConfigPath,
+    routeProxyConfigText: input.renderResult.routeProxyConfig,
+    routes: input.renderResult.routes,
+    bind: {
+      socksPort: input.bind.socksPort,
+      httpPort: input.bind.httpPort,
+    },
+    reportPath: input.reportPath,
+    checkedAt,
+    ...validateOptions,
+  });
+  const validationSource = summarizeValidationSource(result);
 
-  for (const route of routes) {
-    const result = await validateWireproxyConfig({
-      configPath: route.artifactPaths.wireproxyConfigPath,
-      configText: route.wireproxyConfig,
-      reportPath: route.artifactPaths.configTestReportPath,
-      checkedAt,
-      ...validateOptions,
-    });
-    const validationSource = summarizeValidationSource(result);
+  if (!result.ok) {
+    const failingRoute =
+      result.artifact === 'route-proxy'
+        ? (input.renderResult.routes.find((route) => result.cause.includes(route.routeId)) ?? null)
+        : null;
 
-    if (!result.ok) {
-      return {
-        ok: false,
-        phase: result.phase,
-        source: result.source,
-        message: 'Rendered wireproxy config failed validation before Docker launch.',
-        cause: result.cause,
-        artifactPath: result.target,
-        validationSource,
-        routeId: route.routeId,
-        routeHostname: route.routeHostname,
-        routeBindIp: route.routeBindIp,
-        serviceName: route.serviceName,
-        reportPath: result.reportPath ?? route.artifactPaths.configTestReportPath,
-      };
-    }
-
-    primaryReportPath = result.reportPath ?? route.artifactPaths.configTestReportPath;
-    validationSources.push(validationSource);
+    return {
+      ok: false,
+      phase: result.phase,
+      source: result.source,
+      message: 'Rendered runtime artifacts failed validation before Docker launch.',
+      cause: result.cause,
+      artifactPath: result.target,
+      validationSource,
+      routeId: failingRoute?.routeId ?? null,
+      routeHostname: failingRoute?.routeHostname ?? null,
+      routeBindIp: failingRoute?.routeBindIp ?? null,
+      serviceName:
+        result.artifact === 'entry-wireproxy' ? ENTRY_TUNNEL_SERVICE : ROUTE_PROXY_SERVICE,
+      reportPath: result.reportPath ?? input.reportPath,
+    };
   }
 
   return {
     ok: true,
-    validationSource: summarizeValidationSources(validationSources, routes.length),
-    reportPath: primaryReportPath,
+    validationSource,
+    reportPath: result.reportPath ?? input.reportPath,
   };
-}
-
-function summarizeValidationSources(sources: readonly string[], routeCount: number): string {
-  const uniqueSources = [...new Set(sources)];
-  const sourceSummary =
-    uniqueSources.length === 1
-      ? requireDefined(uniqueSources[0], 'Expected at least one validation source.')
-      : uniqueSources.join(', ');
-  return routeCount === 1 ? sourceSummary : `${sourceSummary} (${routeCount} routes)`;
 }
 
 function inferRouteDiagnosticContext(
@@ -592,11 +598,10 @@ function inferRouteDiagnosticContext(
       route.routeId,
       route.hostname,
       route.bindIp,
-      route.services.wireproxy.name,
-      route.services.backends.socks5,
-      route.services.backends.http,
+      route.listeners.socks5,
+      route.listeners.http,
+      route.listeners.https,
       route.services.backends.https,
-      route.wireproxyConfigPath,
     ].some((candidate) => typeof candidate === 'string' && haystack.includes(candidate));
   });
 
@@ -608,14 +613,39 @@ function inferRouteDiagnosticContext(
         : null;
 
   if (!selected) {
+    if (
+      [
+        ENTRY_TUNNEL_SERVICE,
+        manifest.services.entryTunnel.mountPaths.entryWireproxyConfigPath,
+        manifest.services.entryTunnel.internalListeners.socks5,
+        manifest.services.entryTunnel.internalListeners.http,
+      ].some((candidate) => haystack.includes(candidate))
+    ) {
+      return { serviceName: ENTRY_TUNNEL_SERVICE };
+    }
+
+    if (
+      [ROUTE_PROXY_SERVICE, manifest.services.routeProxy.mountPaths.routeProxyConfigPath].some(
+        (candidate) => haystack.includes(candidate),
+      )
+    ) {
+      return { serviceName: ROUTE_PROXY_SERVICE };
+    }
+
+    if (haystack.includes('routing-layer')) {
+      return { serviceName: 'routing-layer' };
+    }
+
     return {};
   }
+
+  const serviceName = haystack.includes('routing-layer') ? 'routing-layer' : ROUTE_PROXY_SERVICE;
 
   return {
     routeId: selected.routeId,
     routeHostname: selected.hostname,
     routeBindIp: selected.bindIp,
-    serviceName: selected.services.wireproxy.name,
+    serviceName,
   };
 }
 

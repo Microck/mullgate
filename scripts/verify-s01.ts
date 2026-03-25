@@ -44,17 +44,17 @@ async function main(): Promise<void> {
     await createFakeWireproxyBinary(env);
 
     const provisionFixture = await readTextFixture('wg-provision-response.txt');
-    const relayFixture = await readJsonFixture<unknown>('app-relays.json');
+    const relayFixture = await readJsonFixture<unknown>('www-relays-all.json');
 
     await withJsonServer(
       {
         '/wg': (request) => {
-          const payload = request.body as { pubkey: string; name?: string };
+          const payload = new URLSearchParams(String(request.body ?? ''));
           return {
             body: JSON.stringify({
               ...JSON.parse(provisionFixture),
-              pubkey: payload.pubkey,
-              name: payload.name ?? 'mullgate-verify-host',
+              pubkey: payload.get('pubkey'),
+              name: payload.get('name') ?? 'mullgate-verify-host',
             }),
           };
         },
@@ -119,32 +119,41 @@ async function main(): Promise<void> {
         });
         assert(setPortResult.status === 0, `config set port failed:\n${setPortResult.stderr}`);
 
-        const validateRefreshResult = await runCli(['config', 'validate'], { env });
+        const validateRefreshResult = await runCli(['validate'], { env });
         assert(
           validateRefreshResult.status === 0,
-          `config validate failed:\n${validateRefreshResult.stderr}`,
+          `validate failed:\n${validateRefreshResult.stderr}`,
         );
         assert(
           validateRefreshResult.stdout.includes('artifacts refreshed: yes'),
-          'config validate did not refresh stale artifacts',
+          'validate did not refresh stale artifacts',
         );
 
-        const wireproxyPath = path.join(
+        const entryWireproxyPath = path.join(
           requireDefined(env.XDG_STATE_HOME, 'Expected XDG_STATE_HOME in the verification env.'),
-          'mullgate/runtime/wireproxy.conf',
+          'mullgate/runtime/entry-wireproxy.conf',
         );
-        const renderedWireproxy = await readFile(wireproxyPath, 'utf8');
+        const routeProxyPath = path.join(
+          requireDefined(env.XDG_STATE_HOME, 'Expected XDG_STATE_HOME in the verification env.'),
+          'mullgate/runtime/route-proxy.cfg',
+        );
+        const renderedEntryWireproxy = await readFile(entryWireproxyPath, 'utf8');
+        const renderedRouteProxy = await readFile(routeProxyPath, 'utf8');
         assert(
-          renderedWireproxy.includes('BindAddress = 0.0.0.0:9091'),
-          'wireproxy config did not pick up the updated HTTP port',
+          renderedEntryWireproxy.includes('BindAddress = 127.0.0.1:39102'),
+          'entry wireproxy config did not render the shared internal HTTP listener',
         );
         assert(
-          renderedWireproxy.includes('Password = rotated-verify-secret'),
-          'wireproxy config did not pick up the rotated password',
+          renderedRouteProxy.includes('proxy -p9091 -i127.0.0.1 -e127.0.0.1'),
+          'route proxy config did not pick up the updated HTTP port',
+        );
+        assert(
+          renderedRouteProxy.includes('users alice:CL:rotated-verify-secret'),
+          'route proxy config did not pick up the rotated password',
         );
 
-        await writeFile(wireproxyPath, '[Interface]\nPrivateKey = broken\n', 'utf8');
-        const validateFailureResult = await runCli(['config', 'validate'], { env });
+        await writeFile(entryWireproxyPath, '[Interface]\nPrivateKey = broken\n', 'utf8');
+        const validateFailureResult = await runCli(['validate'], { env });
         assert(
           validateFailureResult.status === 1,
           'corrupted wireproxy config unexpectedly validated',
@@ -189,11 +198,14 @@ async function createFakeWireproxyBinary(env: NodeJS.ProcessEnv): Promise<void> 
     path.join(binDir, 'wireproxy'),
     [
       '#!/bin/sh',
-      'if [ "$1" != "--configtest" ]; then',
+      'if [ "$1" = "--config" ] && [ "$3" = "--configtest" ]; then',
+      '  config="$2"',
+      'elif [ "$1" = "--configtest" ]; then',
+      '  config="$2"',
+      'else',
       '  echo "unsupported fake wireproxy invocation" >&2',
       '  exit 1',
       'fi',
-      'config="$2"',
       'if grep -q "^Address = " "$config" && grep -q "^\\[Peer\\]" "$config" && grep -q "^\\[Socks5\\]" "$config" && grep -q "^\\[http\\]" "$config"; then',
       '  exit 0',
       'fi',
@@ -204,6 +216,23 @@ async function createFakeWireproxyBinary(env: NodeJS.ProcessEnv): Promise<void> 
     'utf8',
   );
   chmodSync(path.join(binDir, 'wireproxy'), 0o755);
+  await writeFile(
+    path.join(binDir, 'docker'),
+    [
+      '#!/bin/sh',
+      'if [ "$1" = "run" ] && [ "$2" = "--rm" ] && [ "$3" = "-v" ] && [ "$5" = "tarampampam/3proxy:latest" ] && [ "$6" = "/bin/3proxy" ]; then',
+      '  exit 0',
+      'fi',
+      'if [ "$1" = "run" ] && [ "$2" = "--rm" ] && [ "$3" = "-v" ] && [ "$5" = "ghcr.io/windtf/wireproxy:latest" ]; then',
+      '  exit 0',
+      'fi',
+      'echo "unsupported fake docker invocation" >&2',
+      'exit 1',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  chmodSync(path.join(binDir, 'docker'), 0o755);
 }
 
 async function withJsonServer(

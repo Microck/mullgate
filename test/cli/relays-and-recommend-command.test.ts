@@ -15,6 +15,7 @@ import { resolveMullgatePaths } from '../../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
 import { ConfigStore } from '../../src/config/store.js';
 import type { MullvadRelayCatalog } from '../../src/mullvad/fetch-relays.js';
+import { createFixtureRoute, createFixtureRuntime } from '../helpers/mullgate-fixtures.js';
 import { normalizeFixtureHomePath } from '../helpers/platform-test-utils.js';
 
 const tempRoots: string[] = [];
@@ -98,101 +99,46 @@ function createFixtureConfig(store: ConfigStore): MullgateConfig {
     },
     routing: {
       locations: [
-        {
+        createFixtureRoute({
           alias: 'sweden-gothenburg',
           hostname: 'sweden-gothenburg.proxy.example.com',
           bindIp: '192.168.10.10',
-          relayPreference: {
-            requested: 'sweden-gothenburg',
-            country: 'se',
-            city: 'got',
-            hostnameLabel: 'se-got-wg-101',
-            resolvedAlias: 'sweden-gothenburg',
+          requested: 'sweden-gothenburg',
+          country: 'se',
+          city: 'got',
+          hostnameLabel: 'se-got-wg-101',
+          resolvedAlias: 'sweden-gothenburg',
+          exit: {
+            relayHostname: 'se-got-wg-101',
+            relayFqdn: 'se-got-wg-101.relays.mullvad.net',
+            socksHostname: 'se-got-wg-101-socks.relays.mullvad.net',
           },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-test-1',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard: {
-              publicKey: 'public-key-value-1',
-              privateKey: 'private-key-value-1',
-              ipv4Address: '10.64.12.34/32',
-              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
-              gatewayIpv4: '10.64.0.1',
-              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-              dnsServers: ['10.64.0.1'],
-              peerPublicKey: 'peer-public-key-value-1',
-              peerEndpoint: 'se-got-wg-101.relays.mullvad.net:3401',
-            },
-          },
-          runtime: {
-            routeId: 'sweden-gothenburg',
-            wireproxyServiceName: 'wireproxy-sweden-gothenburg',
-            haproxyBackendName: 'route-sweden-gothenburg',
-            wireproxyConfigFile: 'wireproxy-sweden-gothenburg.conf',
-          },
-        },
-        {
+        }),
+        createFixtureRoute({
           alias: 'austria-vienna',
           hostname: 'austria-vienna.proxy.example.com',
           bindIp: '192.168.10.11',
-          relayPreference: {
-            requested: 'austria-vienna',
-            country: 'at',
-            city: 'vie',
-            hostnameLabel: 'at-vie-wg-001',
-            resolvedAlias: 'austria-vienna',
+          requested: 'austria-vienna',
+          country: 'at',
+          city: 'vie',
+          hostnameLabel: 'at-vie-wg-001',
+          resolvedAlias: 'austria-vienna',
+          exit: {
+            relayHostname: 'at-vie-wg-001',
+            relayFqdn: 'at-vie-wg-001.relays.mullvad.net',
+            socksHostname: 'at-vie-wg-001-socks.relays.mullvad.net',
           },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-test-2',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard: {
-              publicKey: 'public-key-value-2',
-              privateKey: 'private-key-value-2',
-              ipv4Address: '10.64.12.35/32',
-              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1235/128',
-              gatewayIpv4: '10.64.0.1',
-              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-              dnsServers: ['10.64.0.1'],
-              peerPublicKey: 'peer-public-key-value-2',
-              peerEndpoint: 'at-vie-wg-001.relays.mullvad.net:3401',
-            },
-          },
-          runtime: {
-            routeId: 'austria-vienna',
-            wireproxyServiceName: 'wireproxy-austria-vienna',
-            haproxyBackendName: 'route-austria-vienna',
-            wireproxyConfigFile: 'wireproxy-austria-vienna.conf',
-          },
-        },
+        }),
       ],
     },
-    runtime: {
-      backend: 'wireproxy',
-      sourceConfigPath: store.paths.configFile,
-      wireproxyConfigPath: store.paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: store.paths.wireproxyConfigTestReportFile,
-      relayCachePath: store.paths.provisioningCacheFile,
-      dockerComposePath: store.paths.runtimeComposeFile,
-      runtimeBundle: {
-        bundleDir: store.paths.runtimeBundleDir,
-        dockerComposePath: store.paths.runtimeComposeFile,
-        httpsSidecarConfigPath: store.paths.runtimeHttpsSidecarConfigFile,
-        manifestPath: store.paths.runtimeBundleManifestFile,
-      },
+    runtime: createFixtureRuntime({
+      paths: store.paths,
       status: {
         phase: 'validated',
         lastCheckedAt: timestamp,
         message: 'Fixture config already validated.',
       },
-    },
+    }),
     diagnostics: {
       lastRuntimeStartReportPath: store.paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
@@ -450,7 +396,7 @@ describe('relay and recommend flows', () => {
       source: configured-route
       config: /tmp/mullgate-home/config/mullgate/config.json
       route alias: sweden-gothenburg
-      route id: sweden-gothenburg
+      route id: sweden-gothenburg-proxy-example-com
       hostname: sweden-gothenburg.proxy.example.com
       bind ip: 192.168.10.10
       target: https://am.i.mullvad.net/json
@@ -507,7 +453,7 @@ describe('relay and recommend flows', () => {
            port speed: 10000
            route status: existing configured route
            route alias: sweden-gothenburg
-           route id: sweden-gothenburg
+           route id: sweden-gothenburg-proxy-example-com
            hostname: sweden-gothenburg.proxy.example.com
            bind ip: 192.168.10.10
            socks5: socks5://alice:multi-route-secret@192.168.10.10:1080
