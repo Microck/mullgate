@@ -129,14 +129,21 @@ export type ExposureCommandOptions = {
   readonly routeBindIp?: string[];
 };
 
-type ProxyExportProtocol = 'socks5' | 'http' | 'https';
+const LEGACY_RELAYS_URL = 'https://api.mullvad.net/www/relays/all/';
 
-type ProxyExportSelector = {
+export type ProxyExportProtocol = 'socks5' | 'http' | 'https';
+export type RelayOwnerFilter = 'mullvad' | 'rented' | 'all';
+export type RelayRunModeFilter = 'ram' | 'disk' | 'all';
+
+export type ProxyExportSelector = {
   readonly kind: 'country' | 'region';
   readonly value: string;
   readonly city?: string;
   readonly server?: string;
   readonly providers: readonly string[];
+  readonly owner: RelayOwnerFilter;
+  readonly runMode: RelayRunModeFilter;
+  readonly minPortSpeed: number | null;
   readonly requestedCount: number | null;
 };
 
@@ -145,7 +152,7 @@ type ProxyExportSelectorResult = ProxyExportSelector & {
   readonly exportedCount: number;
 };
 
-type ProxyExportEntry = {
+export type ProxyExportEntry = {
   readonly routeIndex: number;
   readonly alias: string;
   readonly hostname: string;
@@ -153,10 +160,13 @@ type ProxyExportEntry = {
   readonly cityCode: string | null;
   readonly relayHostname: string | null;
   readonly provider: string | null;
+  readonly owner: RelayOwnerFilter | null;
+  readonly runMode: Exclude<RelayRunModeFilter, 'all'> | null;
+  readonly portSpeed: number | null;
   readonly url: string;
 };
 
-type ProxyExportRouteDescriptor = {
+export type ProxyExportRouteDescriptor = {
   readonly routeIndex: number;
   readonly routeId: string;
   readonly routeAlias: string;
@@ -165,9 +175,12 @@ type ProxyExportRouteDescriptor = {
   readonly cityCode: string | null;
   readonly relayHostname: string | null;
   readonly provider: string | null;
+  readonly owner: RelayOwnerFilter | null;
+  readonly runMode: Exclude<RelayRunModeFilter, 'all'> | null;
+  readonly portSpeed: number | null;
 };
 
-type ProxyExportPlanSuccess = {
+export type ProxyExportPlanSuccess = {
   readonly ok: true;
   readonly protocol: ProxyExportProtocol;
   readonly selectors: readonly ProxyExportSelectorResult[];
@@ -176,7 +189,7 @@ type ProxyExportPlanSuccess = {
   readonly suggestedFilename: string;
 };
 
-type ProxyExportFailure = {
+export type ProxyExportFailure = {
   readonly ok: false;
   readonly phase: string;
   readonly source: string;
@@ -188,9 +201,9 @@ type ProxyExportFailure = {
 
 type ProxyExportPlanResult = ProxyExportPlanSuccess | ProxyExportFailure;
 
-type ProxyExportWriteMode = 'file' | 'stdout' | 'dry-run';
+export type ProxyExportWriteMode = 'file' | 'stdout' | 'dry-run';
 
-type ProxyExportResolvedInput = {
+export type ProxyExportResolvedInput = {
   readonly protocol: ProxyExportProtocol;
   readonly selectors: readonly ProxyExportSelector[];
   readonly writeMode: ProxyExportWriteMode;
@@ -217,6 +230,9 @@ export type ProxyExportCommandOptions = {
   readonly city?: string[];
   readonly server?: string[];
   readonly provider?: string[];
+  readonly owner?: string[];
+  readonly runMode?: string[];
+  readonly minPortSpeed?: string[];
 };
 
 const GUIDED_PROMPT_CANCELLED = Symbol('guided-prompt-cancelled');
@@ -561,6 +577,18 @@ function registerExportCommand(target: Command): void {
       'Filter the immediately preceding --country or --region selector by provider. Repeat as needed.',
     )
     .option(
+      '--owner <owner>',
+      'Filter the immediately preceding selector by relay ownership: mullvad, rented, or all.',
+    )
+    .option(
+      '--run-mode <mode>',
+      'Filter the immediately preceding selector by relay run mode: ram, disk, or all.',
+    )
+    .option(
+      '--min-port-speed <mbps>',
+      'Filter the immediately preceding selector by minimum advertised port speed in Mbps.',
+    )
+    .option(
       '--count <number>',
       'Apply a per-selector export cap to the immediately preceding --country or --region batch.',
     )
@@ -570,7 +598,7 @@ function registerExportCommand(target: Command): void {
     .option('--force', 'Overwrite an existing output file.')
     .option('--output <path>', 'Write the export to this path instead of using an auto filename.')
     .description(
-      'Export proxy URLs to a text file with ordered country or region batches plus optional city, server, and provider filters.',
+      'Export proxy URLs to a text file with ordered country or region batches plus optional city, server, provider, ownership, run-mode, and port-speed filters.',
     )
     .action(async (options: ProxyExportCommandOptions) => {
       const store = new ConfigStore();
@@ -1211,6 +1239,9 @@ export function parseProxyExportSelectors(
         kind: 'country',
         value: normalizeProxyExportSelectorValue(countryOption.value, 'country'),
         providers: [],
+        owner: 'all',
+        runMode: 'all',
+        minPortSpeed: null,
         requestedCount: null,
       });
       index += countryOption.consumedNextToken ? 1 : 0;
@@ -1228,6 +1259,9 @@ export function parseProxyExportSelectors(
         kind: 'region',
         value: normalizeProxyExportSelectorValue(regionOption.value, 'region'),
         providers: [],
+        owner: 'all',
+        runMode: 'all',
+        minPortSpeed: null,
         requestedCount: null,
       });
       index += regionOption.consumedNextToken ? 1 : 0;
@@ -1336,6 +1370,111 @@ export function parseProxyExportSelectors(
         providers: [...previousSelector.providers, providerOption.value.trim()],
       };
       index += providerOption.consumedNextToken ? 1 : 0;
+      continue;
+    }
+
+    const ownerOption = readCliOptionValue({
+      flag: '--owner',
+      token,
+      nextToken: tokens[index + 1],
+    });
+
+    if (ownerOption.matched) {
+      const previousSelector = selectors.at(-1);
+
+      if (!previousSelector) {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: 'Pass --owner after a --country or --region selector.',
+        };
+      }
+
+      if (previousSelector.owner !== 'all') {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: `Selector ${previousSelector.kind}=${previousSelector.value} already has an --owner filter.`,
+        };
+      }
+
+      selectors[selectors.length - 1] = {
+        ...previousSelector,
+        owner: parseRelayOwnerFilter(ownerOption.value),
+      };
+      index += ownerOption.consumedNextToken ? 1 : 0;
+      continue;
+    }
+
+    const runModeOption = readCliOptionValue({
+      flag: '--run-mode',
+      token,
+      nextToken: tokens[index + 1],
+    });
+
+    if (runModeOption.matched) {
+      const previousSelector = selectors.at(-1);
+
+      if (!previousSelector) {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: 'Pass --run-mode after a --country or --region selector.',
+        };
+      }
+
+      if (previousSelector.runMode !== 'all') {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: `Selector ${previousSelector.kind}=${previousSelector.value} already has a --run-mode filter.`,
+        };
+      }
+
+      selectors[selectors.length - 1] = {
+        ...previousSelector,
+        runMode: parseRelayRunModeFilter(runModeOption.value),
+      };
+      index += runModeOption.consumedNextToken ? 1 : 0;
+      continue;
+    }
+
+    const minPortSpeedOption = readCliOptionValue({
+      flag: '--min-port-speed',
+      token,
+      nextToken: tokens[index + 1],
+    });
+
+    if (minPortSpeedOption.matched) {
+      const previousSelector = selectors.at(-1);
+
+      if (!previousSelector) {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: 'Pass --min-port-speed after a --country or --region selector.',
+        };
+      }
+
+      if (previousSelector.minPortSpeed !== null) {
+        return {
+          ok: false,
+          phase: 'export-proxies',
+          source: 'input',
+          message: `Selector ${previousSelector.kind}=${previousSelector.value} already has a --min-port-speed filter.`,
+        };
+      }
+
+      selectors[selectors.length - 1] = {
+        ...previousSelector,
+        minPortSpeed: parseProxyExportMinPortSpeed(minPortSpeedOption.value),
+      };
+      index += minPortSpeedOption.consumedNextToken ? 1 : 0;
       continue;
     }
 
@@ -1482,7 +1621,7 @@ function buildProviderPromptOptions(input: {
     }));
 }
 
-function renderProxyExportSelectorLabel(selector: ProxyExportSelector): string {
+export function renderProxyExportSelectorLabel(selector: ProxyExportSelector): string {
   const parts =
     selector.kind === 'region'
       ? [`region=${selector.value}`]
@@ -1495,6 +1634,9 @@ function renderProxyExportSelectorLabel(selector: ProxyExportSelector): string {
   return [
     ...parts,
     ...(selector.providers.length > 0 ? [`providers=${selector.providers.join(',')}`] : []),
+    ...(selector.owner !== 'all' ? [`owner=${selector.owner}`] : []),
+    ...(selector.runMode !== 'all' ? [`run-mode=${selector.runMode}`] : []),
+    ...(selector.minPortSpeed !== null ? [`min-port-speed=${selector.minPortSpeed}`] : []),
   ].join(' ');
 }
 
@@ -1653,16 +1795,28 @@ function resolveServerHostname(input: {
   };
 }
 
-function listMatchingRelays(input: {
+export function listMatchingRelays(input: {
   readonly relayCatalog: MullvadRelayCatalog;
   readonly countryCode?: string;
   readonly cityCode?: string;
   readonly providers: readonly string[];
+  readonly owner?: RelayOwnerFilter;
+  readonly runMode?: RelayRunModeFilter;
+  readonly minPortSpeed?: number | null;
+  readonly includeInactive?: boolean;
 }): MullvadRelay[] {
   const providers = new Set(input.providers.map((provider) => provider.toLowerCase()));
+  const owner = input.owner ?? 'all';
+  const runMode = input.runMode ?? 'all';
+  const minPortSpeed = input.minPortSpeed ?? null;
+  const includeInactive = input.includeInactive ?? false;
 
   return [...input.relayCatalog.relays]
     .filter((relay) => {
+      if (!includeInactive && !relay.active) {
+        return false;
+      }
+
       if (input.countryCode && relay.location.countryCode !== input.countryCode) {
         return false;
       }
@@ -1675,11 +1829,33 @@ function listMatchingRelays(input: {
         return false;
       }
 
+      if (owner === 'mullvad' && !relay.owned) {
+        return false;
+      }
+
+      if (owner === 'rented' && relay.owned) {
+        return false;
+      }
+
+      if (runMode === 'ram' && relay.stboot !== true) {
+        return false;
+      }
+
+      if (runMode === 'disk' && relay.stboot === true) {
+        return false;
+      }
+
+      if (minPortSpeed !== null && (relay.networkPortSpeed ?? 0) < minPortSpeed) {
+        return false;
+      }
+
       return true;
     })
     .sort(
       (left, right) =>
         Number(right.active) - Number(left.active) ||
+        Number(right.owned) - Number(left.owned) ||
+        (right.networkPortSpeed ?? 0) - (left.networkPortSpeed ?? 0) ||
         left.location.countryCode.localeCompare(right.location.countryCode) ||
         left.location.cityCode.localeCompare(right.location.cityCode) ||
         left.hostname.localeCompare(right.hostname),
@@ -1737,6 +1913,9 @@ export function buildProxyExportPlan(input: {
         cityCode: routeDescriptors[routeIndex]?.cityCode ?? null,
         relayHostname: routeDescriptors[routeIndex]?.relayHostname ?? null,
         provider: routeDescriptors[routeIndex]?.provider ?? null,
+        owner: routeDescriptors[routeIndex]?.owner ?? null,
+        runMode: routeDescriptors[routeIndex]?.runMode ?? null,
+        portSpeed: routeDescriptors[routeIndex]?.portSpeed ?? null,
         url: createProxyExportUrl({
           protocol: input.protocol,
           hostname: route.hostname,
@@ -2411,6 +2590,9 @@ async function collectGuidedRegionSelector(input: {
     kind: 'region',
     value: input.region,
     providers,
+    owner: 'all',
+    runMode: 'all',
+    minPortSpeed: null,
     requestedCount: parseGuidedProxyExportCount(selectorCount),
   };
 }
@@ -2557,6 +2739,9 @@ async function collectGuidedCountrySelector(input: {
     ...(typeof city === 'string' ? { city } : {}),
     ...(typeof server === 'string' ? { server } : {}),
     providers,
+    owner: 'all',
+    runMode: 'all',
+    minPortSpeed: null,
     requestedCount: parseGuidedProxyExportCount(selectorCount),
   };
 }
@@ -2569,7 +2754,7 @@ function describeGuidedCountrySelector(
   return country ? `${country.name} (${country.code})` : countryCode;
 }
 
-function resolveProxyExportSelectorsWithCatalog(input: {
+export function resolveProxyExportSelectorsWithCatalog(input: {
   readonly config: MullgateConfig;
   readonly selectors: readonly ProxyExportSelector[];
   readonly relayCatalog: MullvadRelayCatalog;
@@ -2605,6 +2790,9 @@ function resolveProxyExportSelectorsWithCatalog(input: {
         kind: 'region',
         value: region,
         providers: providersResult.providers,
+        owner: selector.owner,
+        runMode: selector.runMode,
+        minPortSpeed: selector.minPortSpeed,
         requestedCount: selector.requestedCount,
       });
       continue;
@@ -2663,6 +2851,9 @@ function resolveProxyExportSelectorsWithCatalog(input: {
           ...(cityResult.cityCode ? { city: cityResult.cityCode } : {}),
           ...(serverResult.hostname ? { server: serverResult.hostname } : {}),
           providers: providersResult.providers,
+          owner: selector.owner,
+          runMode: selector.runMode,
+          minPortSpeed: selector.minPortSpeed,
         })} targets one exact server, so --count cannot exceed 1.`,
         configPath: input.configPath,
       };
@@ -2674,6 +2865,9 @@ function resolveProxyExportSelectorsWithCatalog(input: {
       ...(cityResult.cityCode ? { city: cityResult.cityCode } : {}),
       ...(serverResult.hostname ? { server: serverResult.hostname } : {}),
       providers: providersResult.providers,
+      owner: selector.owner,
+      runMode: selector.runMode,
+      minPortSpeed: selector.minPortSpeed,
       requestedCount: selector.requestedCount,
     });
   }
@@ -2684,7 +2878,7 @@ function resolveProxyExportSelectorsWithCatalog(input: {
   };
 }
 
-function describeConfiguredProxyExportRoutes(input: {
+export function describeConfiguredProxyExportRoutes(input: {
   readonly config: MullgateConfig;
   readonly relayCatalog: MullvadRelayCatalog;
 }): readonly ProxyExportRouteDescriptor[] {
@@ -2707,16 +2901,39 @@ function describeConfiguredProxyExportRoutes(input: {
       cityCode: matchedRelay?.location.cityCode ?? location.relayPreference.city ?? null,
       relayHostname: matchedRelay?.hostname ?? location.relayPreference.hostnameLabel ?? null,
       provider: matchedRelay?.provider ?? location.mullvad.relayConstraints.providers[0] ?? null,
+      owner: matchedRelay ? (matchedRelay.owned ? 'mullvad' : 'rented') : null,
+      runMode: matchedRelay ? (matchedRelay.stboot ? 'ram' : 'disk') : null,
+      portSpeed: matchedRelay?.networkPortSpeed ?? null,
     };
   });
 }
 
-async function loadRelayCatalogForProxyExport(input: {
+export async function loadRelayCatalogForProxyExport(input: {
   readonly store: ConfigStore;
 }): Promise<
   { readonly ok: true; readonly relayCatalog: MullvadRelayCatalog } | ProxyExportFailure
 > {
   const cached = await loadStoredRelayCatalog(input.store.paths.provisioningCacheFile);
+
+  if (cached.ok && relayCatalogHasRichMetadata(cached.value)) {
+    return {
+      ok: true,
+      relayCatalog: cached.value,
+    };
+  }
+
+  const envRelayUrl = readOptionalString(process.env[RELAYS_URL_ENV]);
+  const preferredRelayUrl = envRelayUrl ?? LEGACY_RELAYS_URL;
+  const preferredFetch = await fetchRelays({
+    url: preferredRelayUrl,
+  });
+
+  if (preferredFetch.ok) {
+    return {
+      ok: true,
+      relayCatalog: preferredFetch.value,
+    };
+  }
 
   if (cached.ok) {
     return {
@@ -2725,7 +2942,6 @@ async function loadRelayCatalogForProxyExport(input: {
     };
   }
 
-  const envRelayUrl = readOptionalString(process.env[RELAYS_URL_ENV]);
   const fetched = await fetchRelays({
     ...(envRelayUrl ? { url: envRelayUrl } : {}),
   });
@@ -2743,11 +2959,21 @@ async function loadRelayCatalogForProxyExport(input: {
     source: fetched.source,
     message: fetched.message,
     configPath: input.store.paths.configFile,
-    cause: cached.cause ?? fetched.cause ?? cached.message,
+    cause: preferredFetch.cause ?? cached.cause ?? fetched.cause ?? cached.message,
   };
 }
 
-async function ensureProxyExportRoutes(input: {
+function relayCatalogHasRichMetadata(relayCatalog: MullvadRelayCatalog): boolean {
+  if (relayCatalog.source === 'www-relays-all') {
+    return true;
+  }
+
+  return relayCatalog.relays.some((relay) => {
+    return Boolean(relay.provider || relay.networkPortSpeed || relay.stboot !== undefined);
+  });
+}
+
+export async function ensureProxyExportRoutes(input: {
   readonly store: ConfigStore;
   readonly config: MullgateConfig;
   readonly relayCatalog: MullvadRelayCatalog;
@@ -3015,7 +3241,7 @@ async function ensureProxyExportRoutes(input: {
   };
 }
 
-function planProxyExportRelayTargets(input: {
+export function planProxyExportRelayTargets(input: {
   readonly config: MullgateConfig;
   readonly relayCatalog: MullvadRelayCatalog;
   readonly selectors: readonly ProxyExportSelector[];
@@ -3049,6 +3275,9 @@ function planProxyExportRelayTargets(input: {
           cityCode: route.cityCode,
           relayHostname: route.relayHostname,
           provider: route.provider,
+          owner: route.owner,
+          runMode: route.runMode,
+          portSpeed: route.portSpeed,
           url: '',
         },
       });
@@ -3087,7 +3316,7 @@ function planProxyExportRelayTargets(input: {
   };
 }
 
-function chooseRelaysForProxyExportSelector(input: {
+export function chooseRelaysForProxyExportSelector(input: {
   readonly selector: ProxyExportSelector;
   readonly relayCatalog: MullvadRelayCatalog;
   readonly count: number;
@@ -3100,6 +3329,9 @@ function chooseRelaysForProxyExportSelector(input: {
       candidates: listMatchingRelays({
         relayCatalog: input.relayCatalog,
         providers: input.selector.providers,
+        owner: input.selector.owner,
+        runMode: input.selector.runMode,
+        minPortSpeed: input.selector.minPortSpeed,
       }).filter(
         (relay) =>
           countryCodes.includes(relay.location.countryCode) &&
@@ -3116,6 +3348,9 @@ function chooseRelaysForProxyExportSelector(input: {
       countryCode: input.selector.value,
       ...(input.selector.city ? { cityCode: input.selector.city } : {}),
       providers: input.selector.providers,
+      owner: input.selector.owner,
+      runMode: input.selector.runMode,
+      minPortSpeed: input.selector.minPortSpeed,
     }).find(
       (candidate) =>
         candidate.hostname === input.selector.server &&
@@ -3130,6 +3365,9 @@ function chooseRelaysForProxyExportSelector(input: {
     countryCode: input.selector.value,
     ...(input.selector.city ? { cityCode: input.selector.city } : {}),
     providers: input.selector.providers,
+    owner: input.selector.owner,
+    runMode: input.selector.runMode,
+    minPortSpeed: input.selector.minPortSpeed,
   }).filter((relay) => !input.excludedRelayHostnames.has(relay.hostname));
 
   return chooseSpreadRelays({
@@ -3139,7 +3377,7 @@ function chooseRelaysForProxyExportSelector(input: {
   });
 }
 
-function chooseSpreadRelays(input: {
+export function chooseSpreadRelays(input: {
   readonly candidates: readonly MullvadRelay[];
   readonly count: number;
   readonly spreadKey: (relay: MullvadRelay) => string;
@@ -3843,6 +4081,36 @@ function parseGuidedProxyExportCount(value: string): number | null {
   return value.trim().toLowerCase() === 'all' ? null : parseProxyExportCount(value);
 }
 
+export function parseRelayOwnerFilter(raw: string): RelayOwnerFilter {
+  const normalized = raw.trim().toLowerCase();
+
+  if (normalized === 'mullvad' || normalized === 'rented' || normalized === 'all') {
+    return normalized;
+  }
+
+  throw new Error('Relay ownership must be one of mullvad, rented, or all.');
+}
+
+export function parseRelayRunModeFilter(raw: string): RelayRunModeFilter {
+  const normalized = raw.trim().toLowerCase();
+
+  if (normalized === 'ram' || normalized === 'disk' || normalized === 'all') {
+    return normalized;
+  }
+
+  throw new Error('Relay run mode must be one of ram, disk, or all.');
+}
+
+function parseProxyExportMinPortSpeed(raw: string): number {
+  const value = Number(raw.trim());
+
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error('Minimum port speed must be a positive integer.');
+  }
+
+  return value;
+}
+
 async function validateSavedConfig(input: {
   store: ConfigStore;
   refresh: boolean;
@@ -4189,20 +4457,41 @@ function collectRepeatedValues(value: string, previous: string[]): string[] {
   return [...previous, value.trim()].filter((entry) => entry.length > 0);
 }
 
-function extractProxyExportArgs(argv: readonly string[]): string[] {
-  for (let index = 0; index < argv.length; index += 1) {
-    if (argv[index] === 'export') {
-      return argv.slice(index + 1);
-    }
+export function extractOrderedCommandArgs(input: {
+  readonly argv: readonly string[];
+  readonly commandPath: readonly string[];
+}): string[] {
+  if (input.commandPath.length === 0) {
+    return [];
   }
 
-  for (let index = 0; index < argv.length - 1; index += 1) {
-    if (argv[index] === 'config' && argv[index + 1] === 'export') {
-      return argv.slice(index + 2);
+  for (let index = 0; index <= input.argv.length - input.commandPath.length; index += 1) {
+    const matches = input.commandPath.every(
+      (segment, offset) => input.argv[index + offset] === segment,
+    );
+
+    if (matches) {
+      return input.argv.slice(index + input.commandPath.length);
     }
   }
 
   return [];
+}
+
+export function extractProxyExportArgs(argv: readonly string[]): string[] {
+  const topLevel = extractOrderedCommandArgs({
+    argv,
+    commandPath: ['export'],
+  });
+
+  if (topLevel.length > 0) {
+    return topLevel;
+  }
+
+  return extractOrderedCommandArgs({
+    argv,
+    commandPath: ['config', 'export'],
+  });
 }
 
 function parseProxyExportProtocol(raw: string | undefined): ProxyExportProtocol {
@@ -4215,7 +4504,7 @@ function parseProxyExportProtocol(raw: string | undefined): ProxyExportProtocol 
   throw new Error('Protocol must be one of socks5, http, or https.');
 }
 
-function createAuthenticatedEndpointUrl(
+export function createAuthenticatedEndpointUrl(
   config: Pick<MullgateConfig, 'setup'>,
   url: string,
 ): string {
@@ -4247,6 +4536,9 @@ function buildProxyExportFilename(input: {
         ...(selector.city ? [selector.city] : []),
         ...(selector.server ? [selector.server] : []),
         ...(selector.providers.length > 0 ? [selector.providers.join('-')] : []),
+        ...(selector.owner !== 'all' ? [selector.owner] : []),
+        ...(selector.runMode !== 'all' ? [selector.runMode] : []),
+        ...(selector.minPortSpeed !== null ? [`speed-${selector.minPortSpeed}`] : []),
         selector.requestedCount ?? 'all',
       ].join('-'),
     )
@@ -4269,6 +4561,21 @@ function matchesProxyExportSelector(input: {
       !input.selector.providers.some(
         (provider) => provider.toLowerCase() === input.entry.provider?.toLowerCase(),
       ))
+  ) {
+    return false;
+  }
+
+  if (input.selector.owner !== 'all' && input.entry.owner !== input.selector.owner) {
+    return false;
+  }
+
+  if (input.selector.runMode !== 'all' && input.entry.runMode !== input.selector.runMode) {
+    return false;
+  }
+
+  if (
+    input.selector.minPortSpeed !== null &&
+    (input.entry.portSpeed ?? 0) < input.selector.minPortSpeed
   ) {
     return false;
   }

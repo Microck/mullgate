@@ -195,8 +195,11 @@ function createProxyExportFixtureRelayCatalog(): MullvadRelayCatalog {
         source: 'www-relays-all',
         active: true,
         owned: true,
+        provider: 'm247',
         publicKey: 'relay-public-key-se-got-101',
         endpointIpv4: '185.213.154.2',
+        networkPortSpeed: 10000,
+        stboot: true,
         location: {
           countryCode: 'se',
           countryName: 'Sweden',
@@ -209,9 +212,12 @@ function createProxyExportFixtureRelayCatalog(): MullvadRelayCatalog {
         fqdn: 'at-vie-wg-001.relays.mullvad.net',
         source: 'www-relays-all',
         active: true,
-        owned: true,
+        owned: false,
+        provider: 'datawagon',
         publicKey: 'relay-public-key-at-vie-001',
         endpointIpv4: '185.213.154.1',
+        networkPortSpeed: 1000,
+        stboot: false,
         location: {
           countryCode: 'at',
           countryName: 'Austria',
@@ -224,9 +230,12 @@ function createProxyExportFixtureRelayCatalog(): MullvadRelayCatalog {
         fqdn: 'us-nyc-wg-001.relays.mullvad.net',
         source: 'www-relays-all',
         active: true,
-        owned: true,
+        owned: false,
+        provider: 'xtom',
         publicKey: 'relay-public-key-us-nyc-001',
         endpointIpv4: '185.213.154.3',
+        networkPortSpeed: 5000,
+        stboot: false,
         location: {
           countryCode: 'us',
           countryName: 'United States',
@@ -1029,7 +1038,7 @@ validation: wireproxy-binary/configtest"
             ['export', '--guided', '--dry-run', '--protocol', 'http'],
             {
               env,
-              input: 'y\n1\n\ny\n1\ny\n1\nn\n',
+              input: 'y\n1\n\ny\n1\nn\ny\n1\nn\n',
             },
           );
 

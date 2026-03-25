@@ -5,6 +5,8 @@ import { writeCliReport } from './cli-output.js';
 import { registerAutostartCommand } from './commands/autostart.js';
 import { registerConfigCommands, registerOperatorCommands } from './commands/config.js';
 import { registerDoctorCommand } from './commands/doctor.js';
+import { registerRecommendCommand } from './commands/recommend.js';
+import { registerRelaysCommand } from './commands/relays.js';
 import { registerSetupCommand } from './commands/setup.js';
 import { registerStartCommand } from './commands/start.js';
 import { registerStatusCommand } from './commands/status.js';
@@ -23,6 +25,8 @@ export function createCli(): Command {
   registerDoctorCommand(program);
   registerAutostartCommand(program);
   registerOperatorCommands(program);
+  registerRelaysCommand(program);
+  registerRecommendCommand(program);
   registerConfigCommands(program);
 
   return program;
