@@ -102,21 +102,21 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 
 ## command surface
 
-| command | purpose |
-| --- | --- |
-| `mullgate setup` | guided or non-interactive Mullvad-backed setup that persists canonical config and derived runtime artifacts |
-| `mullgate start` | re-render artifacts, validate them, and launch the Docker runtime bundle |
-| `mullgate status` | inspect saved runtime state, runtime artifacts, live Docker Compose state, and exposure entrypoints |
-| `mullgate doctor` | run deterministic diagnostics for config, runtime, bind, DNS, and last-start failures |
-| `mullgate autostart` | manage a Linux `systemd --user` unit that starts the proxy runtime at login |
-| `mullgate path` | print active config/state/cache/runtime paths plus platform support posture |
-| `mullgate hosts` | print hostname to bind-IP mappings and the copy/paste hosts block |
-| `mullgate export` | generate authenticated proxy URL inventories with ordered country or region batches plus optional city, server, provider, ownership, run-mode, and port-speed filters |
-| `mullgate relays` | inspect matching relays, probe them with `ping`, and verify configured route exits through the published proxy protocols |
-| `mullgate recommend` | probe matching relays, preview the exact routes Mullgate would use, and optionally pin those relay hostnames into saved config |
-| `mullgate regions` | print the curated region groups accepted by `export --region ...` |
-| `mullgate exposure` | inspect or update loopback, private-network, and public exposure posture |
-| `mullgate validate` | validate rendered wireproxy config and refresh runtime validation metadata |
+| command | key flags | purpose |
+| --- | --- | --- |
+| `mullgate setup` | `--non-interactive` | guided or automated Mullvad-backed setup that persists canonical config and derived runtime artifacts |
+| `mullgate start` | none | re-render artifacts, validate them, and launch the Docker runtime bundle |
+| `mullgate status` | none | inspect saved runtime state, runtime artifacts, live Docker Compose state, and exposure entrypoints |
+| `mullgate doctor` | none | run deterministic diagnostics for config, runtime, bind, DNS, and last-start failures |
+| `mullgate autostart` | `enable`, `disable`, `status` | manage a Linux `systemd --user` unit that starts the proxy runtime at login |
+| `mullgate path` | none | print active config/state/cache/runtime paths plus platform support posture |
+| `mullgate hosts` | none | print hostname to bind-IP mappings and the copy/paste hosts block |
+| `mullgate export` | `--guided`, `--dry-run`, `--stdout` | generate authenticated proxy URL inventories with ordered country or region batches plus selective relay filters |
+| `mullgate relays` | `list`, `probe`, `verify` | inspect matching relays, rank candidates, and verify configured route exits through the published proxy protocols |
+| `mullgate recommend` | `--apply`, selector flags | probe matching relays, preview exact routes, and optionally pin recommended relay hostnames into saved config |
+| `mullgate regions` | none | print the curated region groups accepted by `export --region ...` |
+| `mullgate exposure` | `--mode`, `--base-domain` | inspect or update loopback, private-network, and public exposure posture |
+| `mullgate validate` | `--refresh` | validate rendered wireproxy config and refresh runtime validation metadata |
 
 ## examples
 
