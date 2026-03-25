@@ -1,7 +1,4 @@
----
-title: Release Runbook
-description: Canonical maintainer runbook for cutting and publishing a Mullgate release.
----
+# Release Runbook
 
 Use this when cutting a new `mullgate` release.
 

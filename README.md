@@ -178,10 +178,11 @@ mullgate autostart status
 ## documentation
 
 - [documentation site](https://mullgate.micr.dev)
-- [usage guide](https://mullgate.micr.dev/docs)
-- [release runbook](docs/release-runbook.md)
-- [publishing guide](docs/publishing.md)
-- [multi-exit architecture spec](docs/multi-exit-architecture-spec.md)
+- [quickstart](https://mullgate.micr.dev/docs/getting-started/quickstart)
+- [usage guide](https://mullgate.micr.dev/docs/guides/usage)
+- [setup and exposure](https://mullgate.micr.dev/docs/guides/setup-and-exposure)
+- [command reference](https://mullgate.micr.dev/docs/reference/commands)
+- [troubleshooting](https://mullgate.micr.dev/docs/guides/troubleshooting)
 - [`.env.example`](.env.example) - documented setup inputs for local runs
 
 ## disclaimer

@@ -1,91 +1,75 @@
 ---
 title: Installation
-description: Set up the Mullgate documentation site and prepare a local working environment.
+description: Install Mullgate and verify the CLI before you start configuring routes.
 ---
 
-This page covers the practical prerequisites for working with the Mullgate docs and the surrounding project materials.
+This page covers the operator install paths for Mullgate itself.
 
-## What is in this repository?
+## Requirements
 
-The documentation sources that matter most for Mullgate are:
+- Node.js 22 or newer
+- a supported package manager or shell for the installer script
+- Linux if you want the full shipped runtime behavior today
 
-- `usage.md`
-- `release-runbook.md`
-- `publishing.md`
-- `multi-exit-architecture-spec.md`
-- `mullgate-docs/`
+macOS and Windows can install the CLI and use setup, config, path, status, and doctor surfaces truthfully, but the current multi-route runtime remains Linux-first.
 
-The `mullgate-docs` directory is the FumaDocs application used to publish the site.
+## Recommended install path
 
-## Prerequisites
+Use the checked-in installer for the fastest normal path.
 
-To work on the documentation site locally, have the following installed:
-
-- Git
-- Node.js
-- a package manager such as `pnpm` or `npm`
-
-If you plan to validate the runtime behavior described in the docs, use a Linux environment for the full end-to-end workflow.
-
-## Open the docs app
-
-From the repository root:
+### Linux or macOS
 
 ```bash
-cd docs/mullgate-docs
+curl -fsSL https://raw.githubusercontent.com/Microck/mullgate/main/scripts/install.sh | sh
+mullgate --help
 ```
 
-## Install dependencies
+### Windows
 
-If you use `pnpm`:
+```powershell
+irm https://raw.githubusercontent.com/Microck/mullgate/main/scripts/install.ps1 | iex
+mullgate --help
+```
+
+## Package-manager install
+
+If you prefer to install it directly from npm:
 
 ```bash
-pnpm install
+npm install -g mullgate
+pnpm add -g mullgate
+bun add -g mullgate
 ```
 
-If you use `npm`:
+## Verify the install
 
 ```bash
-npm install
+mullgate --help
+mullgate path
 ```
 
-## Run the docs site
+Use `mullgate path` to confirm the active config, state, cache, and runtime paths on your current platform.
+
+## Choose your first run
+
+### Interactive setup
+
+If you want Mullgate to guide you through account, credentials, routes, bind posture, and optional HTTPS settings:
 
 ```bash
-pnpm dev
+mullgate setup
 ```
 
-Or:
+### Non-interactive setup
+
+If you want automation, CI-style setup, or a repeatable server bootstrap:
 
 ```bash
-npm run dev
+mullgate setup --non-interactive
 ```
 
-Then open the local URL shown in the terminal.
-
-## Production build
-
-```bash
-pnpm build
-```
-
-Or:
-
-```bash
-npm run build
-```
-
-## What this installs
-
-The documentation app uses:
-
-- Next.js
-- `fumadocs-core`
-- `fumadocs-mdx`
-- `fumadocs-ui`
-
-These packages provide the routing, MDX rendering, and navigation experience for the docs site.
+Start from [`.env.example`](https://github.com/Microck/mullgate/blob/main/.env.example) if you want a reference list of supported setup inputs.
 
 ## Next step
 
-Continue with [Quickstart](/docs/getting-started/quickstart).
+Continue with [Quickstart](/docs/getting-started/quickstart) for the first end-to-end workflow.

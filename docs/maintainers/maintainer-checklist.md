@@ -1,9 +1,6 @@
----
-title: Maintainer Checklist
-description: A concise operational checklist for preparing, validating, and publishing a Mullgate release.
----
+# Maintainer Checklist
 
-Use this page as the short-form companion to [Release Runbook](/docs/operations/release-runbook).
+Use this page as the short-form companion to [Release runbook](release-runbook.md).
 
 ## Before release
 

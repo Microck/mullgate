@@ -29,6 +29,16 @@ make install
 make release-check
 ```
 
+## Maintainer docs
+
+Use these docs when you are changing the docs site, cutting a release, or publishing `mullgate`:
+
+- [Maintainer docs index](docs/maintainers/index.md)
+- [Release runbook](docs/maintainers/release-runbook.md)
+- [Publishing](docs/maintainers/publishing.md)
+- [Maintainer checklist](docs/maintainers/maintainer-checklist.md)
+- [Docs site](docs/maintainers/docs-site.md)
+
 ## Before opening a pull request
 
 Run the smallest meaningful verification for your change. For most changes that means:

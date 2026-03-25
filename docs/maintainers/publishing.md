@@ -1,9 +1,8 @@
----
-title: Publishing
-description: Publish-focused companion page for Mullgate's release workflow.
----
+# Publishing Mullgate
 
-Use this page when you only need the npm and release-channel details. For the full release sequence, use [Release Runbook](/docs/operations/release-runbook).
+This page is the publish-focused companion to [the release runbook](release-runbook.md).
+
+Use the runbook for the full release sequence. Use this page when you only need the npm and release-channel details.
 
 ## Canonical release path
 
@@ -56,5 +55,5 @@ That means a new git tag is not enough. The npm package must also be published f
 
 ## Related docs
 
-- [Release Runbook](/docs/operations/release-runbook)
-- [Maintainer Checklist](/docs/operations/maintainer-checklist)
+- [Release runbook](release-runbook.md)
+- [Maintainer checklist](maintainer-checklist.md)

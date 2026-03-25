@@ -1,11 +1,11 @@
 ---
 title: Mullgate
-description: Comprehensive documentation for Mullgate, a CLI-first proxy and multi-exit gateway.
+description: Operator docs for installing, setting up, using, and troubleshooting Mullgate.
 ---
 
-Mullgate is a CLI-first proxy and gateway product for operators who need explicit, inspectable routing behavior. It exposes multiple local proxy entrypoints, keeps hostname-to-route mapping truthful, and documents both the current runtime model and the proposed multi-exit architecture.
+Mullgate is a CLI-first proxy and gateway product for operators who need explicit, inspectable routing behavior. It exposes multiple local proxy entrypoints, keeps hostname-to-route mapping truthful, and gives you one command surface for setup, exposure control, relay discovery, runtime state, and diagnostics.
 
-This Fumadocs site turns the repository's longer-form notes into a browsable documentation set with clear navigation, cross-links, and operator-focused guidance.
+This site is the operator-facing guide to installing Mullgate, configuring routes, using the CLI, and troubleshooting real setups.
 
 ## What Mullgate is for
 
@@ -16,22 +16,22 @@ Mullgate is built around a few stable ideas:
 - support SOCKS5, HTTP, and HTTPS-capable proxy surfaces
 - keep host routing unchanged instead of acting like a full-device VPN
 - make runtime and diagnostic state visible through the CLI
-- preserve truthful documentation for platform support and release operations
+- preserve truthful documentation for platform support and routing behavior
 
 ## Start here
 
 <Cards>
   <Card title="Installation" href="/docs/getting-started/installation">
-    Prepare the docs app and local working environment.
+    Install Mullgate and verify the CLI on your platform.
   </Card>
   <Card title="Quickstart" href="/docs/getting-started/quickstart">
-    Learn the fastest path through setup, validation, and routing.
+    Follow the fastest path through setup, validation, and first use.
   </Card>
   <Card title="Usage" href="/docs/guides/usage">
-    Read the full usage guide migrated from the repository source.
+    Read the full setup, exposure, export, and relay workflow.
   </Card>
-  <Card title="Architecture" href="/docs/architecture/overview">
-    Understand the runtime model, bind IP design, and multi-exit roadmap.
+  <Card title="Troubleshooting" href="/docs/guides/troubleshooting">
+    Diagnose hostname, exposure, runtime, and relay issues.
   </Card>
 </Cards>
 
@@ -51,11 +51,6 @@ Mullgate is built around a few stable ideas:
 - [Current Runtime Model](/docs/architecture/current-runtime)
 - [Multi-exit Architecture Spec](/docs/architecture/multi-exit)
 
-### Operations
-- [Release Runbook](/docs/operations/release-runbook)
-- [Maintainer Checklist](/docs/operations/maintainer-checklist)
-- [Publishing](/docs/operations/publishing)
-
 ### Reference
 - [Commands](/docs/reference/commands)
 - [Configuration](/docs/reference/configuration)
@@ -64,28 +59,17 @@ Mullgate is built around a few stable ideas:
 ### Other
 - [FAQ](/docs/faq)
 
-## How the docs are organized
-
-The most important source documents in the repository are:
-
-- `usage.md`
-- `release-runbook.md`
-- `publishing.md`
-- `multi-exit-architecture-spec.md`
-
-Those root docs now appear in the site as polished, structured pages. Supporting pages split out the core operator workflows into smaller sections that are easier to browse and maintain.
-
 ## Suggested reading order
 
-If you are new to Mullgate, start with:
+If you are new to Mullgate, start with the operator path:
 
 1. [Quickstart](/docs/getting-started/quickstart)
 2. [Usage](/docs/guides/usage)
 3. [Setup and Exposure](/docs/guides/setup-and-exposure)
-4. [Architecture Overview](/docs/architecture/overview)
-5. [Current Runtime Model](/docs/architecture/current-runtime)
-6. [Multi-exit Architecture Spec](/docs/architecture/multi-exit)
-7. [Release Runbook](/docs/operations/release-runbook)
+4. [Troubleshooting](/docs/guides/troubleshooting)
+5. [Commands](/docs/reference/commands)
+
+Read the architecture pages after that if you want the design background.
 
 ## What to expect from the site
 
@@ -95,5 +79,4 @@ The docs emphasize:
 - practical setup examples
 - clear exposure and hostname guidance
 - runtime lifecycle and validation workflows
-- release and publishing expectations
 - a transparent explanation of the current scaling limit and the proposed next step

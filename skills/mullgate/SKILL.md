@@ -61,7 +61,7 @@ Run the smallest truthful verification that matches the change:
 
 ## Release tasks
 
-For release work, follow `docs/release-runbook.md` and `docs/publishing.md`.
+For release work, follow `docs/maintainers/release-runbook.md` and `docs/maintainers/publishing.md`.
 
 Important repo-specific rules:
 
@@ -88,8 +88,8 @@ pnpm publish --no-git-checks --access public --provenance=false
 
 - `README.md` - landing-page contract
 - `docs/usage.md` - deeper operator guidance
-- `docs/release-runbook.md` - canonical release flow
-- `docs/publishing.md` - npm-publish behavior and fallback
+- `docs/maintainers/release-runbook.md` - canonical release flow
+- `docs/maintainers/publishing.md` - npm-publish behavior and fallback
 - `docs/mullgate-docs/content/docs/` - docs-site source pages
 - `scripts/demo-*.ts` - deterministic terminal demos
 - `test/cli/*.test.ts` - CLI help, output, and workflow contract

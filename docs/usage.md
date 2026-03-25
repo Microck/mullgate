@@ -14,13 +14,12 @@ This guide expands on the consumer-facing repository [README](../README.md). It 
 
 ## Install forms
 
-Mullgate now has three truthful invocation forms, in this order of preference:
+Mullgate has two operator-facing install forms:
 
 1. **Installed `mullgate` command** — the published npm package installed via `npm`, `pnpm`, `bun`, or the convenience installer scripts
-2. **Packed release asset** — the GitHub release `.tgz` artifact verified by `pnpm verify:m003-install-path`
-3. **Contributor/source-checkout path** — `node dist/cli.js ...` or `pnpm exec tsx src/cli.ts ...`
+2. **Packed release asset** — the GitHub release `.tgz` artifact or extracted standalone binary
 
-This guide uses installed `mullgate ...` commands by default. If you are working from a checkout instead, replace `mullgate ...` with either `node dist/cli.js ...` after `pnpm build`, or `pnpm exec tsx src/cli.ts ...` while developing.
+This guide uses installed `mullgate ...` commands by default. If you are using a release artifact instead, invoke the extracted `mullgate` binary with the same flags and subcommands shown here.
 
 ## Platform support posture
 

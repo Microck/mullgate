@@ -1,27 +1,26 @@
----
-title: Demos
-description: Recorded terminal GIFs for the README and docs site, plus the regeneration workflow.
----
+# Demos
 
-These demos are fixture-backed on purpose. They do not require a live Mullvad account, a real Docker runtime, or any secret material.
+These demo notes are for maintainers recording or verifying the GIFs used in the README and public docs.
+
+They are not part of the public Mullgate operator docs.
 
 ## Preview
 
 ### Setup
 
-![Setup demo](/images/demos/setup-guided.gif)
+![Setup demo](../../images/demos/setup-guided.gif)
 
 ### Private-network exposure
 
-![Private-network exposure demo](/images/demos/exposure-private-network.gif)
+![Private-network exposure demo](../../images/demos/exposure-private-network.gif)
 
 ### Status and doctor
 
-![Status and doctor demo](/images/demos/status-doctor.gif)
+![Status and doctor demo](../../images/demos/status-doctor.gif)
 
 ### Relay discovery and recommendation
 
-![Relay recommendation demo](/images/demos/relay-recommend.gif)
+![Relay recommendation demo](../../images/demos/relay-recommend.gif)
 
 ## Regenerate
 

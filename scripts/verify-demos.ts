@@ -29,14 +29,14 @@ const checks = [
     includes: '/images/demos/relay-recommend.gif',
   },
   {
-    label: 'Operations demos page reference',
-    file: path.join(repoRoot, 'docs/mullgate-docs/content/docs/operations/demos.mdx'),
-    includes: '/images/demos/status-doctor.gif',
+    label: 'Maintainer demos guide reference',
+    file: path.join(repoRoot, 'docs/maintainers/demos.md'),
+    includes: 'images/demos/status-doctor.gif',
   },
   {
-    label: 'Operations relay recommendation demo reference',
-    file: path.join(repoRoot, 'docs/mullgate-docs/content/docs/operations/demos.mdx'),
-    includes: '/images/demos/relay-recommend.gif',
+    label: 'Maintainer relay recommendation demo reference',
+    file: path.join(repoRoot, 'docs/maintainers/demos.md'),
+    includes: 'images/demos/relay-recommend.gif',
   },
 ] as const;
 
