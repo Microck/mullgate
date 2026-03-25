@@ -9,34 +9,6 @@ description: Install, configure, run, verify, and troubleshoot Mullgate as an op
 
 Operate Mullgate as a user-facing proxy tool. Use the existing Mullgate docs to choose the right setup path, exposure mode, verification sequence, and troubleshooting flow without drifting into repo-maintainer or release workflows.
 
-## Architecture
-
-### Runtime flow
-
-```mermaid
-flowchart LR
-    A[Client app or remote client] --> B[Route-specific hostname or bind IP]
-    B --> C[Mullgate listener]
-    C --> D[Mullgate routing layer]
-    D --> E[Selected relay or configured exact exit]
-    E --> F[Mullvad-backed observed exit]
-    F --> G[Destination]
-```
-
-### Hostname truth model
-
-```mermaid
-flowchart TD
-    A[Configured route] --> B[Assigned bind IP]
-    A --> C[Published hostname]
-    C --> D[DNS or hosts resolution]
-    D --> B
-    B --> E[Route-specific listener]
-    E --> F[Correct route selection]
-
-    X[Two hostnames on one bind IP] --> Y[Not two truthful routes]
-```
-
 ## Grounding
 
 Read these sources before acting:

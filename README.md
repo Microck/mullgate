@@ -40,6 +40,34 @@ the goal is not "replace mullvad's proxy page with another set of manual steps."
 
 the hard part is that mullvad only gives each account 5 wireguard devices. once you want multiple real routed exits, that limit becomes an architectural constraint, which is why mullgate is more than a thin wrapper around mullvad's socks5 proxy.
 
+## architecture
+
+### runtime flow
+
+```mermaid
+flowchart LR
+    A[Client app or remote client] --> B[Route-specific hostname or bind IP]
+    B --> C[Mullgate listener]
+    C --> D[Mullgate routing layer]
+    D --> E[Selected relay or configured exact exit]
+    E --> F[Mullvad-backed observed exit]
+    F --> G[Destination]
+```
+
+### hostname truth model
+
+```mermaid
+flowchart TD
+    A[Configured route] --> B[Assigned bind IP]
+    A --> C[Published hostname]
+    C --> D[DNS or hosts resolution]
+    D --> B
+    B --> E[Route-specific listener]
+    E --> F[Correct route selection]
+
+    X[Two hostnames on one bind IP] --> Y[Not two truthful routes]
+```
+
 ## quickstart
 
 `mullgate` currently requires Node.js 22+.
