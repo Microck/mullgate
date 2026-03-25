@@ -40,6 +40,13 @@ const demos: readonly DemoDefinition[] = [
     cols: 96,
     rows: 38,
   },
+  {
+    name: 'relay-recommend',
+    runnerPath: path.join(repoRoot, 'scripts', 'demo-relay-recommend.ts'),
+    assetPath: path.join(imageDir, 'relay-recommend.gif'),
+    cols: 96,
+    rows: 36,
+  },
 ] as const;
 
 async function main(): Promise<void> {

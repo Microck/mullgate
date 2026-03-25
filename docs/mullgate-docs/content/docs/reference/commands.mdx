@@ -11,6 +11,8 @@ The documentation repeatedly anchors itself to the following CLI help contract:
 - `mullgate status --help`
 - `mullgate doctor --help`
 - `mullgate autostart --help`
+- `mullgate relays --help`
+- `mullgate recommend --help`
 - `mullgate config --help`
 
 ## Core workflow commands
@@ -52,6 +54,10 @@ Important subcommands referenced in the docs include:
 
 `mullgate regions` prints the curated export region groups that `export --region ...` accepts.
 
+`mullgate relays` is the relay-inspection surface. `relays list` shows matching relay metadata, `relays probe` ranks selected candidates by `ping` latency, and `relays verify` checks whether one configured route still exits through Mullvad on the published proxy protocols.
+
+`mullgate recommend` turns broad selector intent into exact relay-hostname recommendations. By default it stays advisory and previews the exact route Mullgate would use. With `--apply`, it pins the recommended relay hostname into saved config and refreshes the runtime artifacts.
+
 ## Invocation forms
 
 Mullgate can be invoked in three documented ways:
@@ -68,11 +74,14 @@ A practical workflow usually looks like this:
 2. `mullgate exposure`
 3. `mullgate export`
 4. `mullgate regions`
-5. `mullgate hosts`
-6. `mullgate validate --refresh`
-7. `mullgate start`
-8. `mullgate status`
-9. `mullgate doctor`
+5. `mullgate relays list`
+6. `mullgate relays probe`
+7. `mullgate recommend`
+8. `mullgate hosts`
+9. `mullgate validate --refresh`
+10. `mullgate start`
+11. `mullgate status`
+12. `mullgate doctor`
 
 ## Reference practice
 

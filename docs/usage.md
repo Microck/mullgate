@@ -8,6 +8,8 @@ This guide expands on the consumer-facing repository [README](../README.md). It 
 - `mullgate status --help`
 - `mullgate doctor --help`
 - `mullgate autostart --help`
+- `mullgate relays --help`
+- `mullgate recommend --help`
 - `mullgate config --help`
 
 ## Install forms
@@ -134,6 +136,66 @@ In that posture:
 - there are no DNS records to publish
 - direct bind-IP entrypoints are the intended access path
 - `mullgate hosts` is still useful for local-only hostname testing, but it is no longer required for remote clients
+
+## Relay discovery, recommendation, and exit verification
+
+Use these commands when you want to move from broad selector intent to exact relay choices you can justify and verify.
+
+### Find relays that match a policy
+
+```bash
+mullgate relays list \
+  --country Sweden \
+  --owner mullvad \
+  --run-mode ram \
+  --min-port-speed 9000
+```
+
+Use cases:
+
+- prefer Mullvad-owned infrastructure over rented servers
+- filter down to RAM-disk relays for a stricter operational posture
+- exclude slower relays before you probe anything
+
+### Probe likely candidates before pinning one
+
+```bash
+mullgate relays probe --country Sweden --count 2
+```
+
+What this does:
+
+- starts from the selector you requested
+- picks a spread of likely candidates
+- runs `ping` against those relay IPs
+- ranks the successes by latency
+
+### Preview or apply exact relay recommendations
+
+```bash
+mullgate recommend --country Sweden --count 1
+mullgate recommend --country Sweden --count 1 --apply
+```
+
+Use `mullgate recommend` when you want Mullgate to translate a broad country or region request into exact relay hostnames.
+
+- without `--apply`, it stays advisory and prints the exact route it would use
+- with `--apply`, it pins the recommended relay hostname into saved config and refreshes the derived runtime artifacts
+- ordered selectors still matter, so you can mix country and region batches and keep deterministic intent
+
+### Verify a configured route really exits through Mullvad
+
+```bash
+mullgate relays verify --route sweden-gothenburg
+```
+
+This verifies the configured route across the published proxy protocols and checks the JSON response from `https://am.i.mullvad.net/json` by default.
+
+Use it when:
+
+- a recommended relay has been applied and you want a quick truth check
+- an operator needs to prove that SOCKS5, HTTP, and HTTPS surfaces all still exit through Mullvad
+- a route looks suspicious and you want a concrete per-protocol failure report instead of guessing
 
 ## Direct-IP access vs hostname/domain access
 
