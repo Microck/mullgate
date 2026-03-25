@@ -167,6 +167,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Compile standalone binary
+        shell: bash
         run: |
           mkdir -p dist
           bun build \
