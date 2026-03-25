@@ -202,6 +202,14 @@ function runRouteProxyStartupCheck(input: {
   | {
       readonly kind: 'missing-binary';
     } {
+  const hostPlatform = process.platform as NodeJS.Platform;
+
+  if (hostPlatform === 'win32') {
+    // Windows-hosted runs cannot truthfully validate the Linux-targeted multi-bind
+    // 3proxy startup path, so fall back to the internal syntax contract there.
+    return { kind: 'missing-binary' };
+  }
+
   const runner = input.spawn ?? spawnSync;
   const stage = createDockerValidationStage({
     prefix: 'mullgate-route-proxy-validate-',

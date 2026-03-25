@@ -708,6 +708,97 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
     expect(renderResult.routeProxyConfig).not.toContain('parent 1000 socks5 127.0.0.1 39101');
   });
 
+  it('falls back to internal route-proxy syntax validation on Windows hosts', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const appPayload = await readJsonFixture<unknown>('app-relays.json');
+    const relayResult = normalizeRelayPayload(appPayload, {
+      fetchedAt: '2026-03-20T18:36:00.000Z',
+      endpoint: 'fixture://app-relays.json',
+    });
+
+    expect(relayResult.ok).toBe(true);
+
+    if (!relayResult.ok) {
+      return;
+    }
+
+    const config = createConfig(paths, {
+      publicKey: 'PUBLIC_KEY_FOR_WINDOWS_VALIDATION_TEST=',
+      privateKey: 'PRIVATE_KEY_FOR_WINDOWS_VALIDATION_TEST=',
+      ipv4Address: '10.64.12.34/32',
+      ipv6Address: null,
+      gatewayIpv4: null,
+      gatewayIpv6: null,
+      dnsServers: ['10.64.0.1'],
+      peerPublicKey: null,
+      peerEndpoint: null,
+    });
+    const renderResult = await renderWireproxyArtifacts({
+      config,
+      relayCatalog: relayResult.value,
+      paths,
+      generatedAt: '2026-03-20T18:37:00.000Z',
+    });
+
+    expect(renderResult.ok).toBe(true);
+
+    if (!renderResult.ok) {
+      return;
+    }
+
+    const originalPlatform = process.platform;
+
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      const validation = await validateRuntimeArtifacts({
+        entryWireproxyConfigPath: renderResult.artifactPaths.entryWireproxyConfigPath,
+        entryWireproxyConfigText: renderResult.entryWireproxyConfig,
+        routeProxyConfigPath: renderResult.artifactPaths.routeProxyConfigPath,
+        routeProxyConfigText: renderResult.routeProxyConfig,
+        routes: renderResult.routes,
+        bind: {
+          socksPort: config.setup.bind.socksPort,
+          httpPort: config.setup.bind.httpPort,
+        },
+        checkedAt: '2026-03-20T18:38:00.000Z',
+        spawn: createSpawnStub({
+          docker: () => {
+            throw new Error('Windows route-proxy validation should skip docker startup checks.');
+          },
+          wireproxy: () => ({
+            status: 0,
+            stdout: 'wireproxy configtest ok\n',
+          }),
+        }),
+      });
+
+      expect(validation).toMatchObject({
+        ok: true,
+        phase: 'validation',
+        source: 'validation-suite',
+        checkedAt: '2026-03-20T18:38:00.000Z',
+        checks: [
+          {
+            artifact: 'entry-wireproxy',
+            ok: true,
+            source: 'wireproxy-binary',
+            validator: 'wireproxy-configtest',
+          },
+          {
+            artifact: 'route-proxy',
+            ok: true,
+            source: 'internal-syntax',
+            validator: 'internal-syntax',
+          },
+        ],
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
   it('runs the shared runtime containers as root so they can read the private mounted configs', async () => {
     const env = createTempEnvironment();
     const paths = resolveMullgatePaths(env);
