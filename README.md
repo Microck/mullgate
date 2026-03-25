@@ -19,7 +19,6 @@ the main setup path is `mullgate setup`. on a real terminal it opens a guided fl
 
 ![setup demo](images/demos/setup-guided.gif)
 
-once your routes are saved, `mullgate` can also generate ready-to-paste client inventories and help you choose better exact exits. use `mullgate regions` to inspect the built-in region groups, run `mullgate export --guided` for a setup-style `proxies.txt` flow with country and region pick-lists, inspect relay candidates with `mullgate relays list` or `mullgate relays probe`, then preview or apply exact pinned recommendations with `mullgate recommend`.
 
 ## why
 
