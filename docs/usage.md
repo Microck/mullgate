@@ -317,7 +317,7 @@ This command:
 1. loads the canonical config
 2. verifies HTTPS asset presence when HTTPS is enabled
 3. loads the saved relay cache
-4. re-renders per-route wireproxy configs and the runtime bundle
+4. re-renders the shared entry-wireproxy config, shared route-proxy config, and runtime bundle
 5. validates the rendered config
 6. launches `docker compose up --detach`
 7. saves a secret-safe `last-start.json` report
@@ -401,6 +401,7 @@ Use the integrated Linux-first proof command when you want one end-to-end check 
 | HTTPS port (default `8443` when the verifier generates TLS assets) | `MULLGATE_HTTPS_PORT` |
 | Existing HTTPS cert/key paths | `MULLGATE_HTTPS_CERT_PATH`, `MULLGATE_HTTPS_KEY_PATH` |
 | Preserve the temp XDG home even on success | `--keep-temp-home` |
+| Reuse a preserved temp XDG home and skip provisioning a new Mullvad device | `--reuse-temp-home <path>` |
 
 ### Command
 
@@ -421,9 +422,15 @@ pnpm verify:s06
 - direct host-route invariance before/after `mullgate start`
 - distinct exits for the first two routed hostnames when they resolve locally to distinct bind IPs
 
-### Route-slot prerequisite
+### Shared-device prerequisite
 
-The verifier needs one free Mullvad WireGuard device slot per routed location because setup provisions real per-route WireGuard state. If you keep the default two-route verifier contract, the account must have two free slots before `pnpm verify:s06` can pass.
+A fresh verifier run needs one free Mullvad WireGuard device slot total because setup provisions one shared Mullvad entry device for the whole proof, not one device per route. If you rerun against a preserved home with `--reuse-temp-home <path>`, the verifier reuses that saved shared device and does not consume another slot.
+
+### Scaling note
+
+The built-in `pnpm verify:s06` path still keeps its end-to-end probe contract to the first two saved routes so the default proof stays fast and inspectable.
+
+That does not mean Mullgate consumes one Mullvad slot per route. The current shared-entry runtime has also been live-validated with a 50-route sweep on one shared Mullvad device.
 
 ### HTTPS proof note
 

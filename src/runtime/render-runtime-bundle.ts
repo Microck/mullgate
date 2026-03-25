@@ -1,7 +1,8 @@
 import { chmod, type FileHandle, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
+
 import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
-import { type MullgatePaths, resolveRouteWireproxyPaths } from '../config/paths.js';
+import type { MullgatePaths } from '../config/paths.js';
 import { REDACTED } from '../config/redact.js';
 import type { MullgateConfig, RoutedLocation } from '../config/schema.js';
 import {
@@ -9,9 +10,16 @@ import {
   type PlatformSupportContract,
 } from '../platform/support-contract.js';
 import { requireDefined } from '../required.js';
+import {
+  ENTRY_TUNNEL_SERVICE,
+  ENTRY_WIREPROXY_HTTP_PORT,
+  ENTRY_WIREPROXY_SOCKS_PORT,
+  ROUTE_PROXY_SERVICE,
+} from './render-runtime-proxies.js';
 
 const CONTAINER_BIND_HOST = '0.0.0.0';
 const WIREPROXY_IMAGE = 'backplane/wireproxy:20260320';
+const ROUTE_PROXY_IMAGE = 'tarampampam/3proxy:latest';
 const HAPROXY_IMAGE = 'haproxytech/haproxy-alpine:3.0.19';
 const ROUTING_LAYER_SERVICE = 'routing-layer';
 const HAPROXY_CONFIG_CONTAINER_PATH = '/usr/local/etc/haproxy/haproxy.cfg';
@@ -19,7 +27,8 @@ const HAPROXY_CERT_INPUT_PATH = '/run/mullgate-cert.pem';
 const HAPROXY_KEY_INPUT_PATH = '/run/mullgate-key.pem';
 const HAPROXY_COMBINED_PEM_PATH = '/run/mullgate/tls/haproxy.pem';
 const HAPROXY_TLS_TMPFS_PATH = '/run/mullgate/tls';
-const WIREPROXY_CONFIG_CONTAINER_PATH = '/etc/wireproxy/wireproxy.conf';
+const ENTRY_WIREPROXY_CONFIG_CONTAINER_PATH = '/etc/wireproxy/wireproxy.conf';
+const ROUTE_PROXY_CONFIG_CONTAINER_PATH = '/etc/3proxy/3proxy.cfg';
 const HOST_NETWORK_MODE = 'host';
 
 type RuntimeProtocol = 'socks5' | 'http' | 'https';
@@ -46,18 +55,39 @@ export type RuntimeEndpoint = {
 export type RuntimeBundleManifest = {
   readonly generatedAt: string;
   readonly source: 'canonical-config';
-  readonly topology: 'multi-route-wireproxy-haproxy';
+  readonly topology: 'shared-entry-wireguard-route-proxy-haproxy';
   readonly relayCachePath: string;
   readonly images: {
     readonly wireproxy: string;
+    readonly routeProxy: string;
     readonly routingLayer: string;
   };
   readonly services: {
+    readonly entryTunnel: {
+      readonly name: string;
+      readonly internalListeners: {
+        readonly socks5: string;
+        readonly http: string;
+      };
+      readonly networkMode: 'host';
+      readonly mountPaths: {
+        readonly entryWireproxyConfigPath: string;
+      };
+    };
+    readonly routeProxy: {
+      readonly name: string;
+      readonly listeners: {
+        readonly socks5: string;
+        readonly http: string;
+      };
+      readonly networkMode: 'host';
+      readonly mountPaths: {
+        readonly routeProxyConfigPath: string;
+      };
+    };
     readonly routingLayer: {
       readonly name: string;
       readonly listeners: {
-        readonly socks5: string | null;
-        readonly http: string | null;
         readonly https: string | null;
       };
       readonly networkMode: 'host';
@@ -77,19 +107,24 @@ export type RuntimeBundleManifest = {
     readonly alias: string;
     readonly hostname: string;
     readonly bindIp: string;
-    readonly wireproxyConfigPath: string;
-    readonly configTestReportPath: string;
+    readonly exit: {
+      readonly relayHostname: string;
+      readonly relayFqdn: string;
+      readonly socksHostname: string;
+      readonly socksPort: number;
+      readonly countryCode: string;
+      readonly cityCode: string;
+    };
+    readonly listeners: {
+      readonly socks5: string;
+      readonly http: string;
+      readonly https: string | null;
+    };
     readonly services: {
-      readonly wireproxy: {
+      readonly routeProxy: {
         readonly name: string;
-        readonly internalListeners: {
-          readonly socks5: string;
-          readonly http: string;
-        };
       };
       readonly backends: {
-        readonly socks5: string | null;
-        readonly http: string | null;
         readonly https: string | null;
       };
     };
@@ -106,25 +141,25 @@ export type RenderedRuntimeBundleArtifacts = {
 };
 
 export type RenderRuntimeBundleSuccess = {
-  ok: true;
-  phase: 'artifact-render';
-  source: 'canonical-config';
-  checkedAt: string;
-  compose: string;
-  httpsSidecarConfig: string;
-  manifest: RuntimeBundleManifest;
-  artifactPaths: RenderedRuntimeBundleArtifacts;
+  readonly ok: true;
+  readonly phase: 'artifact-render';
+  readonly source: 'canonical-config';
+  readonly checkedAt: string;
+  readonly compose: string;
+  readonly httpsSidecarConfig: string;
+  readonly manifest: RuntimeBundleManifest;
+  readonly artifactPaths: RenderedRuntimeBundleArtifacts;
 };
 
 export type RenderRuntimeBundleFailure = {
-  ok: false;
-  phase: 'artifact-render';
-  source: 'canonical-config' | 'filesystem';
-  checkedAt: string;
-  code: 'MISSING_HTTPS_CONFIG' | 'WRITE_FAILED';
-  message: string;
-  cause?: string;
-  artifactPath?: string;
+  readonly ok: false;
+  readonly phase: 'artifact-render';
+  readonly source: 'canonical-config' | 'filesystem';
+  readonly checkedAt: string;
+  readonly code: 'MISSING_HTTPS_CONFIG' | 'WRITE_FAILED';
+  readonly message: string;
+  readonly cause?: string;
+  readonly artifactPath?: string;
 };
 
 export type RenderRuntimeBundleResult = RenderRuntimeBundleSuccess | RenderRuntimeBundleFailure;
@@ -328,7 +363,6 @@ function buildRuntimeBundleManifest(
   publishedEndpoints: readonly RuntimeEndpoint[],
 ): RuntimeBundleManifest {
   const routeManifests = config.routing.locations.map((route) => {
-    const artifactPaths = resolveRouteWireproxyPaths(paths, route.runtime);
     const routeEndpoints = publishedEndpoints.filter(
       (endpoint) => endpoint.routeId === route.runtime.routeId,
     );
@@ -338,20 +372,25 @@ function buildRuntimeBundleManifest(
       alias: route.alias,
       hostname: route.hostname,
       bindIp: route.bindIp,
-      wireproxyConfigPath: artifactPaths.wireproxyConfigPath,
-      configTestReportPath: artifactPaths.configTestReportPath,
+      exit: {
+        relayHostname: route.mullvad.exit.relayHostname,
+        relayFqdn: route.mullvad.exit.relayFqdn,
+        socksHostname: route.mullvad.exit.socksHostname,
+        socksPort: route.mullvad.exit.socksPort,
+        countryCode: route.mullvad.exit.countryCode,
+        cityCode: route.mullvad.exit.cityCode,
+      },
+      listeners: {
+        socks5: `${route.bindIp}:${config.setup.bind.socksPort}`,
+        http: `${route.bindIp}:${config.setup.bind.httpPort}`,
+        https: https.enabled ? `${route.bindIp}:${https.port}` : null,
+      },
       services: {
-        wireproxy: {
-          name: route.runtime.wireproxyServiceName,
-          internalListeners: {
-            socks5: `${route.bindIp}:${config.setup.bind.socksPort}`,
-            http: `${route.bindIp}:${config.setup.bind.httpPort}`,
-          },
+        routeProxy: {
+          name: ROUTE_PROXY_SERVICE,
         },
         backends: {
-          socks5: null,
-          http: null,
-          https: https.enabled ? `${route.runtime.haproxyBackendName}-https` : null,
+          https: https.enabled ? route.runtime.httpsBackendName : null,
         },
       },
       publishedEndpoints: routeEndpoints,
@@ -361,18 +400,39 @@ function buildRuntimeBundleManifest(
   return {
     generatedAt,
     source: 'canonical-config',
-    topology: 'multi-route-wireproxy-haproxy',
+    topology: 'shared-entry-wireguard-route-proxy-haproxy',
     relayCachePath: paths.provisioningCacheFile,
     images: {
       wireproxy: WIREPROXY_IMAGE,
+      routeProxy: ROUTE_PROXY_IMAGE,
       routingLayer: HAPROXY_IMAGE,
     },
     services: {
+      entryTunnel: {
+        name: ENTRY_TUNNEL_SERVICE,
+        internalListeners: {
+          socks5: `127.0.0.1:${ENTRY_WIREPROXY_SOCKS_PORT}`,
+          http: `127.0.0.1:${ENTRY_WIREPROXY_HTTP_PORT}`,
+        },
+        networkMode: HOST_NETWORK_MODE,
+        mountPaths: {
+          entryWireproxyConfigPath: paths.entryWireproxyConfigFile,
+        },
+      },
+      routeProxy: {
+        name: ROUTE_PROXY_SERVICE,
+        listeners: {
+          socks5: `per-route bind IPs on port ${config.setup.bind.socksPort}`,
+          http: `per-route bind IPs on port ${config.setup.bind.httpPort}`,
+        },
+        networkMode: HOST_NETWORK_MODE,
+        mountPaths: {
+          routeProxyConfigPath: paths.routeProxyConfigFile,
+        },
+      },
       routingLayer: {
         name: ROUTING_LAYER_SERVICE,
         listeners: {
-          socks5: null,
-          http: null,
           https: https.enabled ? `per-route bind IPs on port ${https.port}` : null,
         },
         networkMode: HOST_NETWORK_MODE,
@@ -393,7 +453,7 @@ function buildRuntimeBundleManifest(
 }
 
 function buildDockerCompose(
-  config: MullgateConfig,
+  _config: MullgateConfig,
   paths: MullgatePaths,
   https: Extract<ResolvedHttpsRuntime, { ok: true }>,
 ): string {
@@ -401,11 +461,33 @@ function buildDockerCompose(
     '# Generated by Mullgate. Derived artifact; edit canonical config instead.',
     'name: mullgate',
     'services:',
+    `  ${ENTRY_TUNNEL_SERVICE}:`,
+    `    image: ${WIREPROXY_IMAGE}`,
+    '    user: "0:0"',
+    '    network_mode: host',
+    '    restart: unless-stopped',
+    '    command:',
+    '      - --config',
+    `      - ${ENTRY_WIREPROXY_CONFIG_CONTAINER_PATH}`,
+    '    volumes:',
+    `      - ${paths.entryWireproxyConfigFile}:${ENTRY_WIREPROXY_CONFIG_CONTAINER_PATH}:ro`,
+    `  ${ROUTE_PROXY_SERVICE}:`,
+    `    image: ${ROUTE_PROXY_IMAGE}`,
+    '    user: "0:0"',
+    '    network_mode: host',
+    '    restart: unless-stopped',
+    '    depends_on:',
+    `      - ${ENTRY_TUNNEL_SERVICE}`,
+    '    entrypoint:',
+    '      - /bin/3proxy',
+    `      - ${ROUTE_PROXY_CONFIG_CONTAINER_PATH}`,
+    '    volumes:',
+    `      - ${paths.routeProxyConfigFile}:${ROUTE_PROXY_CONFIG_CONTAINER_PATH}:ro`,
     `  ${ROUTING_LAYER_SERVICE}:`,
     `    image: ${HAPROXY_IMAGE}`,
     '    restart: unless-stopped',
     '    depends_on:',
-    ...config.routing.locations.map((route) => `      - ${route.runtime.wireproxyServiceName}`),
+    `      - ${ROUTE_PROXY_SERVICE}`,
   ];
 
   if (https.enabled) {
@@ -441,41 +523,7 @@ function buildDockerCompose(
     );
   }
 
-  for (const route of config.routing.locations) {
-    const artifactPaths = resolveRouteWireproxyPaths(paths, route.runtime);
-    lines.push(
-      `  ${route.runtime.wireproxyServiceName}:`,
-      `    image: ${WIREPROXY_IMAGE}`,
-      '    user: "0:0"',
-      '    network_mode: host',
-      '    restart: unless-stopped',
-      '    command:',
-      '      - --config',
-      `      - ${WIREPROXY_CONFIG_CONTAINER_PATH}`,
-      '    volumes:',
-      `      - ${artifactPaths.wireproxyConfigPath}:${WIREPROXY_CONFIG_CONTAINER_PATH}:ro`,
-    );
-  }
-
   return `${lines.join('\n')}\n`;
-}
-
-function _buildPublishedPorts(
-  config: MullgateConfig,
-  https: Extract<ResolvedHttpsRuntime, { ok: true }>,
-): string[] {
-  const ports: string[] = [];
-
-  for (const route of config.routing.locations) {
-    ports.push(`${route.bindIp}:${config.setup.bind.socksPort}:${config.setup.bind.socksPort}`);
-    ports.push(`${route.bindIp}:${config.setup.bind.httpPort}:${config.setup.bind.httpPort}`);
-
-    if (https.enabled) {
-      ports.push(`${route.bindIp}:${https.port}:${https.port}`);
-    }
-  }
-
-  return ports;
 }
 
 function buildHttpsSidecarConfig(
@@ -504,8 +552,8 @@ function buildHttpsSidecarConfig(
     lines.push(
       'frontend https_proxy',
       `  bind ${CONTAINER_BIND_HOST}:${https.port} ssl crt ${HAPROXY_COMBINED_PEM_PATH}`,
-      ...buildRouteSelectionRules(config.routing.locations, 'https'),
-      `  default_backend ${primaryRoute.runtime.haproxyBackendName}-https`,
+      ...buildRouteSelectionRules(config.routing.locations),
+      `  default_backend ${primaryRoute.runtime.httpsBackendName}`,
       '',
     );
   }
@@ -513,7 +561,7 @@ function buildHttpsSidecarConfig(
   for (const route of config.routing.locations) {
     if (https.enabled) {
       lines.push(
-        `backend ${route.runtime.haproxyBackendName}-https`,
+        `backend ${route.runtime.httpsBackendName}`,
         `  server ${route.runtime.routeId} ${route.bindIp}:${config.setup.bind.httpPort} check`,
         '',
       );
@@ -523,17 +571,12 @@ function buildHttpsSidecarConfig(
   return `${lines.join('\n')}\n`;
 }
 
-function buildRouteSelectionRules(
-  routes: readonly RoutedLocation[],
-  protocol: RuntimeProtocol,
-): string[] {
-  // SOCKS5 does not preserve the requested proxy hostname end-to-end, so the front door must dispatch by the
-  // published destination bind IP that the operator mapped from hostname -> bind IP during setup/config inspection.
+function buildRouteSelectionRules(routes: readonly RoutedLocation[]): string[] {
   return routes.flatMap((route) => {
-    const aclName = `route_${route.runtime.routeId.replace(/[^a-zA-Z0-9]/g, '_')}_${protocol}`;
+    const aclName = `route_${route.runtime.routeId.replace(/[^a-zA-Z0-9]/g, '_')}_https`;
     return [
       `  acl ${aclName} dst ${route.bindIp}`,
-      `  use_backend ${route.runtime.haproxyBackendName}-${protocol} if ${aclName}`,
+      `  use_backend ${route.runtime.httpsBackendName} if ${aclName}`,
     ];
   });
 }
@@ -564,8 +607,6 @@ async function writeFileAtomic(filePath: string, content: string, mode: number):
     await rename(temporaryPath, filePath);
     await chmod(filePath, mode);
 
-    // Windows does not support syncing directory handles the same way POSIX does.
-    // The rename still gives us the atomic replacement we need for these artifacts.
     if (process.platform === 'win32') {
       return;
     }

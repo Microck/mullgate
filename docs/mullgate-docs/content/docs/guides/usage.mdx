@@ -437,6 +437,7 @@ Use the integrated Linux-first proof command when you want one end-to-end check 
 | HTTPS port (default `8443` when the verifier generates TLS assets) | `MULLGATE_HTTPS_PORT` |
 | Existing HTTPS cert/key paths | `MULLGATE_HTTPS_CERT_PATH`, `MULLGATE_HTTPS_KEY_PATH` |
 | Preserve the temp XDG home even on success | `--keep-temp-home` |
+| Reuse a preserved temp XDG home and skip provisioning a new Mullvad device | `--reuse-temp-home <path>` |
 
 ### Command
 
@@ -456,3 +457,13 @@ pnpm verify:s06
 - authenticated SOCKS5, HTTP, and HTTPS traffic through the published listeners
 - direct host-route invariance before/after `mullgate start`
 - distinct exits for the first two routed hostnames when they resolve locally to distinct bind IPs
+
+### Shared-device prerequisite
+
+A fresh verifier run needs one free Mullvad WireGuard device slot total because setup provisions one shared Mullvad entry device for the whole proof, not one device per route. If you rerun against a preserved home with `--reuse-temp-home <path>`, the verifier reuses that saved shared device and does not consume another slot.
+
+### Scaling note
+
+The built-in `pnpm verify:s06` path still keeps its end-to-end probe contract to the first two saved routes so the default proof stays fast and inspectable.
+
+That does not mean Mullgate consumes one Mullvad slot per route. The current shared-entry runtime has also been live-validated with a 50-route sweep on one shared Mullvad device.

@@ -104,7 +104,7 @@ export function buildPlatformSupportContract(input: {
         support: 'native',
         modeLabel: 'Native host networking available',
         summary:
-          'Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.',
+          'Docker host networking behaves as expected on Linux, so the routing layer and shared route-proxy listeners can bind directly to the saved route IPs.',
         remediation:
           'If runtime checks fail on Linux, inspect Docker Compose health, route bind IP ownership, and hostname-resolution drift before assuming the platform contract is wrong.',
       },

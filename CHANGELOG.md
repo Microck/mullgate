@@ -13,6 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [1.0.0] - 2026-03-25
+
+### Changed
+
+- Mullgate now renders one shared entry WireGuard tunnel and one shared route-proxy service for all configured routes, so multi-route runtimes scale without provisioning a Mullvad device per route
+- README, operator docs, skills, and recorded demos now describe and show the shared-entry multi-exit runtime that was live-verified with a 50-route sweep on one Mullvad account/device
+
+### Fixed
+
+- routed provisioning and export flows no longer hit Mullvad WireGuard key-slot exhaustion just because many routes are configured under the same account
+- demo recording now fails fast when a runner crashes instead of silently keeping stale GIF assets
+
 ## [0.5.0] - 2026-03-25
 
 ### Added

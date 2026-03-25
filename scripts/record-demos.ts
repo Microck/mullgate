@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import { getRepoRoot, syncDemoAsset } from './demo-helpers.js';
@@ -56,6 +56,17 @@ async function main(): Promise<void> {
 
   for (const demo of demos) {
     const castPath = path.join(castDir, `${demo.name}.cast`);
+    const docsAssetPath = path.join(docsImageDir, path.basename(demo.assetPath));
+    await rm(castPath, { force: true });
+    await rm(demo.assetPath, { force: true });
+    await rm(docsAssetPath, { force: true });
+
+    await runCommand({
+      command: process.execPath,
+      args: [tsxCliPath, demo.runnerPath],
+      allowStdout: true,
+    });
+
     await runCommand({
       command: 'asciinema',
       args: [
@@ -92,7 +103,7 @@ async function main(): Promise<void> {
 
     await syncDemoAsset({
       sourcePath: demo.assetPath,
-      destinationPath: path.join(docsImageDir, path.basename(demo.assetPath)),
+      destinationPath: docsAssetPath,
     });
   }
 }
@@ -100,15 +111,31 @@ async function main(): Promise<void> {
 async function runCommand(options: {
   readonly command: string;
   readonly args: readonly string[];
+  readonly allowStdout?: boolean;
 }): Promise<void> {
   const { spawn } = await import('node:child_process');
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(options.command, [...options.args], {
       cwd: repoRoot,
-      stdio: 'inherit',
+      stdio: options.allowStdout ? ['ignore', 'pipe', 'pipe'] : 'inherit',
       env: process.env,
     });
+
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+
+    if (child.stdout) {
+      child.stdout.on('data', (chunk) => {
+        stdoutChunks.push(Buffer.from(chunk));
+      });
+    }
+
+    if (child.stderr) {
+      child.stderr.on('data', (chunk) => {
+        stderrChunks.push(Buffer.from(chunk));
+      });
+    }
 
     child.on('error', reject);
     child.on('close', (code) => {
@@ -117,7 +144,20 @@ async function runCommand(options: {
         return;
       }
 
-      reject(new Error(`${options.command} exited with code ${code ?? 1}.`));
+      const details = [
+        Buffer.concat(stdoutChunks).toString('utf8'),
+        Buffer.concat(stderrChunks).toString('utf8'),
+      ]
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+        .join('\n');
+      reject(
+        new Error(
+          [`${options.command} exited with code ${code ?? 1}.`, details]
+            .filter((value) => value.length > 0)
+            .join('\n'),
+        ),
+      );
     });
   });
 }

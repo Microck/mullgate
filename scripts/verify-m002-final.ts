@@ -9,6 +9,10 @@ import { resolveMullgatePaths } from '../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../src/config/schema.js';
 import { buildPlatformSupportContract } from '../src/platform/support-contract.js';
 import { requireArrayValue } from '../src/required.js';
+import {
+  createFixtureRuntime,
+  createFixtureRoute as createRoutedLocationFixture,
+} from '../test/helpers/mullgate-fixtures.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
@@ -440,101 +444,56 @@ function createExposureFixtureConfig(): MullgateConfig {
     },
     routing: {
       locations: [
-        {
+        createRoutedLocationFixture({
           alias: 'sweden-gothenburg',
           hostname: '10.0.0.10',
           bindIp: '10.0.0.10',
-          relayPreference: {
-            requested: 'sweden-gothenburg',
-            country: 'se',
-            city: 'got',
-            hostnameLabel: 'se-got-wg-101',
-            resolvedAlias: 'sweden-gothenburg',
+          requested: 'sweden-gothenburg',
+          country: 'se',
+          city: 'got',
+          hostnameLabel: 'se-got-wg-101',
+          resolvedAlias: 'sweden-gothenburg',
+          routeId: 'se-got-wg-101',
+          httpsBackendName: 'route-se-got-wg-101',
+          exit: {
+            relayHostname: 'se-got-wg-101',
+            relayFqdn: 'se-got-wg-101.relays.mullvad.net',
+            socksHostname: 'se-got-wg-101.mullvad.net',
+            socksPort: 1080,
+            countryCode: 'se',
+            cityCode: 'got',
           },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-m002-final-fixture-1',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard: {
-              publicKey: 'public-key-value-1',
-              privateKey: 'private-key-value-1',
-              ipv4Address: '10.64.12.34/32',
-              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
-              gatewayIpv4: '10.64.0.1',
-              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-              dnsServers: ['10.64.0.1'],
-              peerPublicKey: 'peer-public-key-value-1',
-              peerEndpoint: 'se-got-wg-101.relays.mullvad.net:3401',
-            },
-          },
-          runtime: {
-            routeId: 'se-got-wg-101',
-            wireproxyServiceName: 'wireproxy-se-got-wg-101',
-            haproxyBackendName: 'route-se-got-wg-101',
-            wireproxyConfigFile: 'wireproxy-se-got-wg-101.conf',
-          },
-        },
-        {
+        }),
+        createRoutedLocationFixture({
           alias: 'austria-vienna',
           hostname: '10.0.0.11',
           bindIp: '10.0.0.11',
-          relayPreference: {
-            requested: 'austria-vienna',
-            country: 'at',
-            city: 'vie',
-            hostnameLabel: 'at-vie-wg-001',
-            resolvedAlias: 'austria-vienna',
+          requested: 'austria-vienna',
+          country: 'at',
+          city: 'vie',
+          hostnameLabel: 'at-vie-wg-001',
+          resolvedAlias: 'austria-vienna',
+          routeId: 'at-vie-wg-001',
+          httpsBackendName: 'route-at-vie-wg-001',
+          exit: {
+            relayHostname: 'at-vie-wg-001',
+            relayFqdn: 'at-vie-wg-001.relays.mullvad.net',
+            socksHostname: 'at-vie-wg-001.mullvad.net',
+            socksPort: 1080,
+            countryCode: 'at',
+            cityCode: 'vie',
           },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-m002-final-fixture-2',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard: {
-              publicKey: 'public-key-value-2',
-              privateKey: 'private-key-value-2',
-              ipv4Address: '10.64.12.35/32',
-              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1235/128',
-              gatewayIpv4: '10.64.0.1',
-              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-              dnsServers: ['10.64.0.1'],
-              peerPublicKey: 'peer-public-key-value-2',
-              peerEndpoint: 'at-vie-wg-001.relays.mullvad.net:51820',
-            },
-          },
-          runtime: {
-            routeId: 'at-vie-wg-001',
-            wireproxyServiceName: 'wireproxy-at-vie-wg-001',
-            haproxyBackendName: 'route-at-vie-wg-001',
-            wireproxyConfigFile: 'wireproxy-at-vie-wg-001.conf',
-          },
-        },
+        }),
       ],
     },
-    runtime: {
-      backend: 'wireproxy',
-      sourceConfigPath: linuxPaths.configFile,
-      wireproxyConfigPath: linuxPaths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: linuxPaths.wireproxyConfigTestReportFile,
-      relayCachePath: linuxPaths.provisioningCacheFile,
-      dockerComposePath: linuxPaths.dockerComposePath,
-      runtimeBundle: {
-        bundleDir: linuxPaths.runtimeBundleDir,
-        dockerComposePath: linuxPaths.runtimeComposeFile,
-        httpsSidecarConfigPath: linuxPaths.runtimeHttpsSidecarConfigFile,
-        manifestPath: linuxPaths.runtimeBundleManifestFile,
-      },
+    runtime: createFixtureRuntime({
+      paths: linuxPaths,
       status: {
         phase: 'validated',
         lastCheckedAt: timestamp,
         message: 'Fixture config already validated.',
       },
-    },
+    }),
     diagnostics: {
       lastRuntimeStartReportPath: linuxPaths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,

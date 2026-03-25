@@ -26,17 +26,21 @@ import {
   normalizeLocationToken,
   resolveLocationAlias,
 } from '../domain/location-aliases.js';
-import { fetchRelays, type MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
+import {
+  fetchRelays,
+  type MullvadRelay,
+  type MullvadRelayCatalog,
+} from '../mullvad/fetch-relays.js';
 import {
   type ProvisionWireguardResult,
   provisionWireguard,
 } from '../mullvad/provision-wireguard.js';
 import { requireArrayValue, requireDefined } from '../required.js';
-import { renderWireproxyArtifacts } from '../runtime/render-wireproxy.js';
+import { renderRuntimeProxyArtifacts } from '../runtime/render-runtime-proxies.js';
 import {
-  type ValidateWireproxyOptions,
-  validateWireproxyConfig,
-} from '../runtime/validate-wireproxy.js';
+  type ValidateRuntimeOptions,
+  validateRuntimeArtifacts,
+} from '../runtime/validate-runtime.js';
 
 const DEFAULT_BIND_HOST = '127.0.0.1';
 const DEFAULT_SOCKS_PORT = 1080;
@@ -85,9 +89,9 @@ export type SetupRouteMetadata = {
 };
 
 export type SetupSuccessRoute = SetupRouteMetadata & {
-  readonly publicKey: string;
-  readonly ipv4Address: string;
-  readonly ipv6Address?: string;
+  readonly exitRelayHostname: string;
+  readonly exitSocksHostname: string;
+  readonly exitSocksPort: number;
 };
 
 export type SetupSuccess = {
@@ -103,10 +107,11 @@ export type SetupSuccess = {
   readonly relayCatalog: MullvadRelayCatalog;
   readonly configPath: string;
   readonly relayCachePath: string;
-  readonly wireproxyConfigPath: string;
+  readonly entryWireproxyConfigPath: string;
+  readonly routeProxyConfigPath: string;
   readonly dockerComposePath: string;
   readonly validationReportPath: string;
-  readonly validationSource: ReturnType<typeof summarizeValidationSource>;
+  readonly validationSource: string;
   readonly summary: string;
 };
 
@@ -172,8 +177,8 @@ export type RunSetupFlowOptions = {
   readonly relayCatalogUrl?: string | URL;
   readonly fetch?: typeof globalThis.fetch;
   readonly validateOptions?: Pick<
-    ValidateWireproxyOptions,
-    'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'spawn'
+    ValidateRuntimeOptions,
+    'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'routeProxyDockerImage' | 'spawn'
   >;
   readonly checkedAt?: string;
 };
@@ -184,8 +189,8 @@ export type PlannedSetupRoute = SetupRouteMetadata & {
   readonly routeId: string;
 };
 
-export type ProvisionedSetupRoute = PlannedSetupRoute & {
-  readonly provisioning: Extract<ProvisionWireguardResult, { ok: true }>;
+export type ResolvedSetupRoute = PlannedSetupRoute & {
+  readonly exitRelay: MullvadRelay;
 };
 
 export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<SetupFlowResult> {
@@ -318,41 +323,57 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     };
   }
 
-  const provisionedRoutes: ProvisionedSetupRoute[] = [];
+  const provisionResult = await provisionRouteWithRetries({
+    accountNumber: setupInputs.accountNumber,
+    route: plannedRoutesResult.value[0],
+    provisioningBaseUrl: options.provisioningBaseUrl,
+    fetch: options.fetch,
+    checkedAt: options.checkedAt,
+  });
 
-  for (const route of plannedRoutesResult.value) {
-    const provisionResult = await provisionRouteWithRetries({
-      accountNumber: setupInputs.accountNumber,
-      route,
-      provisioningBaseUrl: options.provisioningBaseUrl,
-      fetch: options.fetch,
-      checkedAt: options.checkedAt,
-    });
+  if (!provisionResult.ok) {
+    return {
+      ok: false,
+      phase: provisionResult.phase,
+      source: provisionResult.source,
+      exitCode: 1,
+      paths: store.paths,
+      code: provisionResult.code,
+      endpoint: provisionResult.endpoint,
+      route: summarizeSetupRoute(
+        requireDefined(plannedRoutesResult.value[0], 'Expected one planned route.'),
+      ),
+      message: 'Provisioning failed for the shared Mullvad WireGuard device.',
+      cause: formatProvisioningCause(provisionResult),
+    };
+  }
 
-    if (!provisionResult.ok) {
-      return {
-        ok: false,
-        phase: provisionResult.phase,
-        source: provisionResult.source,
-        exitCode: 1,
-        paths: store.paths,
-        code: provisionResult.code,
-        endpoint: provisionResult.endpoint,
-        route: summarizeSetupRoute(route),
-        message: `Provisioning failed for routed location ${route.alias} (${route.hostname} -> ${route.bindIp}).`,
-        cause: formatProvisioningCause(provisionResult),
-      };
-    }
+  const resolvedRoutesResult = resolveSetupRouteExits({
+    routes: plannedRoutesResult.value,
+    relayCatalog: relayResult.value,
+  });
 
-    provisionedRoutes.push({
-      ...route,
-      provisioning: provisionResult,
-    });
+  if (!resolvedRoutesResult.ok) {
+    return {
+      ok: false,
+      phase: resolvedRoutesResult.phase,
+      source: resolvedRoutesResult.source,
+      exitCode: 1,
+      paths: store.paths,
+      code: resolvedRoutesResult.code,
+      message: resolvedRoutesResult.message,
+      ...(resolvedRoutesResult.artifactPath
+        ? { artifactPath: resolvedRoutesResult.artifactPath }
+        : {}),
+      ...(resolvedRoutesResult.route ? { route: resolvedRoutesResult.route } : {}),
+      ...(resolvedRoutesResult.cause ? { cause: resolvedRoutesResult.cause } : {}),
+    };
   }
 
   const initialConfig = createCanonicalConfig({
     inputs: setupInputs,
-    routes: provisionedRoutes,
+    provisioning: provisionResult,
+    routes: resolvedRoutesResult.value,
     relayCatalog: relayResult.value,
     paths: store.paths,
     checkedAt: options.checkedAt,
@@ -364,7 +385,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     return initialSave;
   }
 
-  const renderResult = await renderWireproxyArtifacts({
+  const renderResult = await renderRuntimeProxyArtifacts({
     config: initialConfig,
     relayCatalog: relayResult.value,
     paths: store.paths,
@@ -393,10 +414,17 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     };
   }
 
-  const validationResult = await validateWireproxyConfig({
-    configPath: renderResult.artifactPaths.wireproxyConfigPath,
-    configText: renderResult.wireproxyConfig,
-    reportPath: renderResult.artifactPaths.configTestReportPath,
+  const validationResult = await validateRuntimeArtifacts({
+    entryWireproxyConfigPath: renderResult.artifactPaths.entryWireproxyConfigPath,
+    entryWireproxyConfigText: renderResult.entryWireproxyConfig,
+    routeProxyConfigPath: renderResult.artifactPaths.routeProxyConfigPath,
+    routeProxyConfigText: renderResult.routeProxyConfig,
+    routes: renderResult.routes,
+    bind: {
+      socksPort: setupInputs.socksPort,
+      httpPort: setupInputs.httpPort,
+    },
+    reportPath: store.paths.runtimeValidationReportFile,
     checkedAt: options.checkedAt,
     ...options.validateOptions,
   });
@@ -437,37 +465,44 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     exitCode: 0,
     paths: store.paths,
     config: finalConfig,
-    routes: provisionedRoutes.map(toSetupSuccessRoute),
-    selectedLocation: renderResult.selectedTarget ?? provisionedRoutes[0]?.resolvedLocation,
-    selectedRelayHostname: renderResult.selectedRelay.hostname,
+    routes: resolvedRoutesResult.value.map(toSetupSuccessRoute),
+    selectedLocation:
+      renderResult.entryTarget ??
+      requireDefined(resolvedRoutesResult.value[0], 'Expected one resolved setup route.')
+        .resolvedLocation,
+    selectedRelayHostname: renderResult.entryRelay.hostname,
     relayCatalog: relayResult.value,
     configPath: store.paths.configFile,
     relayCachePath: renderResult.artifactPaths.relayCachePath,
-    wireproxyConfigPath: renderResult.artifactPaths.wireproxyConfigPath,
+    entryWireproxyConfigPath: renderResult.artifactPaths.entryWireproxyConfigPath,
+    routeProxyConfigPath: renderResult.artifactPaths.routeProxyConfigPath,
     dockerComposePath: store.paths.runtimeComposeFile,
-    validationReportPath: renderResult.artifactPaths.configTestReportPath,
+    validationReportPath: store.paths.runtimeValidationReportFile,
     validationSource: summarizeValidationSource(validationResult),
     summary: [
       'Mullgate setup completed.',
       'phase: setup-complete',
       'source: guided-setup',
       `config: ${store.paths.configFile}`,
-      `wireproxy config: ${renderResult.artifactPaths.wireproxyConfigPath}`,
+      `entry wireproxy config: ${renderResult.artifactPaths.entryWireproxyConfigPath}`,
+      `route proxy config: ${renderResult.artifactPaths.routeProxyConfigPath}`,
       `relay cache: ${renderResult.artifactPaths.relayCachePath}`,
       `docker compose: ${store.paths.runtimeComposeFile}`,
-      `validation report: ${renderResult.artifactPaths.configTestReportPath}`,
-      `location: ${provisionedRoutes[0]?.alias}`,
+      `validation report: ${store.paths.runtimeValidationReportFile}`,
+      `entry relay: ${renderResult.entryRelay.hostname}`,
+      `shared device: ${setupInputs.deviceName ?? defaultDeviceName()}`,
+      `location: ${resolvedRoutesResult.value[0]?.alias}`,
       `exposure: ${setupInputs.exposureMode}`,
       `base domain: ${setupInputs.exposureBaseDomain ?? 'n/a'}`,
-      `routes: ${provisionedRoutes.length}`,
-      ...provisionedRoutes.flatMap((route) => [
+      `routes: ${resolvedRoutesResult.value.length}`,
+      ...resolvedRoutesResult.value.flatMap((route) => [
         `${route.index + 1}. ${route.alias}`,
         `   hostname: ${route.hostname}`,
         `   bind ip: ${route.bindIp}`,
-        `   device: ${route.deviceName}`,
-        `   tunnel ipv4: ${route.provisioning.value.ipv4Address}`,
+        `   exit relay: ${route.exitRelay.hostname}`,
+        `   exit socks: ${route.exitRelay.socksName ?? 'n/a'}:${route.exitRelay.socksPort ?? 'n/a'}`,
       ]),
-      `relay: ${renderResult.selectedRelay.hostname}`,
+      `tunnel ipv4: ${provisionResult.value.ipv4Address}`,
       `validation: ${summarizeValidationSource(validationResult)}`,
     ].join('\n'),
   };
@@ -563,6 +598,118 @@ export function planSetupRoutes(input: {
   };
 }
 
+function resolveSetupRouteExits(input: {
+  readonly routes: readonly PlannedSetupRoute[];
+  readonly relayCatalog: MullvadRelayCatalog;
+}):
+  | {
+      readonly ok: true;
+      readonly value: readonly ResolvedSetupRoute[];
+    }
+  | {
+      readonly ok: false;
+      readonly phase: SetupFailure['phase'];
+      readonly source: string;
+      readonly code: string;
+      readonly message: string;
+      readonly artifactPath?: string;
+      readonly route?: SetupRouteMetadata;
+      readonly cause?: string;
+    } {
+  const resolvedRoutes: ResolvedSetupRoute[] = [];
+
+  for (const route of input.routes) {
+    const exitRelay = selectSetupRouteExit({
+      route,
+      relayCatalog: input.relayCatalog,
+    });
+
+    if (!exitRelay.ok) {
+      return {
+        ok: false,
+        phase: 'relay-normalize',
+        source: exitRelay.source,
+        code: exitRelay.code,
+        message: exitRelay.message,
+        ...(exitRelay.artifactPath ? { artifactPath: exitRelay.artifactPath } : {}),
+        route: summarizeSetupRoute(route),
+        ...(exitRelay.cause ? { cause: exitRelay.cause } : {}),
+      };
+    }
+
+    resolvedRoutes.push({
+      ...route,
+      exitRelay: exitRelay.relay,
+    });
+  }
+
+  return {
+    ok: true,
+    value: resolvedRoutes,
+  };
+}
+
+function selectSetupRouteExit(input: {
+  readonly route: PlannedSetupRoute;
+  readonly relayCatalog: MullvadRelayCatalog;
+}):
+  | {
+      readonly ok: true;
+      readonly relay: MullvadRelay;
+    }
+  | {
+      readonly ok: false;
+      readonly source: 'canonical-config' | 'relay-catalog' | 'user-input';
+      readonly code: 'NO_MATCHING_RELAY' | 'MISSING_SOCKS_METADATA';
+      readonly message: string;
+      readonly artifactPath?: string;
+      readonly cause?: string;
+    } {
+  const candidates = input.relayCatalog.relays.filter((relay) => {
+    if (input.route.resolvedLocation.kind === 'country') {
+      return relay.location.countryCode === input.route.resolvedLocation.countryCode;
+    }
+
+    if (input.route.resolvedLocation.kind === 'city') {
+      return (
+        relay.location.countryCode === input.route.resolvedLocation.countryCode &&
+        relay.location.cityCode === input.route.resolvedLocation.cityCode
+      );
+    }
+
+    return relay.hostname === input.route.resolvedLocation.hostname;
+  });
+  const selectedRelay = choosePreferredSetupRelay(candidates);
+
+  if (!selectedRelay) {
+    return {
+      ok: false,
+      source: 'canonical-config',
+      code: 'NO_MATCHING_RELAY',
+      message: `No active Mullvad relay matched the requested route ${input.route.alias}.`,
+      artifactPath: input.route.relayPreference.requested,
+      cause: `Resolved ${input.route.requested} but no active relay survived exact exit selection.`,
+    };
+  }
+
+  if (!selectedRelay.socksName || !selectedRelay.socksPort) {
+    return {
+      ok: false,
+      source: 'relay-catalog',
+      code: 'MISSING_SOCKS_METADATA',
+      message: `Relay ${selectedRelay.hostname} did not include SOCKS metadata required for route pinning.`,
+      artifactPath: input.route.relayPreference.requested,
+      cause:
+        'Fetch the Mullvad legacy relay catalog with SOCKS metadata before creating routed exits.',
+    };
+  }
+
+  return {
+    ok: true,
+    relay: selectedRelay,
+  };
+}
+
 function summarizeSetupRoute(route: SetupRouteMetadata): SetupRouteMetadata {
   return {
     index: route.index,
@@ -571,6 +718,25 @@ function summarizeSetupRoute(route: SetupRouteMetadata): SetupRouteMetadata {
     hostname: route.hostname,
     bindIp: route.bindIp,
     deviceName: route.deviceName,
+  };
+}
+
+function createRouteExitMetadata(
+  relay: MullvadRelay,
+): MullgateConfig['routing']['locations'][number]['mullvad']['exit'] {
+  return {
+    relayHostname: relay.hostname,
+    relayFqdn: relay.fqdn,
+    socksHostname: requireDefined(
+      relay.socksName,
+      `Expected relay ${relay.hostname} to include a SOCKS hostname.`,
+    ),
+    socksPort: requireDefined(
+      relay.socksPort,
+      `Expected relay ${relay.hostname} to include a SOCKS port.`,
+    ),
+    countryCode: relay.location.countryCode,
+    cityCode: relay.location.cityCode,
   };
 }
 
@@ -652,14 +818,18 @@ function shouldRetryProvisioningFailure(
   return /\bthrottled\b|\bretry\b|\btry again\b/i.test(cause);
 }
 
-function toSetupSuccessRoute(route: ProvisionedSetupRoute): SetupSuccessRoute {
+function toSetupSuccessRoute(route: ResolvedSetupRoute): SetupSuccessRoute {
   return {
     ...summarizeSetupRoute(route),
-    publicKey: route.provisioning.value.publicKey,
-    ipv4Address: route.provisioning.value.ipv4Address,
-    ...(route.provisioning.value.ipv6Address
-      ? { ipv6Address: route.provisioning.value.ipv6Address }
-      : {}),
+    exitRelayHostname: route.exitRelay.hostname,
+    exitSocksHostname: requireDefined(
+      route.exitRelay.socksName,
+      `Expected relay ${route.exitRelay.hostname} to include a SOCKS hostname.`,
+    ),
+    exitSocksPort: requireDefined(
+      route.exitRelay.socksPort,
+      `Expected relay ${route.exitRelay.hostname} to include a SOCKS port.`,
+    ),
   };
 }
 
@@ -768,7 +938,8 @@ export async function loadStoredRelayCatalog(relayCachePath: string): Promise<
 
 function createCanonicalConfig(input: {
   inputs: SetupInputValues;
-  routes: readonly ProvisionedSetupRoute[];
+  provisioning: Extract<ProvisionWireguardResult, { ok: true }>;
+  routes: readonly ResolvedSetupRoute[];
   relayCatalog: MullvadRelayCatalog;
   paths: MullgatePaths;
   checkedAt?: string;
@@ -787,19 +958,14 @@ function createCanonicalConfig(input: {
     bindIp: route.bindIp,
     relayPreference: structuredClone(route.relayPreference),
     mullvad: {
-      accountNumber: input.inputs.accountNumber,
-      deviceName: route.deviceName,
-      lastProvisionedAt: route.provisioning.checkedAt,
       relayConstraints: {
         providers: [],
       },
-      wireguard: route.provisioning.value.toConfigValue(),
+      exit: createRouteExitMetadata(route.exitRelay),
     },
     runtime: {
       routeId: route.routeId,
-      wireproxyServiceName: `wireproxy-${route.routeId}`,
-      haproxyBackendName: `route-${route.routeId}`,
-      wireproxyConfigFile: `wireproxy-${route.routeId}.conf`,
+      httpsBackendName: `route-${route.routeId}`,
     },
   }));
 
@@ -831,15 +997,24 @@ function createCanonicalConfig(input: {
         ...(input.inputs.httpsKeyPath ? { keyPath: input.inputs.httpsKeyPath } : {}),
       },
     },
-    mullvad: structuredClone(routingLocations[0]?.mullvad),
+    mullvad: {
+      accountNumber: input.inputs.accountNumber,
+      ...(input.inputs.deviceName ? { deviceName: input.inputs.deviceName } : {}),
+      lastProvisionedAt: input.provisioning.checkedAt,
+      relayConstraints: {
+        providers: [],
+      },
+      wireguard: input.provisioning.value.toConfigValue(),
+    },
     routing: {
       locations: routingLocations,
     },
     runtime: {
-      backend: 'wireproxy',
+      backend: 'shared-entry-wireguard-route-proxy',
       sourceConfigPath: input.paths.configFile,
-      wireproxyConfigPath: input.paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: input.paths.wireproxyConfigTestReportFile,
+      entryWireproxyConfigPath: input.paths.entryWireproxyConfigFile,
+      routeProxyConfigPath: input.paths.routeProxyConfigFile,
+      validationReportPath: input.paths.runtimeValidationReportFile,
       relayCachePath: input.paths.provisioningCacheFile,
       dockerComposePath: input.paths.dockerComposePath,
       runtimeBundle: {
@@ -851,7 +1026,7 @@ function createCanonicalConfig(input: {
       status: {
         phase: 'unvalidated',
         lastCheckedAt: null,
-        message: `Saved relay catalog from ${input.relayCatalog.source}; waiting for validation.`,
+        message: `Saved relay catalog from ${input.relayCatalog.source}; waiting for shared-runtime validation.`,
       },
     },
     diagnostics: {
@@ -1354,10 +1529,22 @@ export function deriveCanonicalRouteLabel(target: LocationAliasTarget): string {
 
 export function deriveRouteDeviceName(
   baseDeviceName: string,
-  routeLabel: string,
-  routeCount: number,
+  _routeLabel: string,
+  _routeCount: number,
 ): string {
-  return routeCount > 1 ? `${baseDeviceName}-${routeLabel}` : baseDeviceName;
+  return baseDeviceName;
+}
+
+function choosePreferredSetupRelay(relays: readonly MullvadRelay[]): MullvadRelay | null {
+  const sorted = [...relays].sort(
+    (left, right) =>
+      Number(right.active) - Number(left.active) ||
+      left.location.countryCode.localeCompare(right.location.countryCode) ||
+      left.location.cityCode.localeCompare(right.location.cityCode) ||
+      left.hostname.localeCompare(right.hostname),
+  );
+
+  return sorted[0] ?? null;
 }
 
 export function createRouteRelayPreference(
@@ -1434,17 +1621,29 @@ function readArrayProperty(value: unknown, key: string): unknown[] | null {
 }
 
 export function summarizeValidationSource(
-  result: Awaited<ReturnType<typeof validateWireproxyConfig>>,
-): 'wireproxy-binary/configtest' | 'docker/configtest' | 'internal-syntax' {
-  if (result.source === 'wireproxy-binary') {
-    return 'wireproxy-binary/configtest';
-  }
+  result: Awaited<ReturnType<typeof validateRuntimeArtifacts>>,
+): string {
+  const labels = result.checks.map((check) => {
+    if (check.artifact === 'entry-wireproxy') {
+      if (check.source === 'wireproxy-binary') {
+        return 'wireproxy-binary/configtest';
+      }
 
-  if (result.source === 'docker') {
-    return 'docker/configtest';
-  }
+      if (check.source === 'docker') {
+        return 'docker/configtest';
+      }
 
-  return 'internal-syntax';
+      return 'internal-wireproxy-syntax';
+    }
+
+    if (check.source === 'docker') {
+      return 'docker/3proxy-startup';
+    }
+
+    return 'internal-3proxy-syntax';
+  });
+
+  return [...new Set(labels)].join(' + ');
 }
 
 function validatePortInput(value: string | undefined): string | undefined {

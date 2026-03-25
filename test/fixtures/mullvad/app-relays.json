@@ -15,14 +15,18 @@
               "ipv4_addr_in": "146.70.116.98",
               "ipv6_addr_in": "2001:ac8:29:84::a01f",
               "public_key": "TNrdH73p6h2EfeXxUiLOCOWHcjmjoslLxZptZpIPQXU=",
-              "multihop_port": 3543
+              "multihop_port": 3543,
+              "socks_name": "at-vie-wg-001.mullvad.net",
+              "socks_port": 1080
             },
             {
               "hostname": "at-vie-wg-101",
               "ipv4_addr_in": "185.24.11.130",
               "ipv6_addr_in": "2a02:6ea0:cb1b:1::f001",
               "public_key": "dj3qNfJfA4dWXsWokPcDh4oo6xaPtOTPfbr5UzHKZ0M=",
-              "multihop_port": 3327
+              "multihop_port": 3327,
+              "socks_name": "at-vie-wg-101.mullvad.net",
+              "socks_port": 1080
             }
           ]
         }
@@ -43,14 +47,18 @@
               "ipv4_addr_in": "146.70.40.2",
               "ipv6_addr_in": "2a03:1b20:5:f011::a01f",
               "public_key": "Wg5yKrVIO52wBIMNz+lQbZ3ZIDvJpQ6AqmrKa1iWLEg=",
-              "multihop_port": 3401
+              "multihop_port": 3401,
+              "socks_name": "se-got-wg-101.mullvad.net",
+              "socks_port": 1080
             },
             {
               "hostname": "se-got-wg-102",
               "ipv4_addr_in": "146.70.40.66",
               "ipv6_addr_in": "2a03:1b20:5:f012::a02f",
               "public_key": "t0Tp8+Q3cllDSp2pgwFMMu2Cml3Z1tKj5yO6jwxKF1Q=",
-              "multihop_port": 3402
+              "multihop_port": 3402,
+              "socks_name": "se-got-wg-102.mullvad.net",
+              "socks_port": 1080
             }
           ]
         },
@@ -65,7 +73,9 @@
               "ipv4_addr_in": "193.138.218.10",
               "ipv6_addr_in": "2a03:1b20:5:f101::f001",
               "public_key": "7uGgXuYiDmzOVSIpB3Ppfv+tGT5jrQTsHo8u6O9gNHA=",
-              "multihop_port": 3460
+              "multihop_port": 3460,
+              "socks_name": "se-sto-wg-001.mullvad.net",
+              "socks_port": 1080
             }
           ]
         }

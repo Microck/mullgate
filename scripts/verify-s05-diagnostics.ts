@@ -6,7 +6,7 @@ import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { resolveMullgatePaths, resolveRouteWireproxyPaths } from '../src/config/paths.js';
+import { resolveMullgatePaths } from '../src/config/paths.js';
 import {
   CONFIG_VERSION,
   type MullgateConfig,
@@ -16,7 +16,11 @@ import {
 import { ConfigStore } from '../src/config/store.js';
 import type { MullvadRelayCatalog } from '../src/mullvad/fetch-relays.js';
 import { renderRuntimeBundle } from '../src/runtime/render-runtime-bundle.js';
-import type { ValidateWireproxyResult } from '../src/runtime/validate-wireproxy.js';
+import type { ValidateRuntimeResult } from '../src/runtime/validate-runtime.js';
+import {
+  createFixtureRuntime,
+  createFixtureRoute as createRoutedLocationFixture,
+} from '../test/helpers/mullgate-fixtures.js';
 
 type CommandResult = {
   readonly exitCode: number;
@@ -48,6 +52,9 @@ const repoRoot = path.resolve(import.meta.dirname, '..');
 const tsxCliPath = path.join(repoRoot, 'node_modules/tsx/dist/cli.mjs');
 const _REDACTED = '[redacted]';
 const TLS_PRIVATE_KEY_FIXTURE = '-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----';
+const ENTRY_TUNNEL_SERVICE = 'entry-tunnel';
+const ROUTE_PROXY_SERVICE = 'route-proxy';
+const ROUTING_LAYER_SERVICE = 'routing-layer';
 const PRIMARY_ROUTE = {
   alias: 'sweden-gothenburg',
   routeId: 'se-got-wg-101',
@@ -220,12 +227,12 @@ async function verifyHealthyScenario(options: VerificationOptions): Promise<stri
     assertContains(doctor.stdout, 'overall: pass', 'healthy: doctor did not stay green.');
     assertContains(
       doctor.stdout,
-      '7. runtime: pass',
+      '8. runtime: pass',
       'healthy: doctor runtime check drifted away from pass.',
     );
     assertContains(
       doctor.stdout,
-      '8. last-start: pass',
+      '9. last-start: pass',
       'healthy: doctor last-start success check drifted.',
     );
     assertSharedFact(
@@ -248,23 +255,48 @@ async function verifyHealthyScenario(options: VerificationOptions): Promise<stri
     );
     assertContains(
       status.stdout,
-      `service: ${PRIMARY_ROUTE.wireproxyServiceName}`,
-      'healthy: status did not expose the primary route service.',
+      `${ENTRY_TUNNEL_SERVICE}: running`,
+      'healthy: status did not expose the shared entry-tunnel service.',
     );
     assertContains(
       doctor.stdout,
-      `route ${PRIMARY_ROUTE.routeId} (${PRIMARY_ROUTE.wireproxyServiceName})=running`,
-      'healthy: doctor did not expose the primary route service.',
+      `${ENTRY_TUNNEL_SERVICE}=running`,
+      'healthy: doctor did not expose the shared entry-tunnel service.',
     );
     assertContains(
       status.stdout,
-      `service: ${SECONDARY_ROUTE.wireproxyServiceName}`,
-      'healthy: status did not expose the secondary route service.',
+      `${ROUTE_PROXY_SERVICE}: running`,
+      'healthy: status did not expose the shared route-proxy service.',
     );
     assertContains(
       doctor.stdout,
-      `route ${SECONDARY_ROUTE.routeId} (${SECONDARY_ROUTE.wireproxyServiceName})=running`,
-      'healthy: doctor did not expose the secondary route service.',
+      `${ROUTE_PROXY_SERVICE}=running`,
+      'healthy: doctor did not expose the shared route-proxy service.',
+    );
+    assertContains(
+      status.stdout,
+      `${ROUTING_LAYER_SERVICE}: running`,
+      'healthy: status did not expose the shared routing-layer service.',
+    );
+    assertContains(
+      doctor.stdout,
+      `${ROUTING_LAYER_SERVICE}=running`,
+      'healthy: doctor did not expose the shared routing-layer service.',
+    );
+    assertContains(
+      status.stdout,
+      `shared service: ${ROUTE_PROXY_SERVICE}`,
+      'healthy: status did not expose the shared per-route service mapping.',
+    );
+    assertContains(
+      doctor.stdout,
+      `route ${PRIMARY_ROUTE.routeId} publishes 127.0.0.1 -> 127.0.0.1 via ${ROUTE_PROXY_SERVICE}`,
+      'healthy: doctor did not preserve the primary route mapping.',
+    );
+    assertContains(
+      doctor.stdout,
+      `route ${SECONDARY_ROUTE.routeId} publishes 127.0.0.2 -> 127.0.0.2 via ${ROUTE_PROXY_SERVICE}`,
+      'healthy: doctor did not preserve the secondary route mapping.',
     );
     assertNoSecretLeaks('healthy status', status.stdout, seeded.config);
     assertNoSecretLeaks('healthy doctor', doctor.stdout, seeded.config);
@@ -316,14 +348,14 @@ async function verifyDegradedAuthScenario(): Promise<string> {
           code: 'COMPOSE_UP_FAILED',
           message:
             'Docker Compose failed for multi-route-secret / 123456789012 / private-key-value-2 while authenticating route at-vie-wg-001.',
-          cause: `service ${SECONDARY_ROUTE.wireproxyServiceName} rejected username alice password multi-route-secret while reading ${TLS_PRIVATE_KEY_FIXTURE}`,
+          cause: `service ${ROUTE_PROXY_SERVICE} rejected username alice password multi-route-secret while reading ${TLS_PRIVATE_KEY_FIXTURE}`,
           artifactPath: null,
           composeFilePath: null,
           validationSource: 'internal-syntax',
           routeId: SECONDARY_ROUTE.routeId,
           routeHostname: '127.0.0.2',
           routeBindIp: '127.0.0.2',
-          serviceName: SECONDARY_ROUTE.wireproxyServiceName,
+          serviceName: ROUTE_PROXY_SERVICE,
           command: `docker compose --file ${paths.runtimeComposeFile} up --detach`,
         },
       },
@@ -347,13 +379,13 @@ async function verifyDegradedAuthScenario(): Promise<string> {
     );
     assertContains(
       status.stdout,
-      `route ${SECONDARY_ROUTE.routeId} is stopped`,
-      'degraded-auth: status warning lost the failing route context.',
+      `${ROUTE_PROXY_SERVICE} is not fully healthy:`,
+      'degraded-auth: status warning lost the failing shared service context.',
     );
     assertContains(
       status.stdout,
-      `service: ${SECONDARY_ROUTE.wireproxyServiceName}`,
-      'degraded-auth: status stopped exposing the failing service name.',
+      `shared service: ${ROUTE_PROXY_SERVICE}`,
+      'degraded-auth: status stopped exposing the failing shared service name.',
     );
     assertContains(
       status.stdout,
@@ -363,12 +395,12 @@ async function verifyDegradedAuthScenario(): Promise<string> {
     assertContains(doctor.stderr, 'overall: fail', 'degraded-auth: doctor did not fail.');
     assertContains(
       doctor.stderr,
-      '7. runtime: fail',
+      '8. runtime: fail',
       'degraded-auth: doctor runtime check drifted away from fail.',
     );
     assertContains(
       doctor.stderr,
-      '8. last-start: fail',
+      '9. last-start: fail',
       'degraded-auth: doctor last-start check drifted away from fail.',
     );
     assertContains(
@@ -378,12 +410,12 @@ async function verifyDegradedAuthScenario(): Promise<string> {
     );
     assertContains(
       doctor.stderr,
-      `service=${SECONDARY_ROUTE.wireproxyServiceName}`,
+      `service=${ROUTE_PROXY_SERVICE}`,
       'degraded-auth: doctor lost the failing service name.',
     );
     assertContains(
       doctor.stderr,
-      'If credentials changed, update `setup.auth.username` / `setup.auth.password` with `mullgate config set`, then rerun `mullgate config validate` and `mullgate start`.',
+      'If credentials changed, update `setup.auth.username` / `setup.auth.password` with `mullgate config set`, then rerun `mullgate validate` and `mullgate start`.',
       'degraded-auth: doctor auth remediation drifted.',
     );
     assertContains(
@@ -424,7 +456,7 @@ async function verifyHostnameDriftScenario(): Promise<string> {
         runtimePhase: 'unvalidated',
         runtimeCheckedAt: '2026-03-21T09:20:00.000Z',
         runtimeMessage:
-          'Exposure settings changed; rerun `mullgate config validate` or `mullgate start` to refresh runtime artifacts.',
+          'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
       },
       {
         relayFetchedAt: '2026-03-21T09:15:00.000Z',
@@ -458,7 +490,7 @@ async function verifyHostnameDriftScenario(): Promise<string> {
     assertContains(doctor.stderr, 'overall: fail', 'hostname-drift: doctor did not fail.');
     assertContains(
       doctor.stderr,
-      '6. hostname-resolution: fail',
+      '7. hostname-resolution: fail',
       'hostname-drift: doctor hostname-resolution check drifted away from fail.',
     );
     assertContains(
@@ -468,17 +500,17 @@ async function verifyHostnameDriftScenario(): Promise<string> {
     );
     assertContains(
       doctor.stderr,
-      'Use `mullgate config hosts` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun `mullgate doctor`.',
+      'Use `mullgate hosts` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun `mullgate doctor`.',
       'hostname-drift: doctor lost the hosts-based remediation.',
     );
     assertContains(
       doctor.stderr,
-      '7. runtime: degraded',
+      '8. runtime: degraded',
       'hostname-drift: doctor runtime no-container classification drifted.',
     );
     assertContains(
       doctor.stderr,
-      '8. last-start: degraded',
+      '9. last-start: degraded',
       'hostname-drift: doctor no-last-start classification drifted.',
     );
     assertSharedFact(
@@ -541,23 +573,30 @@ async function seedConfiguredScenario(
     );
   }
 
-  await mkdir(path.dirname(config.runtime.wireproxyConfigPath), { recursive: true, mode: 0o700 });
-  await writeFile(config.runtime.wireproxyConfigPath, '# verifier primary wireproxy config\n', {
+  await mkdir(path.dirname(config.runtime.entryWireproxyConfigPath), {
+    recursive: true,
+    mode: 0o700,
+  });
+  await writeFile(
+    config.runtime.entryWireproxyConfigPath,
+    '# verifier primary wireproxy config\n',
+    {
+      mode: 0o600,
+    },
+  );
+  await writeFile(config.runtime.routeProxyConfigPath, '# verifier shared route proxy config\n', {
     mode: 0o600,
   });
 
-  for (const route of config.routing.locations) {
-    const routePaths = resolveRouteWireproxyPaths(paths, route.runtime);
-    await writeFile(routePaths.wireproxyConfigPath, `# verifier route ${route.runtime.routeId}\n`, {
+  if (options.writeValidationReports) {
+    const report = createValidationSuccess({
+      entryWireproxyConfigPath: config.runtime.entryWireproxyConfigPath,
+      routeProxyConfigPath: config.runtime.routeProxyConfigPath,
+      reportPath: config.runtime.validationReportPath,
+    });
+    await writeFile(config.runtime.validationReportPath, `${JSON.stringify(report, null, 2)}\n`, {
       mode: 0o600,
     });
-
-    if (options.writeValidationReports) {
-      const report = createValidationSuccess(routePaths.configTestReportPath);
-      await writeFile(routePaths.configTestReportPath, `${JSON.stringify(report, null, 2)}\n`, {
-        mode: 0o600,
-      });
-    }
   }
 
   const relayCatalog = createRelayCatalog(options.relayFetchedAt);
@@ -667,37 +706,22 @@ function createFixtureConfig(
           route: PRIMARY_ROUTE,
           hostname: options.routeHostnames[0],
           bindIp: options.routeBindIps[0],
-          accountNumber: '123456789012',
-          lastProvisionedAt: timestamp,
         }),
         createRouteFixture({
           route: SECONDARY_ROUTE,
           hostname: options.routeHostnames[1],
           bindIp: options.routeBindIps[1],
-          accountNumber: '123456789012',
-          lastProvisionedAt: timestamp,
         }),
       ],
     },
-    runtime: {
-      backend: 'wireproxy',
-      sourceConfigPath: paths.configFile,
-      wireproxyConfigPath: paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
-      relayCachePath: paths.provisioningCacheFile,
-      dockerComposePath: paths.dockerComposePath,
-      runtimeBundle: {
-        bundleDir: paths.runtimeBundleDir,
-        dockerComposePath: paths.runtimeComposeFile,
-        httpsSidecarConfigPath: paths.runtimeHttpsSidecarConfigFile,
-        manifestPath: paths.runtimeBundleManifestFile,
-      },
+    runtime: createFixtureRuntime({
+      paths,
       status: {
         phase: options.runtimePhase,
         lastCheckedAt: options.runtimeCheckedAt,
         message: options.runtimeMessage,
       },
-    },
+    }),
     diagnostics: {
       lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
@@ -709,46 +733,28 @@ function createRouteFixture(input: {
   readonly route: typeof PRIMARY_ROUTE | typeof SECONDARY_ROUTE;
   readonly hostname: string;
   readonly bindIp: string;
-  readonly accountNumber: string;
-  readonly lastProvisionedAt: string;
 }): RoutedLocation {
-  return {
+  return createRoutedLocationFixture({
     alias: input.route.alias,
     hostname: input.hostname,
     bindIp: input.bindIp,
-    relayPreference: {
-      requested: input.route.requested,
-      country: input.route.country,
-      city: input.route.city,
-      hostnameLabel: input.route.hostnameLabel,
-      resolvedAlias: input.route.alias,
+    requested: input.route.requested,
+    country: input.route.country,
+    city: input.route.city,
+    hostnameLabel: input.route.hostnameLabel,
+    resolvedAlias: input.route.alias,
+    routeId: input.route.routeId,
+    httpsBackendName: input.route.haproxyBackendName,
+    exit: {
+      relayHostname: input.route.hostnameLabel,
+      relayFqdn:
+        input.route.peerEndpoint.split(':')[0] ?? `${input.route.hostnameLabel}.relays.mullvad.net`,
+      socksHostname: `${input.route.hostnameLabel}.mullvad.net`,
+      socksPort: 1080,
+      countryCode: input.route.country,
+      cityCode: input.route.city,
     },
-    mullvad: {
-      accountNumber: input.accountNumber,
-      deviceName: input.route.deviceName,
-      lastProvisionedAt: input.lastProvisionedAt,
-      relayConstraints: {
-        providers: [],
-      },
-      wireguard: {
-        publicKey: input.route.publicKey,
-        privateKey: input.route.privateKey,
-        ipv4Address: input.route.ipv4Address,
-        ipv6Address: input.route.ipv6Address,
-        gatewayIpv4: '10.64.0.1',
-        gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-        dnsServers: ['10.64.0.1'],
-        peerPublicKey: `peer-${input.route.publicKey}`,
-        peerEndpoint: input.route.peerEndpoint,
-      },
-    },
-    runtime: {
-      routeId: input.route.routeId,
-      wireproxyServiceName: input.route.wireproxyServiceName,
-      haproxyBackendName: input.route.haproxyBackendName,
-      wireproxyConfigFile: input.route.wireproxyConfigFile,
-    },
-  };
+  });
 }
 
 function createRelayCatalog(fetchedAt: string): MullvadRelayCatalog {
@@ -806,17 +812,36 @@ function createRelayCatalog(fetchedAt: string): MullvadRelayCatalog {
   };
 }
 
-function createValidationSuccess(targetPath: string): ValidateWireproxyResult {
+function createValidationSuccess(input: {
+  readonly entryWireproxyConfigPath: string;
+  readonly routeProxyConfigPath: string;
+  readonly reportPath: string;
+}): ValidateRuntimeResult {
   return {
     ok: true,
     phase: 'validation',
-    source: 'internal-syntax',
+    source: 'validation-suite',
     status: 'success',
     checkedAt: '2026-03-21T09:00:00.000Z',
-    target: targetPath,
-    reportPath: targetPath,
-    validator: 'internal-syntax',
-    issues: [],
+    reportPath: input.reportPath,
+    checks: [
+      {
+        artifact: 'entry-wireproxy',
+        ok: true,
+        source: 'internal-syntax',
+        validator: 'internal-syntax',
+        target: input.entryWireproxyConfigPath,
+        issues: [],
+      },
+      {
+        artifact: 'route-proxy',
+        ok: true,
+        source: 'internal-syntax',
+        validator: 'internal-syntax',
+        target: input.routeProxyConfigPath,
+        issues: [],
+      },
+    ],
   };
 }
 
@@ -900,8 +925,8 @@ function createFakeDockerContainers(
 ): unknown[] {
   const base = [
     {
-      Name: 'mullgate-routing-layer-1',
-      Service: 'routing-layer',
+      Name: 'mullgate-entry-tunnel-1',
+      Service: ENTRY_TUNNEL_SERVICE,
       Project: 'mullgate',
       State: 'running',
       Health: 'healthy',
@@ -910,8 +935,18 @@ function createFakeDockerContainers(
       Publishers: [],
     },
     {
-      Name: 'mullgate-wireproxy-se-got-wg-101-1',
-      Service: PRIMARY_ROUTE.wireproxyServiceName,
+      Name: 'mullgate-route-proxy-1',
+      Service: ROUTE_PROXY_SERVICE,
+      Project: 'mullgate',
+      State: 'running',
+      Health: 'healthy',
+      Status: scenario === 'healthy' ? 'Up 45 seconds' : 'Up 2 minutes',
+      ExitCode: 0,
+      Publishers: [],
+    },
+    {
+      Name: 'mullgate-routing-layer-1',
+      Service: ROUTING_LAYER_SERVICE,
       Project: 'mullgate',
       State: 'running',
       Health: 'healthy',
@@ -922,32 +957,25 @@ function createFakeDockerContainers(
   ];
 
   if (scenario === 'healthy') {
-    return [
-      ...base,
-      {
-        Name: 'mullgate-wireproxy-at-vie-wg-001-1',
-        Service: SECONDARY_ROUTE.wireproxyServiceName,
-        Project: 'mullgate',
-        State: 'running',
-        Health: 'healthy',
-        Status: 'Up 45 seconds',
-        ExitCode: 0,
-        Publishers: [],
-      },
-    ];
+    return base;
   }
 
   return [
-    ...base,
     {
-      Name: 'mullgate-wireproxy-at-vie-wg-001-1',
-      Service: SECONDARY_ROUTE.wireproxyServiceName,
+      ...base[0],
+    },
+    {
+      Name: 'mullgate-route-proxy-1',
+      Service: ROUTE_PROXY_SERVICE,
       Project: 'mullgate',
       State: 'exited',
       Health: null,
       Status: 'Exited (2) 5 seconds ago',
       ExitCode: 2,
       Publishers: [],
+    },
+    {
+      ...base[2],
     },
   ];
 }
@@ -1058,10 +1086,6 @@ function collectSecrets(config: MullgateConfig): string[] {
     config.setup.auth.password,
     config.mullvad.accountNumber,
     config.mullvad.wireguard.privateKey,
-    ...config.routing.locations.flatMap((route) => [
-      route.mullvad.accountNumber,
-      route.mullvad.wireguard.privateKey,
-    ]),
   ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 }
 

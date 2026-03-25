@@ -80,8 +80,10 @@ pnpm publish --no-git-checks --access public --provenance=false
 ## Mullgate-specific gotchas
 
 - Preserve truthful Linux-first runtime messaging for macOS and Windows instead of hiding the platform limits.
+- Keep README, docs, and skills truthful about the current shared-entry multi-exit runtime. Do not reintroduce route-per-WireGuard-key language.
 - Keep `recommend --apply` pinned to exact relay hostnames rather than broad selectors.
 - Keep `relays verify` focused on configured routes rather than arbitrary relay-catalog candidates.
+- When documenting verification, distinguish the built-in two-route `verify:s06` proof contract from larger maintainer scale sweeps that reuse a preserved temp home.
 - Keep docs, demos, and help output aligned with the actual command flow rather than aspirational behavior.
 
 ## Reference map

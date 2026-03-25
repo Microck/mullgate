@@ -16,7 +16,9 @@ export function redactConfig(config: MullgateConfig): MullgateConfig {
     routing: {
       locations: config.routing.locations.map((location) => ({
         ...location,
-        mullvad: redactProvisioning(location.mullvad),
+        mullvad: {
+          ...location.mullvad,
+        },
       })),
     },
   } satisfies MullgateConfig;
@@ -58,16 +60,10 @@ function redactOptionalText(value: string | null, config: MullgateConfig): strin
 }
 
 function collectKnownSecrets(config: MullgateConfig): string[] {
-  const routeSecrets = config.routing.locations.flatMap((location) => [
-    location.mullvad.accountNumber,
-    location.mullvad.wireguard.privateKey,
-  ]);
-
   return [
     config.mullvad.accountNumber,
     config.setup.auth.password,
     config.mullvad.wireguard.privateKey,
-    ...routeSecrets,
   ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 }
 

@@ -32,8 +32,9 @@ export type MullgatePaths = {
   readonly configFile: string;
   readonly runtimeDir: string;
   readonly runtimeBundleDir: string;
-  readonly wireproxyConfigFile: string;
-  readonly wireproxyConfigTestReportFile: string;
+  readonly entryWireproxyConfigFile: string;
+  readonly routeProxyConfigFile: string;
+  readonly runtimeValidationReportFile: string;
   readonly provisioningCacheFile: string;
   readonly runtimeComposeFile: string;
   readonly runtimeHttpsSidecarConfigFile: string;
@@ -42,44 +43,12 @@ export type MullgatePaths = {
   readonly dockerComposePath: string;
 };
 
-export type RouteWireproxyPaths = {
-  readonly wireproxyConfigPath: string;
-  readonly configTestReportPath: string;
-};
-
 type PathModule = typeof path.posix | typeof path.win32;
 
 type ResolvedBaseDir = {
   readonly value: string;
   readonly source: MullgatePathSource;
 };
-
-export function resolveRouteWireproxyConfigPath(
-  paths: Pick<MullgatePaths, 'runtimeDir'>,
-  wireproxyConfigFile: string,
-): string {
-  return selectPathModuleFromBase(paths.runtimeDir).join(paths.runtimeDir, wireproxyConfigFile);
-}
-
-export function resolveRouteWireproxyConfigTestReportPath(
-  paths: Pick<MullgatePaths, 'runtimeDir'>,
-  routeId: string,
-): string {
-  return selectPathModuleFromBase(paths.runtimeDir).join(
-    paths.runtimeDir,
-    `wireproxy-${routeId}-configtest.json`,
-  );
-}
-
-export function resolveRouteWireproxyPaths(
-  paths: Pick<MullgatePaths, 'runtimeDir'>,
-  runtime: { readonly routeId: string; readonly wireproxyConfigFile: string },
-): RouteWireproxyPaths {
-  return {
-    wireproxyConfigPath: resolveRouteWireproxyConfigPath(paths, runtime.wireproxyConfigFile),
-    configTestReportPath: resolveRouteWireproxyConfigTestReportPath(paths, runtime.routeId),
-  };
-}
 
 export function resolveMullgatePaths(env: NodeJS.ProcessEnv = process.env): MullgatePaths {
   const platformResolution = resolveTargetPlatform(env);
@@ -128,8 +97,9 @@ export function resolveMullgatePaths(env: NodeJS.ProcessEnv = process.env): Mull
     configFile: pathModule.join(appConfigDir, 'config.json'),
     runtimeDir,
     runtimeBundleDir,
-    wireproxyConfigFile: pathModule.join(runtimeDir, 'wireproxy.conf'),
-    wireproxyConfigTestReportFile: pathModule.join(runtimeDir, 'wireproxy-configtest.json'),
+    entryWireproxyConfigFile: pathModule.join(runtimeDir, 'entry-wireproxy.conf'),
+    routeProxyConfigFile: pathModule.join(runtimeDir, 'route-proxy.cfg'),
+    runtimeValidationReportFile: pathModule.join(runtimeDir, 'runtime-validation.json'),
     provisioningCacheFile: pathModule.join(appCacheDir, 'relays.json'),
     runtimeComposeFile,
     runtimeHttpsSidecarConfigFile: pathModule.join(runtimeBundleDir, 'haproxy.cfg'),
@@ -176,10 +146,6 @@ function selectPathModule(platform: MullgatePlatform): PathModule {
   }
 
   return path.posix;
-}
-
-function selectPathModuleFromBase(basePath: string): PathModule {
-  return basePath.includes('\\') ? path.win32 : path.posix;
 }
 
 function resolveHomeDirectory(input: {

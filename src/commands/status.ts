@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 
 import { writeCliReport } from '../cli-output.js';
 import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
+import { redactSensitiveText } from '../config/redact.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
 import { ConfigStore, type LoadConfigResult } from '../config/store.js';
 import { buildPlatformSupportContract } from '../platform/support-contract.js';
@@ -12,6 +13,7 @@ import {
   queryDockerComposeStatus,
 } from '../runtime/docker-runtime.js';
 import type { RuntimeBundleManifest } from '../runtime/render-runtime-bundle.js';
+import { ENTRY_TUNNEL_SERVICE, ROUTE_PROXY_SERVICE } from '../runtime/render-runtime-proxies.js';
 import {
   type ArtifactReadResult,
   type ContainerLiveState,
@@ -53,17 +55,25 @@ type RouteSurface = {
   readonly hostname: string;
   readonly bindIp: string;
   readonly serviceName: string;
-  readonly backends: {
-    readonly socks5: string | null;
-    readonly http: string | null;
+  readonly listeners: {
+    readonly socks5: string;
+    readonly http: string;
     readonly https: string | null;
   };
+  readonly httpsBackendName: string | null;
   readonly dnsRecord: string | null;
   readonly endpoints: readonly {
     readonly protocol: string;
     readonly hostnameUrl: string;
     readonly bindUrl: string;
   }[];
+};
+
+type SharedServiceView = {
+  readonly serviceName: string;
+  readonly container: DockerComposeContainer | null;
+  readonly liveState: ContainerLiveState;
+  readonly detail: string;
 };
 
 type RouteContainerView = {
@@ -163,10 +173,7 @@ export async function runStatusFlow(
   const routeViews = composeStatus.ok
     ? buildRouteContainerViews(routes, composeStatus.containers)
     : routes.map((route) => createRouteContainerView(route, null));
-  const routingLayerContainer = composeStatus.ok
-    ? findContainerForService(composeStatus.containers, ROUTING_LAYER_SERVICE)
-    : null;
-  const routingLayerState = classifyContainerState(routingLayerContainer);
+  const sharedServiceViews = buildSharedServiceViews(composeStatus);
   const lastStart = resolveLastStartDiagnostic(config, lastStartResult);
   const diagnostics = buildDiagnostics({
     config,
@@ -174,14 +181,12 @@ export async function runStatusFlow(
     lastStartResult,
     lastStart,
     composeStatus,
-    routeViews,
-    routingLayerState,
+    sharedServiceViews,
   });
   const phase = classifyOverallPhase({
     config,
     composeStatus,
-    routeViews,
-    routingLayerState,
+    sharedServiceViews,
     lastStart,
   });
 
@@ -215,7 +220,7 @@ export async function runStatusFlow(
           `compose project: ${composeStatus.project ?? 'n/a'}`,
           `compose command: ${composeStatus.command.rendered}`,
           `container summary: ${composeStatus.summary.total} total, ${composeStatus.summary.running} running, ${composeStatus.summary.starting} starting, ${composeStatus.summary.stopped} stopped, ${composeStatus.summary.unhealthy} unhealthy`,
-          `routing layer: ${routingLayerState.detail}`,
+          ...sharedServiceViews.map((service) => `${service.serviceName}: ${service.detail}`),
         ]
       : [
           `compose command: ${composeStatus.command.rendered}`,
@@ -229,11 +234,12 @@ export async function runStatusFlow(
       `${view.route.index + 1}. ${view.route.hostname} -> ${view.route.bindIp}`,
       `   alias: ${view.route.alias}`,
       `   route id: ${view.route.routeId}`,
-      `   service: ${view.route.serviceName}`,
+      `   shared service: ${view.route.serviceName}`,
       `   live state: ${view.detail}`,
-      ...(view.route.backends.socks5 ? [`   socks5 backend: ${view.route.backends.socks5}`] : []),
-      ...(view.route.backends.http ? [`   http backend: ${view.route.backends.http}`] : []),
-      ...(view.route.backends.https ? [`   https backend: ${view.route.backends.https}`] : []),
+      `   socks5 listener: ${view.route.listeners.socks5}`,
+      `   http listener: ${view.route.listeners.http}`,
+      ...(view.route.listeners.https ? [`   https listener: ${view.route.listeners.https}`] : []),
+      ...(view.route.httpsBackendName ? [`   https backend: ${view.route.httpsBackendName}`] : []),
       `   dns: ${view.route.dnsRecord ?? 'not required; use direct bind IP entrypoints'}`,
       ...view.route.endpoints.flatMap((endpoint) => [
         `   ${endpoint.protocol} hostname: ${endpoint.hostnameUrl}`,
@@ -279,7 +285,7 @@ export async function runStatusFlow(
     ok: true,
     exitCode: 0,
     phase,
-    summary,
+    summary: redactSensitiveText(summary, config),
   };
 }
 
@@ -301,12 +307,21 @@ function buildRouteSurfaces(
       routeId: location.runtime.routeId,
       hostname: exposureRoute?.hostname ?? manifestRoute?.hostname ?? location.hostname,
       bindIp: exposureRoute?.bindIp ?? manifestRoute?.bindIp ?? location.bindIp,
-      serviceName: manifestRoute?.services.wireproxy.name ?? location.runtime.wireproxyServiceName,
-      backends: {
-        socks5: manifestRoute?.services.backends.socks5 ?? null,
-        http: manifestRoute?.services.backends.http ?? null,
-        https: manifestRoute?.services.backends.https ?? null,
+      serviceName:
+        manifestRoute?.services.routeProxy.name ??
+        manifest?.services.routeProxy.name ??
+        ROUTE_PROXY_SERVICE,
+      listeners: {
+        socks5:
+          manifestRoute?.listeners.socks5 ?? `${location.bindIp}:${config.setup.bind.socksPort}`,
+        http: manifestRoute?.listeners.http ?? `${location.bindIp}:${config.setup.bind.httpPort}`,
+        https:
+          manifestRoute?.listeners.https ??
+          (config.setup.bind.httpsPort === null
+            ? null
+            : `${location.bindIp}:${config.setup.bind.httpsPort}`),
       },
+      httpsBackendName: manifestRoute?.services.backends.https ?? location.runtime.httpsBackendName,
       dnsRecord: exposureRoute?.dnsRecord ?? null,
       endpoints: (exposureRoute?.endpoints ?? []).map((endpoint) => ({
         protocol: endpoint.protocol,
@@ -315,6 +330,39 @@ function buildRouteSurfaces(
       })),
     };
   });
+}
+
+function buildSharedServiceViews(composeStatus: DockerComposeStatusResult): SharedServiceView[] {
+  const containers = composeStatus.ok ? composeStatus.containers : [];
+
+  return [
+    createSharedServiceView(
+      ENTRY_TUNNEL_SERVICE,
+      findContainerForService(containers, ENTRY_TUNNEL_SERVICE),
+    ),
+    createSharedServiceView(
+      ROUTE_PROXY_SERVICE,
+      findContainerForService(containers, ROUTE_PROXY_SERVICE),
+    ),
+    createSharedServiceView(
+      ROUTING_LAYER_SERVICE,
+      findContainerForService(containers, ROUTING_LAYER_SERVICE),
+    ),
+  ];
+}
+
+function createSharedServiceView(
+  serviceName: string,
+  container: DockerComposeContainer | null,
+): SharedServiceView {
+  const classified = classifyContainerState(container);
+
+  return {
+    serviceName,
+    container,
+    liveState: classified.liveState,
+    detail: classified.detail,
+  };
 }
 
 function buildRouteContainerViews(
@@ -343,44 +391,38 @@ function createRouteContainerView(
 function classifyOverallPhase(input: {
   readonly config: MullgateConfig;
   readonly composeStatus: DockerComposeStatusResult;
-  readonly routeViews: readonly RouteContainerView[];
-  readonly routingLayerState: ReturnType<typeof classifyContainerState>;
+  readonly sharedServiceViews: readonly SharedServiceView[];
   readonly lastStart: RuntimeStartDiagnostic | null;
 }): StatusPhase {
   if (!input.composeStatus.ok) {
     return 'error';
   }
 
-  const liveStates = [
-    input.routingLayerState.liveState,
-    ...input.routeViews.map((view) => view.liveState),
-  ];
-  const hasRunning = liveStates.includes('running');
-  const hasStarting = liveStates.includes('starting');
-  const hasStopped = liveStates.includes('stopped');
-  const hasDegraded = liveStates.includes('degraded');
-  const expectedServices = input.routeViews.length + 1;
+  const liveStates = input.sharedServiceViews.map((service) => service.liveState);
+  const everyRunning = liveStates.every((state) => state === 'running');
+  const someRunning = liveStates.some((state) => state === 'running');
+  const someStarting = liveStates.some((state) => state === 'starting');
+  const someStopped = liveStates.some((state) => state === 'stopped');
+  const someDegraded = liveStates.some((state) => state === 'degraded');
   const hasNoContainers = input.composeStatus.containers.length === 0;
-  const hasMissingExpectedServices =
-    input.composeStatus.containers.length < expectedServices && hasStopped;
 
-  if (hasDegraded) {
+  if (someDegraded) {
     return 'degraded';
   }
 
-  if (hasRunning && (hasStopped || hasMissingExpectedServices)) {
-    return 'degraded';
-  }
-
-  if (hasRunning && !hasStarting && !hasStopped) {
+  if (everyRunning) {
     return 'running';
   }
 
-  if (hasStarting && !hasStopped) {
+  if ((someRunning || someStarting) && !someStopped) {
     return 'starting';
   }
 
-  if (hasNoContainers || (!hasRunning && !hasStarting && hasStopped)) {
+  if ((someRunning || someStarting) && someStopped) {
+    return 'degraded';
+  }
+
+  if (hasNoContainers || liveStates.every((state) => state === 'stopped')) {
     if (input.config.runtime.status.phase === 'running') {
       return 'degraded';
     }
@@ -401,8 +443,7 @@ function buildDiagnostics(input: {
   readonly lastStartResult: ArtifactReadResult<RuntimeStartDiagnostic>;
   readonly lastStart: RuntimeStartDiagnostic | null;
   readonly composeStatus: DockerComposeStatusResult;
-  readonly routeViews: readonly RouteContainerView[];
-  readonly routingLayerState: ReturnType<typeof classifyContainerState>;
+  readonly sharedServiceViews: readonly SharedServiceView[];
 }): string[] {
   const diagnostics: string[] = [];
 
@@ -429,22 +470,18 @@ function buildDiagnostics(input: {
     return diagnostics;
   }
 
-  if (input.routingLayerState.liveState !== 'running') {
-    diagnostics.push(`routing layer is not fully healthy: ${input.routingLayerState.detail}.`);
-  }
-
-  for (const view of input.routeViews) {
-    if (view.liveState !== 'running') {
-      diagnostics.push(`route ${view.route.routeId} is ${view.liveState}: ${view.detail}.`);
+  for (const service of input.sharedServiceViews) {
+    if (service.liveState !== 'running') {
+      diagnostics.push(`${service.serviceName} is not fully healthy: ${service.detail}.`);
     }
   }
 
   if (
     input.config.runtime.status.phase === 'running' &&
-    input.routeViews.some((view) => view.liveState !== 'running')
+    input.sharedServiceViews.some((service) => service.liveState !== 'running')
   ) {
     diagnostics.push(
-      'saved runtime status says running, but live compose status shows stopped or degraded route containers. Trust live compose over the saved phase and rerun `mullgate start` after fixing the failing route.',
+      'saved runtime status says running, but live compose status shows stopped or degraded shared services. Trust live compose over the saved phase and rerun `mullgate start` after fixing the failing service.',
     );
   }
 

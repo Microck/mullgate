@@ -169,13 +169,9 @@ async function main(): Promise<void> {
           setupResult.stderr.includes('KEY_LIMIT_REACHED') ||
           setupResult.stderr.includes('maximum number of WireGuard keys')
             ? [
-                'The configured Mullgate proof needs one free Mullvad WireGuard device slot per routed location.',
-                `Current route count: ${
-                  env.MULLGATE_LOCATIONS?.split(',')
-                    .map((entry) => entry.trim())
-                    .filter(Boolean).length ?? 0
-                }`,
-                'Revoke old Mullvad devices or reduce the routed location count before rerunning `pnpm verify:s06`.',
+                'The configured Mullgate proof only provisions one shared Mullvad WireGuard device.',
+                'KEY_LIMIT_REACHED here means the account has no free slot for that one shared entry device.',
+                'Revoke an old Mullvad device or rerun this proof with --reuse-temp-home if you already preserved a previous successful setup.',
               ]
             : [];
 
@@ -229,12 +225,12 @@ async function main(): Promise<void> {
 
     context.phase = 'config-hosts';
     logPhase(context.phase, 'Inspecting emitted hostname → bind IP mappings.');
-    const hostsResult = await runCliCommand(context, env, ['config', 'hosts'], 'config-hosts');
+    const hostsResult = await runCliCommand(context, env, ['hosts'], 'hosts');
     context.hostsOutputPath = hostsResult.stdoutPath;
-    assertExitCode(hostsResult, 0, context, 'mullgate config hosts failed.');
+    assertExitCode(hostsResult, 0, context, 'mullgate hosts failed.');
     assertHostsOutput(hostsResult.stdout, configAfterSetup);
     assertNoSecretLeaks(
-      'config hosts output',
+      'hosts output',
       `${hostsResult.stdout}\n${hostsResult.stderr}`,
       configAfterSetup,
     );
@@ -283,7 +279,7 @@ async function main(): Promise<void> {
 
     assertStartSummary(startResult.stdout, manifest, configAfterStart);
     assertManifestTopology(manifest, configAfterStart);
-    assertLastStartReport(lastStart, manifest);
+    assertLastStartReport(lastStart, manifest, paths.runtimeComposeFile);
     assertNoSecretLeaks(
       'start output',
       `${startResult.stdout}\n${startResult.stderr}`,
@@ -312,8 +308,8 @@ async function main(): Promise<void> {
       const extraGuidance = doctorOutput.includes('hostname-resolution: fail')
         ? [
             'Doctor reported hostname-resolution drift.',
-            'Install the hosts block emitted by `mullgate config hosts` or publish DNS so each route hostname resolves to its saved bind IP, then rerun `pnpm verify:s06`.',
-            ...(context.hostsOutputPath ? [`config hosts output: ${context.hostsOutputPath}`] : []),
+            'Install the hosts block emitted by `mullgate hosts` or publish DNS so each route hostname resolves to its saved bind IP, then rerun `pnpm verify:s06`.',
+            ...(context.hostsOutputPath ? [`hosts output: ${context.hostsOutputPath}`] : []),
           ]
         : [];
 
@@ -424,7 +420,7 @@ async function main(): Promise<void> {
       `config: ${context.paths.configFile}`,
       `runtime manifest: ${context.manifestPath ?? context.paths.runtimeBundleManifestFile}`,
       `last-start report: ${context.lastStartPath ?? context.paths.runtimeStartDiagnosticsFile}`,
-      ...(context.hostsOutputPath ? [`config hosts output: ${context.hostsOutputPath}`] : []),
+      ...(context.hostsOutputPath ? [`hosts output: ${context.hostsOutputPath}`] : []),
       message,
       'The temp XDG home was preserved for later inspection.',
     ];
@@ -496,7 +492,7 @@ function renderHelp(): string {
     'Usage: pnpm exec tsx scripts/verify-s06-release.ts [options]',
     '',
     'Run the integrated Linux-first Mullgate proof in a temp XDG home: perform',
-    'non-interactive setup, print/check `config hosts`, start the Docker runtime,',
+    'non-interactive setup, print/check `hosts`, start the Docker runtime,',
     'verify `status` + `doctor`, prove SOCKS5/HTTP/HTTPS traffic, confirm the host',
     'route to a direct-check IP did not change, and compare the exits for two routed',
     'hostnames when they resolve locally to distinct bind IPs.',
@@ -526,8 +522,10 @@ function renderHelp(): string {
     'If HTTPS cert/key paths are not provided, the verifier requires `openssl` so it can',
     'generate a temporary self-signed pair without persisting raw private-key material in',
     'the saved failure bundle.',
-    'The verifier also needs one free Mullvad WireGuard device slot per routed location unless',
-    'you resume from a previously preserved temp home with --reuse-temp-home.',
+    'The verifier needs one free Mullvad WireGuard device slot for each fresh proof run because',
+    'setup provisions a single shared entry device for all routes.',
+    'Use --reuse-temp-home to avoid provisioning another shared device when rerunning a',
+    'preserved proof.',
     '',
     'Options:',
     `  --target-url <url>        Exit-check endpoint to query (default: ${DEFAULT_TARGET_URL})`,
@@ -737,7 +735,7 @@ function assertAtLeastTwoRoutes(config: MullgateConfig): void {
 
 function assertHostsOutput(output: string, config: MullgateConfig): void {
   if (!output.includes('copy/paste hosts block')) {
-    throw new Error('`mullgate config hosts` output did not include the copy/paste hosts block.');
+    throw new Error('`mullgate hosts` output did not include the copy/paste hosts block.');
   }
 
   for (const route of config.routing.locations) {
@@ -745,12 +743,12 @@ function assertHostsOutput(output: string, config: MullgateConfig): void {
     const hostsBlockLine = `${route.bindIp} ${route.hostname}`;
 
     if (!output.includes(mapping)) {
-      throw new Error(`Expected \`mullgate config hosts\` output to include mapping ${mapping}.`);
+      throw new Error(`Expected \`mullgate hosts\` output to include mapping ${mapping}.`);
     }
 
     if (!output.includes(hostsBlockLine)) {
       throw new Error(
-        `Expected \`mullgate config hosts\` output to include hosts block line ${hostsBlockLine}.`,
+        `Expected \`mullgate hosts\` output to include hosts block line ${hostsBlockLine}.`,
       );
     }
   }
@@ -824,9 +822,9 @@ function assertStartSummary(
 }
 
 function assertManifestTopology(manifest: RuntimeBundleManifest, config: MullgateConfig): void {
-  if (manifest.topology !== 'multi-route-wireproxy-haproxy') {
+  if (manifest.topology !== 'shared-entry-wireguard-route-proxy-haproxy') {
     throw new Error(
-      `Expected runtime manifest topology to be multi-route-wireproxy-haproxy, got ${manifest.topology}.`,
+      `Expected runtime manifest topology to be shared-entry-wireguard-route-proxy-haproxy, got ${manifest.topology}.`,
     );
   }
 
@@ -880,7 +878,8 @@ function assertManifestTopology(manifest: RuntimeBundleManifest, config: Mullgat
 
 function assertLastStartReport(
   report: RuntimeStartDiagnostic,
-  manifest: RuntimeBundleManifest,
+  _manifest: RuntimeBundleManifest,
+  expectedComposeFilePath: string,
 ): void {
   const requiredKeys = [
     'attemptedAt',
@@ -920,11 +919,15 @@ function assertLastStartReport(
     throw new Error('last-start.json is missing compose launch diagnostics on the success path.');
   }
 
-  if (
-    !manifest.routes.some((route) => report.composeFilePath === route.wireproxyConfigPath) &&
-    !report.composeFilePath.endsWith('docker-compose.yml')
-  ) {
+  if (report.composeFilePath !== expectedComposeFilePath) {
     throw new Error(`Unexpected compose file path in last-start.json: ${report.composeFilePath}`);
+  }
+
+  if (
+    report.serviceName !== null &&
+    !['entry-tunnel', 'route-proxy', 'routing-layer'].includes(report.serviceName)
+  ) {
+    throw new Error(`Unexpected service name in last-start.json: ${report.serviceName}`);
   }
 }
 
@@ -955,8 +958,10 @@ function assertStatusOutput(
       );
     }
 
-    if (!output.includes(`service: ${route.services.wireproxy.name}`)) {
-      throw new Error(`mullgate status did not include service ${route.services.wireproxy.name}.`);
+    if (!output.includes(`shared service: ${route.services.routeProxy.name}`)) {
+      throw new Error(
+        `mullgate status did not include shared service ${route.services.routeProxy.name}.`,
+      );
     }
   }
 }
@@ -1059,12 +1064,7 @@ async function waitForRuntimeSteadyState(input: {
     const containers = lines.map(
       (line) => JSON.parse(line) as { Service?: string; State?: string; Status?: string },
     );
-    const expectedServices = new Set([
-      'routing-layer',
-      ...(input.context.config?.routing.locations ?? []).map(
-        (route) => route.runtime.wireproxyServiceName,
-      ),
-    ]);
+    const expectedServices = new Set(['entry-tunnel', 'route-proxy', 'routing-layer']);
     const liveServices = new Map(
       containers.map((container) => [
         container.Service ?? 'unknown',
@@ -1348,10 +1348,6 @@ function collectSecrets(config: MullgateConfig): string[] {
     config.setup.auth.password,
     config.mullvad.accountNumber,
     config.mullvad.wireguard.privateKey,
-    ...config.routing.locations.flatMap((route) => [
-      route.mullvad.accountNumber,
-      route.mullvad.wireguard.privateKey,
-    ]),
   ];
 
   return [

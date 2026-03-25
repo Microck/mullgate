@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { requireDefined } from '../required.js';
 
-const MULLVAD_RELAYS_URL = 'https://api.mullvad.net/public/relays/wireguard/v1/';
+const MULLVAD_RELAYS_URL = 'https://api.mullvad.net/www/relays/all/';
 
 const appRelaySchema = z
   .object({

@@ -63,19 +63,19 @@ async function main(): Promise<void> {
 
   const routeBefore = await captureRoute(options.routeCheckIp);
   const directBefore = await runDirectProbe(options.targetUrl);
-  const hostsCommand = await runCliCommand(['config', 'hosts']);
+  const hostsCommand = await runCliCommand(['hosts']);
 
   if (hostsCommand.exitCode !== 0) {
     throw new Error(
       [
-        'mullgate config hosts failed before live verification.',
+        'mullgate hosts failed before live verification.',
         hostsCommand.stderr || hostsCommand.stdout || 'No CLI output.',
       ].join('\n'),
     );
   }
 
   assertHostsOutput(hostsCommand.stdout, configBeforeStart);
-  assertNoSecretLeaks('config hosts output', hostsCommand.stdout, configBeforeStart);
+  assertNoSecretLeaks('hosts output', hostsCommand.stdout, configBeforeStart);
 
   const startResult = await runCliCommand(['start']);
 
@@ -112,7 +112,7 @@ async function main(): Promise<void> {
 
   assertStartSummary(startResult.stdout, manifest, configAfterStart);
   assertManifestTopology(manifest, configAfterStart);
-  assertLastStartReport(lastStart, manifest);
+  assertLastStartReport(lastStart, manifest, store.paths.runtimeComposeFile);
   assertNoSecretLeaks('start output', startResult.stdout, configAfterStart);
   assertNoSecretLeaks('runtime manifest', JSON.stringify(manifest, null, 2), configAfterStart);
   assertNoSecretLeaks('last-start report', JSON.stringify(lastStart, null, 2), configAfterStart);
@@ -281,7 +281,7 @@ async function loadJsonFile<T>(filePath: string, label: string): Promise<T> {
 
 function assertHostsOutput(output: string, config: MullgateConfig): void {
   if (!output.includes('copy/paste hosts block')) {
-    throw new Error('`mullgate config hosts` output did not include the copy/paste hosts block.');
+    throw new Error('`mullgate hosts` output did not include the copy/paste hosts block.');
   }
 
   for (const route of config.routing.locations) {
@@ -289,12 +289,12 @@ function assertHostsOutput(output: string, config: MullgateConfig): void {
     const hostsBlockLine = `${route.bindIp} ${route.hostname}`;
 
     if (!output.includes(mapping)) {
-      throw new Error(`Expected \`mullgate config hosts\` output to include mapping ${mapping}.`);
+      throw new Error(`Expected \`mullgate hosts\` output to include mapping ${mapping}.`);
     }
 
     if (!output.includes(hostsBlockLine)) {
       throw new Error(
-        `Expected \`mullgate config hosts\` output to include hosts block line ${hostsBlockLine}.`,
+        `Expected \`mullgate hosts\` output to include hosts block line ${hostsBlockLine}.`,
       );
     }
   }
@@ -339,9 +339,21 @@ function assertStartSummary(
 }
 
 function assertManifestTopology(manifest: RuntimeBundleManifest, config: MullgateConfig): void {
-  if (manifest.topology !== 'multi-route-wireproxy-haproxy') {
+  if (manifest.topology !== 'shared-entry-wireguard-route-proxy-haproxy') {
     throw new Error(
-      `Expected runtime manifest topology to be multi-route-wireproxy-haproxy, got ${manifest.topology}.`,
+      `Expected runtime manifest topology to be shared-entry-wireguard-route-proxy-haproxy, got ${manifest.topology}.`,
+    );
+  }
+
+  if (manifest.services.entryTunnel.name !== 'entry-tunnel') {
+    throw new Error(
+      `Expected runtime manifest entry tunnel service to be entry-tunnel, got ${manifest.services.entryTunnel.name}.`,
+    );
+  }
+
+  if (manifest.services.routeProxy.name !== 'route-proxy') {
+    throw new Error(
+      `Expected runtime manifest route proxy service to be route-proxy, got ${manifest.services.routeProxy.name}.`,
     );
   }
 
@@ -395,7 +407,8 @@ function assertManifestTopology(manifest: RuntimeBundleManifest, config: Mullgat
 
 function assertLastStartReport(
   report: RuntimeStartDiagnostic,
-  manifest: RuntimeBundleManifest,
+  _manifest: RuntimeBundleManifest,
+  expectedComposeFilePath: string,
 ): void {
   const requiredKeys = [
     'attemptedAt',
@@ -435,11 +448,15 @@ function assertLastStartReport(
     throw new Error('last-start.json is missing compose launch diagnostics on the success path.');
   }
 
-  if (
-    !manifest.routes.some((route) => report.composeFilePath === route.wireproxyConfigPath) &&
-    !report.composeFilePath.endsWith('docker-compose.yml')
-  ) {
+  if (report.composeFilePath !== expectedComposeFilePath) {
     throw new Error(`Unexpected compose file path in last-start.json: ${report.composeFilePath}`);
+  }
+
+  if (
+    report.serviceName !== null &&
+    !['entry-tunnel', 'route-proxy', 'routing-layer'].includes(report.serviceName)
+  ) {
+    throw new Error(`Unexpected service name in last-start.json: ${report.serviceName}`);
   }
 }
 
@@ -696,10 +713,6 @@ function collectSecrets(config: MullgateConfig): string[] {
     config.setup.auth.password,
     config.mullvad.accountNumber,
     config.mullvad.wireguard.privateKey,
-    ...config.routing.locations.flatMap((route) => [
-      route.mullvad.accountNumber,
-      route.mullvad.wireguard.privateKey,
-    ]),
   ];
 
   return [

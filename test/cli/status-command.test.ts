@@ -15,6 +15,7 @@ import {
 import { ConfigStore } from '../../src/config/store.js';
 import type { DockerComposeStatusResult } from '../../src/runtime/docker-runtime.js';
 import { renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
+import { createFixtureRoute, createFixtureRuntime } from '../helpers/mullgate-fixtures.js';
 import { normalizeFixtureHomePath } from '../helpers/platform-test-utils.js';
 
 const temporaryDirectories: string[] = [];
@@ -108,101 +109,36 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
     },
     routing: {
       locations: [
-        {
+        createFixtureRoute({
           alias: 'sweden-gothenburg',
           hostname: 'se-got-wg-101',
           bindIp: '127.0.0.1',
-          relayPreference: {
-            requested: 'sweden-gothenburg',
-            country: 'se',
-            city: 'got',
-            hostnameLabel: 'se-got-wg-101',
-            resolvedAlias: 'sweden-gothenburg',
-          },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-status-test-1',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard: {
-              publicKey: 'public-key-value-1',
-              privateKey: 'private-key-value-1',
-              ipv4Address: '10.64.12.34/32',
-              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1234/128',
-              gatewayIpv4: '10.64.0.1',
-              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-              dnsServers: ['10.64.0.1'],
-              peerPublicKey: 'peer-public-key-value-1',
-              peerEndpoint: 'se-got-wg-101.relays.mullvad.net:3401',
-            },
-          },
-          runtime: {
-            routeId: 'se-got-wg-101',
-            wireproxyServiceName: 'wireproxy-se-got-wg-101',
-            haproxyBackendName: 'route-se-got-wg-101',
-            wireproxyConfigFile: 'wireproxy-se-got-wg-101.conf',
-          },
-        },
-        {
+          requested: 'sweden-gothenburg',
+          country: 'se',
+          city: 'got',
+          hostnameLabel: 'se-got-wg-101',
+          resolvedAlias: 'sweden-gothenburg',
+        }),
+        createFixtureRoute({
           alias: 'austria-vienna',
           hostname: 'at-vie-wg-001',
           bindIp: '127.0.0.2',
-          relayPreference: {
-            requested: 'austria-vienna',
-            country: 'at',
-            city: 'vie',
-            hostnameLabel: 'at-vie-wg-001',
-            resolvedAlias: 'austria-vienna',
-          },
-          mullvad: {
-            accountNumber: '123456789012',
-            deviceName: 'mullgate-status-test-2',
-            lastProvisionedAt: timestamp,
-            relayConstraints: {
-              providers: [],
-            },
-            wireguard: {
-              publicKey: 'public-key-value-2',
-              privateKey: 'private-key-value-2',
-              ipv4Address: '10.64.12.35/32',
-              ipv6Address: 'fc00:bbbb:bbbb:bb01::1:1235/128',
-              gatewayIpv4: '10.64.0.1',
-              gatewayIpv6: 'fc00:bbbb:bbbb:bb01::1',
-              dnsServers: ['10.64.0.1'],
-              peerPublicKey: 'peer-public-key-value-2',
-              peerEndpoint: 'at-vie-wg-001.relays.mullvad.net:51820',
-            },
-          },
-          runtime: {
-            routeId: 'at-vie-wg-001',
-            wireproxyServiceName: 'wireproxy-at-vie-wg-001',
-            haproxyBackendName: 'route-at-vie-wg-001',
-            wireproxyConfigFile: 'wireproxy-at-vie-wg-001.conf',
-          },
-        },
+          requested: 'austria-vienna',
+          country: 'at',
+          city: 'vie',
+          hostnameLabel: 'at-vie-wg-001',
+          resolvedAlias: 'austria-vienna',
+        }),
       ],
     },
-    runtime: {
-      backend: 'wireproxy',
-      sourceConfigPath: paths.configFile,
-      wireproxyConfigPath: paths.wireproxyConfigFile,
-      wireproxyConfigTestReportPath: paths.wireproxyConfigTestReportFile,
-      relayCachePath: paths.provisioningCacheFile,
-      dockerComposePath: paths.dockerComposePath,
-      runtimeBundle: {
-        bundleDir: paths.runtimeBundleDir,
-        dockerComposePath: paths.runtimeComposeFile,
-        httpsSidecarConfigPath: paths.runtimeHttpsSidecarConfigFile,
-        manifestPath: paths.runtimeBundleManifestFile,
-      },
+    runtime: createFixtureRuntime({
+      paths,
       status: {
         phase: 'validated',
         lastCheckedAt: timestamp,
         message: 'Fixture config already validated.',
       },
-    },
+    }),
     diagnostics: {
       lastRuntimeStartReportPath: paths.runtimeStartDiagnosticsFile,
       lastRuntimeStart: null,
@@ -381,28 +317,28 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       inspectRuntime: async () =>
         createComposeStatusSuccess(paths.runtimeComposeFile, [
           {
+            name: 'mullgate-entry-tunnel-1',
+            service: 'entry-tunnel',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 10 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
+            name: 'mullgate-route-proxy-1',
+            service: 'route-proxy',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 10 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
             name: 'mullgate-routing-layer-1',
             service: 'routing-layer',
-            project: 'mullgate',
-            state: 'running',
-            health: 'healthy',
-            status: 'Up 10 seconds',
-            exitCode: 0,
-            publishers: [],
-          },
-          {
-            name: 'mullgate-wireproxy-se-got-wg-101-1',
-            service: 'wireproxy-se-got-wg-101',
-            project: 'mullgate',
-            state: 'running',
-            health: 'healthy',
-            status: 'Up 10 seconds',
-            exitCode: 0,
-            publishers: [],
-          },
-          {
-            name: 'mullgate-wireproxy-at-vie-wg-001-1',
-            service: 'wireproxy-at-vie-wg-001',
             project: 'mullgate',
             state: 'running',
             health: 'healthy',
@@ -441,19 +377,24 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
       runtime story: Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.
       host networking: Native host networking available
-      host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
+      host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and shared route-proxy listeners can bind directly to the saved route IPs.
       compose inspection: available
       compose project: mullgate
       compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
       container summary: 3 total, 3 running, 0 starting, 0 stopped, 0 unhealthy
-      routing layer: running (status=Up 10 seconds, health=healthy, exit=0)
+      entry-tunnel: running (status=Up 10 seconds, health=healthy, exit=0)
+      route-proxy: running (status=Up 10 seconds, health=healthy, exit=0)
+      routing-layer: running (status=Up 10 seconds, health=healthy, exit=0)
 
       routes
       1. se-got-wg-101 -> 127.0.0.1
          alias: sweden-gothenburg
          route id: se-got-wg-101
-         service: wireproxy-se-got-wg-101
+         shared service: route-proxy
          live state: running (status=Up 10 seconds, health=healthy, exit=0)
+         socks5 listener: 127.0.0.1:1080
+         http listener: 127.0.0.1:8080
+         https backend: route-se-got-wg-101
          dns: not required; use direct bind IP entrypoints
          socks5 hostname: socks5://se-got-wg-101:1080
          socks5 direct ip: socks5://127.0.0.1:1080
@@ -462,8 +403,11 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       2. at-vie-wg-001 -> 127.0.0.2
          alias: austria-vienna
          route id: at-vie-wg-001
-         service: wireproxy-at-vie-wg-001
+         shared service: route-proxy
          live state: running (status=Up 10 seconds, health=healthy, exit=0)
+         socks5 listener: 127.0.0.2:1080
+         http listener: 127.0.0.2:8080
+         https backend: route-at-vie-wg-001
          dns: not required; use direct bind IP entrypoints
          socks5 hostname: socks5://at-vie-wg-001:1080
          socks5 direct ip: socks5://127.0.0.2:1080
@@ -502,14 +446,14 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       message:
         'Docker Compose failed to start the Mullgate runtime bundle for proxy-password / 123456789012 / private-key-value-2.',
       cause:
-        'service wireproxy-at-vie-wg-001 crashed while reading -----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY----- and account 123456789012',
+        'service route-proxy crashed while reading -----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY----- and account 123456789012',
       artifactPath: null,
       composeFilePath: null,
       validationSource: 'wireproxy-binary/configtest (2 routes)',
       routeId: 'at-vie-wg-001',
       routeHostname: 'at-vie-wg-001',
       routeBindIp: '127.0.0.2',
-      serviceName: 'wireproxy-at-vie-wg-001',
+      serviceName: 'route-proxy',
       command: null,
     } satisfies RuntimeStartDiagnostic;
     const { store, paths } = await seedSavedConfig(env, {
@@ -536,6 +480,26 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       inspectRuntime: async () =>
         createComposeStatusSuccess(paths.runtimeComposeFile, [
           {
+            name: 'mullgate-entry-tunnel-1',
+            service: 'entry-tunnel',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 30 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
+            name: 'mullgate-route-proxy-1',
+            service: 'route-proxy',
+            project: 'mullgate',
+            state: 'exited',
+            health: null,
+            status: 'Exited (2) 3 seconds ago',
+            exitCode: 2,
+            publishers: [],
+          },
+          {
             name: 'mullgate-routing-layer-1',
             service: 'routing-layer',
             project: 'mullgate',
@@ -543,26 +507,6 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
             health: 'healthy',
             status: 'Up 30 seconds',
             exitCode: 0,
-            publishers: [],
-          },
-          {
-            name: 'mullgate-wireproxy-se-got-wg-101-1',
-            service: 'wireproxy-se-got-wg-101',
-            project: 'mullgate',
-            state: 'running',
-            health: 'healthy',
-            status: 'Up 30 seconds',
-            exitCode: 0,
-            publishers: [],
-          },
-          {
-            name: 'mullgate-wireproxy-at-vie-wg-001-1',
-            service: 'wireproxy-at-vie-wg-001',
-            project: 'mullgate',
-            state: 'exited',
-            health: null,
-            status: 'Exited (2) 3 seconds ago',
-            exitCode: 2,
             publishers: [],
           },
         ]),
@@ -596,19 +540,24 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
       runtime story: Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.
       host networking: Native host networking available
-      host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
+      host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and shared route-proxy listeners can bind directly to the saved route IPs.
       compose inspection: available
       compose project: mullgate
       compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
       container summary: 3 total, 2 running, 0 starting, 1 stopped, 0 unhealthy
-      routing layer: running (status=Up 30 seconds, health=healthy, exit=0)
+      entry-tunnel: running (status=Up 30 seconds, health=healthy, exit=0)
+      route-proxy: exited (status=Exited (2) 3 seconds ago, exit=2)
+      routing-layer: running (status=Up 30 seconds, health=healthy, exit=0)
 
       routes
       1. se-got-wg-101 -> 127.0.0.1
          alias: sweden-gothenburg
          route id: se-got-wg-101
-         service: wireproxy-se-got-wg-101
-         live state: running (status=Up 30 seconds, health=healthy, exit=0)
+         shared service: route-proxy
+         live state: exited (status=Exited (2) 3 seconds ago, exit=2)
+         socks5 listener: 127.0.0.1:1080
+         http listener: 127.0.0.1:8080
+         https backend: route-se-got-wg-101
          dns: not required; use direct bind IP entrypoints
          socks5 hostname: socks5://se-got-wg-101:1080
          socks5 direct ip: socks5://127.0.0.1:1080
@@ -617,8 +566,11 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       2. at-vie-wg-001 -> 127.0.0.2
          alias: austria-vienna
          route id: at-vie-wg-001
-         service: wireproxy-at-vie-wg-001
+         shared service: route-proxy
          live state: exited (status=Exited (2) 3 seconds ago, exit=2)
+         socks5 listener: 127.0.0.2:1080
+         http listener: 127.0.0.2:8080
+         https backend: route-at-vie-wg-001
          dns: not required; use direct bind IP entrypoints
          socks5 hostname: socks5://at-vie-wg-001:1080
          socks5 direct ip: socks5://127.0.0.2:1080
@@ -634,8 +586,8 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       - Use \`mullgate hosts\` if you want a copy/paste /etc/hosts block for this machine.
 
       warnings
-      - route at-vie-wg-001 is stopped: exited (status=Exited (2) 3 seconds ago, exit=2).
-      - saved runtime status says running, but live compose status shows stopped or degraded route containers. Trust live compose over the saved phase and rerun \`mullgate start\` after fixing the failing route.
+      - route-proxy is not fully healthy: exited (status=Exited (2) 3 seconds ago, exit=2).
+      - saved runtime status says running, but live compose status shows stopped or degraded shared services. Trust live compose over the saved phase and rerun \`mullgate start\` after fixing the failing service.
       - the last recorded \`mullgate start\` attempt failed; inspect the last-start diagnostics below before restarting blindly.
 
       last start diagnostics
@@ -647,11 +599,9 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       route id: at-vie-wg-001
       route hostname: at-vie-wg-001
       route bind ip: 127.0.0.2
-      service: wireproxy-at-vie-wg-001
-      reason: Docker Compose failed to start the Mullgate runtime bundle for proxy-password / 123456789012 / private-key-value-2.
-      cause: service wireproxy-at-vie-wg-001 crashed while reading -----BEGIN PRIVATE KEY-----
-      fixture
-      -----END PRIVATE KEY----- and account 123456789012"
+      service: route-proxy
+      reason: Docker Compose failed to start the Mullgate runtime bundle for [redacted] / [redacted] / private-key-value-2.
+      cause: service route-proxy crashed while reading [redacted] and account [redacted]"
     `);
   });
 
@@ -737,19 +687,24 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       platform summary: Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
       runtime story: Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.
       host networking: Native host networking available
-      host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and per-route wireproxy listeners can bind directly to the saved route IPs.
+      host networking summary: Docker host networking behaves as expected on Linux, so the routing layer and shared route-proxy listeners can bind directly to the saved route IPs.
       compose inspection: available
       compose project: n/a
       compose command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
       container summary: 0 total, 0 running, 0 starting, 0 stopped, 0 unhealthy
-      routing layer: not present in live compose status
+      entry-tunnel: not present in live compose status
+      route-proxy: not present in live compose status
+      routing-layer: not present in live compose status
 
       routes
       1. se-got-wg-101 -> 127.0.0.1
          alias: sweden-gothenburg
          route id: se-got-wg-101
-         service: wireproxy-se-got-wg-101
+         shared service: route-proxy
          live state: not present in live compose status
+         socks5 listener: 127.0.0.1:1080
+         http listener: 127.0.0.1:8080
+         https backend: route-se-got-wg-101
          dns: not required; use direct bind IP entrypoints
          socks5 hostname: socks5://se-got-wg-101:1080
          socks5 direct ip: socks5://127.0.0.1:1080
@@ -758,8 +713,11 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       2. at-vie-wg-001 -> 127.0.0.2
          alias: austria-vienna
          route id: at-vie-wg-001
-         service: wireproxy-at-vie-wg-001
+         shared service: route-proxy
          live state: not present in live compose status
+         socks5 listener: 127.0.0.2:1080
+         http listener: 127.0.0.2:8080
+         https backend: route-at-vie-wg-001
          dns: not required; use direct bind IP entrypoints
          socks5 hostname: socks5://at-vie-wg-001:1080
          socks5 direct ip: socks5://127.0.0.2:1080
@@ -776,9 +734,9 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
 
       warnings
       - no persisted last-start report exists yet; run \`mullgate start\` to capture a fresh launch diagnostic.
-      - routing layer is not fully healthy: not present in live compose status.
-      - route se-got-wg-101 is stopped: not present in live compose status.
-      - route at-vie-wg-001 is stopped: not present in live compose status.
+      - entry-tunnel is not fully healthy: not present in live compose status.
+      - route-proxy is not fully healthy: not present in live compose status.
+      - routing-layer is not fully healthy: not present in live compose status.
 
       last start diagnostics
       status: none persisted yet"

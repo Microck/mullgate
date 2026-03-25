@@ -50,6 +50,7 @@ Choose the path that matches the user’s goal:
 ## Mental Model
 
 - Mullgate is not a full-device VPN client. It is a local proxy gateway with explicit per-route entrypoints.
+- Mullgate provisions one shared Mullvad WireGuard entry device and fans out to per-route Mullvad SOCKS5 exits, so route count does not imply one Mullvad slot per route.
 - Route selection stays truthful only when hostnames resolve to the route’s assigned bind IP.
 - In non-loopback multi-route setups, distinct routes require distinct bind IPs.
 - `status`, `doctor`, `hosts`, and `exposure` are part of the product surface, not optional extras.
@@ -61,6 +62,7 @@ Choose the path that matches the user’s goal:
 - On macOS and Windows, keep install, config, `path`, `status`, and `doctor` truthful, but do not claim the shipped Docker runtime is fully equivalent to Linux.
 - Use `mullgate setup` for guided setup unless the user explicitly wants automation.
 - Use `mullgate setup --non-interactive` only when all required inputs are available through flags or environment variables.
+- Do not describe Mullgate as consuming one Mullvad WireGuard device per route. The current runtime uses one shared entry device and many logical exits.
 - Keep hostname-based routing truthful: each non-loopback route needs its own bind IP, and each hostname must resolve to that route’s bind IP.
 - Prefer `mullgate exposure` and `mullgate hosts` over hand-written explanations when deciding whether a hostname or bind plan is correct.
 - Use `mullgate validate --refresh` or `mullgate start` after exposure changes when derived runtime state may be stale.
