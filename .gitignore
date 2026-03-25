@@ -27,6 +27,7 @@ coverage/
 .cache/
 tmp/
 .tmp/
+.bg-shell/
 pnpm-publish-summary.json
 AGENTS.md
 .vercel
