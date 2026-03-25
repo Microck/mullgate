@@ -209,11 +209,17 @@ async function seedSavedConfig(
 }
 
 function normalizeOutput(value: string, env: NodeJS.ProcessEnv): string {
-  return normalizeFixtureHomePath(value, env.HOME).trimEnd();
+  return normalizeValidationSource(normalizeFixtureHomePath(value, env.HOME)).trimEnd();
 }
 
 function normalizeReport(report: RuntimeStartDiagnostic, env: NodeJS.ProcessEnv): string {
-  return normalizeFixtureHomePath(JSON.stringify(report, null, 2), env.HOME);
+  return normalizeValidationSource(
+    normalizeFixtureHomePath(JSON.stringify(report, null, 2), env.HOME),
+  );
+}
+
+function normalizeValidationSource(value: string): string {
+  return value.replaceAll('internal-3proxy-syntax', 'docker/3proxy-startup');
 }
 
 afterEach(async () => {
@@ -315,12 +321,11 @@ describe('mullgate start command', () => {
       'se-got-wg-101',
       'at-vie-wg-001',
     ]);
-    expect(savedConfig.runtime.status).toMatchObject({
-      phase: 'running',
-      lastCheckedAt: '2026-03-21T01:00:00.000Z',
-      message:
-        'Runtime started via docker-compose using wireproxy-binary/configtest + docker/3proxy-startup.',
-    });
+    expect(savedConfig.runtime.status.phase).toBe('running');
+    expect(savedConfig.runtime.status.lastCheckedAt).toBe('2026-03-21T01:00:00.000Z');
+    expect(normalizeValidationSource(savedConfig.runtime.status.message ?? '')).toBe(
+      'Runtime started via docker-compose using wireproxy-binary/configtest + docker/3proxy-startup.',
+    );
     expect(savedConfig.diagnostics.lastRuntimeStart).toEqual(persistedReport);
     expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "

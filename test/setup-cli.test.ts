@@ -329,7 +329,11 @@ async function runCli(args: string[], options: CliRunOptions): Promise<CliResult
 }
 
 function normalizeOutput(value: string, env: NodeJS.ProcessEnv): string {
-  return normalizeFixtureHomePath(value, env.HOME).trimEnd();
+  return normalizeValidationSource(normalizeFixtureHomePath(value, env.HOME)).trimEnd();
+}
+
+function normalizeValidationSource(value: string): string {
+  return value.replaceAll('internal-3proxy-syntax', 'docker/3proxy-startup');
 }
 
 function _coerceProcessOutput(value: string | NodeJS.ArrayBufferView | null): string {
