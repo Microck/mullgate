@@ -42,31 +42,123 @@ the hard part is that mullvad only gives each account 5 wireguard devices. once 
 
 ## architecture
 
-### runtime flow
-
 ```mermaid
-flowchart LR
-    A[Client app or remote client] --> B[Route-specific hostname or bind IP]
-    B --> C[Mullgate listener]
-    C --> D[Mullgate routing layer]
-    D --> E[Selected relay or configured exact exit]
-    E --> F[Mullvad-backed observed exit]
-    F --> G[Destination]
+flowchart TB
+    operator[Operator]
+
+    subgraph cli[CLI command surface]
+        setup[mullgate setup]
+        exposure[mullgate exposure]
+        regions[mullgate regions]
+        export[mullgate export]
+        relays[mullgate relays list or probe]
+        recommend[mullgate recommend]
+        validate[mullgate validate --refresh]
+        start[mullgate start]
+        status[mullgate status]
+        doctor[mullgate doctor]
+        hosts[mullgate hosts]
+        autostart[mullgate autostart]
+        path[mullgate path]
+    end
+
+    subgraph state[Canonical config and saved state]
+        config[config.json\nroutes plus credentials plus exposure posture]
+        cache[relay cache plus exact relay choices]
+        artifacts[derived runtime artifacts\nwireproxy configs plus docker-compose plus runtime-manifest plus validation metadata plus last-start]
+    end
+
+    subgraph planner[Route and exposure planning]
+        routeIntent[route aliases plus requested locations]
+        bindPlan[bind IP plan\nloopback or private-network or public]
+        hostnamePlan[hostname plan\nroute alias or base-domain hostname or direct IP]
+        exactExit[exact relay hostname per route\noptional pinned recommendation]
+    end
+
+    subgraph runtime[Linux-first live runtime]
+        listeners[route-specific SOCKS5, HTTP, and HTTPS listeners]
+        router[routing by destination bind IP]
+        backends[one rendered backend per configured route]
+        docker[Docker runtime bundle]
+    end
+
+    subgraph clients[Clients]
+        localClient[local apps]
+        remoteClient[remote LAN, VPN, or internet clients]
+        dns[DNS or hosts mapping]
+    end
+
+    subgraph upstream[Mullvad-backed upstream path]
+        relayCatalog[Mullvad relay catalog]
+        selectedRelay[selected Mullvad relay per route]
+        wg[one WireGuard identity per route]
+        destination[destination and observed exit]
+    end
+
+    operator --> setup
+    operator --> exposure
+    operator --> regions
+    operator --> export
+    operator --> relays
+    operator --> recommend
+    operator --> validate
+    operator --> start
+    operator --> status
+    operator --> doctor
+    operator --> hosts
+    operator --> autostart
+    operator --> path
+
+    setup --> config
+    setup --> routeIntent
+    setup --> bindPlan
+    setup --> hostnamePlan
+    exposure --> bindPlan
+    exposure --> hostnamePlan
+    exposure --> config
+    regions --> export
+    relays --> relayCatalog
+    relayCatalog --> recommend
+    recommend --> exactExit
+    recommend --> cache
+    exactExit --> config
+
+    routeIntent --> config
+    bindPlan --> config
+    hostnamePlan --> config
+    config --> artifacts
+    cache --> artifacts
+    validate --> artifacts
+    start --> artifacts
+    start --> docker
+    docker --> listeners
+    listeners --> router
+    router --> backends
+    backends --> selectedRelay
+    selectedRelay --> wg
+    wg --> destination
+
+    localClient --> listeners
+    remoteClient --> dns
+    dns --> listeners
+    hosts --> dns
+    hostnamePlan --> dns
+
+    status --> artifacts
+    status --> docker
+    doctor --> config
+    doctor --> artifacts
+    doctor --> dns
+    doctor --> docker
+    path --> config
+    path --> artifacts
+
+    bindPlan -.non-loopback multi-route requires one distinct bind IP per route.-> listeners
+    hostnamePlan -.hostname-selected routing stays truthful only when the hostname resolves to that route's bind IP.-> dns
+    wg -.current scaling limit: one Mullvad WireGuard device or key per route.-> destination
 ```
 
-### hostname truth model
-
-```mermaid
-flowchart TD
-    A[Configured route] --> B[Assigned bind IP]
-    A --> C[Published hostname]
-    C --> D[DNS or hosts resolution]
-    D --> B
-    B --> E[Route-specific listener]
-    E --> F[Correct route selection]
-
-    X[Two hostnames on one bind IP] --> Y[Not two truthful routes]
-```
+the diagram above shows the current shipped Mullgate model end to end: setup writes canonical config, exposure defines bind-IP and hostname truth, relay tooling can pin exact exits, `start` renders and launches the Docker runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces.
 
 ## quickstart
 
