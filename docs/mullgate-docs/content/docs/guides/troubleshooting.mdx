@@ -30,8 +30,10 @@ What to do:
 
 1. run `mullgate exposure`
 2. confirm the route-to-bind-IP mapping
-3. verify local hosts or DNS resolution
+3. if you are intentionally using hostname entrypoints, verify local hosts or DNS resolution
 4. run `mullgate doctor`
+
+In loopback mode without a base domain, direct bind-IP entrypoints are the canonical local path. Missing host-file mappings only matter when you want hostname shortcuts on that same machine.
 
 ### Remote clients cannot prove hostname-based routing
 
@@ -61,6 +63,20 @@ mullgate validate --refresh
 # or
 mullgate start
 ```
+
+### Installed command says the config version is unsupported
+
+Likely cause:
+
+- the local machine still has a stale pre-v2 config/runtime bundle
+
+What to do:
+
+1. back up or remove the config file and runtime directory named in the error
+2. rerun `mullgate setup`
+3. rerun `mullgate start`
+
+Do not expect the current CLI to operate on the old runtime bundle in place.
 
 ### macOS or Windows behaves differently from Linux
 

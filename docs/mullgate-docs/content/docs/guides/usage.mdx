@@ -95,6 +95,7 @@ What to expect:
 - route 1 gets `127.0.0.1`
 - route 2 gets `127.0.0.2`
 - the configured hostnames default to the route aliases in loopback mode
+- direct bind-IP entrypoints work immediately and are the canonical local access path
 - hostname access on the local machine works only after you install the emitted hosts block
 
 ![Private-network exposure demo](/images/demos/exposure-private-network.gif)
@@ -139,6 +140,19 @@ In that posture:
 - there are no DNS records to publish
 - direct bind-IP entrypoints are the intended access path
 - `mullgate hosts` is still useful for local-only hostname testing, but it is no longer required for remote clients
+
+## Unsupported local config versions
+
+The current CLI only operates on the current v2 config/runtime shape.
+
+If an installed `mullgate` command reports an unsupported config version:
+
+- treat the reported config/runtime paths as stale local state
+- back up or remove the config file and runtime directory named in the error
+- rerun `mullgate setup`
+- rerun `mullgate start`
+
+Do not expect the current CLI to keep operating on an older runtime bundle in place.
 
 ## Exporting proxy lists for clients
 
@@ -268,6 +282,8 @@ That mapping can come from:
 - published DNS records when you use `--base-domain`
 - some other trusted name-resolution system that preserves the same hostname-to-bind-IP mapping
 
+In loopback mode without a base domain, those hostname mappings are optional. Direct bind-IP entrypoints remain the canonical local path even when you skip the hosts block.
+
 ### Why the mapping matters for multi-route proof
 
 Mullgate's routing layer dispatches by **destination bind IP**, not by a late application-level hint. That means:
@@ -275,7 +291,7 @@ Mullgate's routing layer dispatches by **destination bind IP**, not by a late ap
 - every remote route needs its own bind IP
 - hostname proof only works when name resolution lands on the correct IP first
 - if two hostnames resolve to the same bind IP, they collapse to the same route
-- if a hostname resolves somewhere else, `mullgate doctor` reports hostname drift and points you back to `mullgate hosts`
+- in DNS-backed or non-loopback hostname setups, `mullgate doctor` reports hostname drift and points you back to `mullgate hosts`
 
 ### Example `curl` forms
 

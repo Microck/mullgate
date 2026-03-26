@@ -194,6 +194,12 @@ function createLegacyFixtureConfig(env: NodeJS.ProcessEnv): Record<string, unkno
   };
 }
 
+function createUnsupportedVersionFixtureConfig(env: NodeJS.ProcessEnv): Record<string, unknown> {
+  const config = JSON.parse(JSON.stringify(createFixtureConfig(env))) as Record<string, unknown>;
+  config.version = 1;
+  return config;
+}
+
 afterEach(async () => {
   cleanupWindowsFixturePaths();
   await Promise.all(
@@ -484,6 +490,38 @@ describe('mullgate config store', () => {
         ],
       },
     });
+  });
+
+  it('fails with an operator recovery message for unsupported config versions', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const store = new ConfigStore(paths);
+    const staleConfig = createUnsupportedVersionFixtureConfig(env);
+
+    await mkdir(path.dirname(paths.configFile), { recursive: true, mode: 0o700 });
+    await writeFile(paths.configFile, `${JSON.stringify(staleConfig, null, 2)}\n`, 'utf8');
+
+    const loaded = await store.load();
+
+    expect(loaded).toMatchObject({
+      ok: false,
+      phase: 'parse-config',
+      source: 'file',
+      artifactPath: paths.configFile,
+      paths,
+    });
+
+    if (loaded.ok) {
+      return;
+    }
+
+    expect(loaded.message).toContain('Config version 1 is no longer supported.');
+    expect(loaded.message).toContain(
+      'This is stale local state, not a config the current CLI will operate.',
+    );
+    expect(loaded.message).toContain(paths.configFile);
+    expect(loaded.message).toContain(paths.runtimeDir);
+    expect(loaded.message).toContain('rerun `mullgate setup` and `mullgate start`');
   });
 
   it('persists routed configs atomically and mirrors the first route back into legacy fields', async () => {

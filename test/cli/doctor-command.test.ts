@@ -556,7 +556,8 @@ describe('mullgate doctor command', () => {
          detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
 
       7. hostname-resolution: pass
-         summary: Configured hostnames resolve to the bind IPs promised by the saved exposure contract.
+         summary: Loopback direct bind-IP entrypoints are canonical, and the optional hostname shortcuts currently resolve correctly.
+         detail: Loopback mode without a base domain keeps direct bind-IP entrypoints canonical. Hostname shortcuts are optional for local testing.
          detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
          detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
 
@@ -759,7 +760,8 @@ describe('mullgate doctor command', () => {
          detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
 
       7. hostname-resolution: pass
-         summary: Configured hostnames resolve to the bind IPs promised by the saved exposure contract.
+         summary: Loopback direct bind-IP entrypoints are canonical, and the optional hostname shortcuts currently resolve correctly.
+         detail: Loopback mode without a base domain keeps direct bind-IP entrypoints canonical. Hostname shortcuts are optional for local testing.
          detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
          detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
 
@@ -874,12 +876,12 @@ describe('mullgate doctor command', () => {
 
     await action();
 
-    expect(process.exitCode).toBe(1);
-    expect(stdout.value.current).toBe('');
-    expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
+    expect(process.exitCode).toBe(0);
+    expect(stderr.value.current).toBe('');
+    expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
       "
       Mullgate doctor
-      overall: fail
+      overall: degraded
       checked at: 2026-03-21T08:00:00.000Z
       mode: offline-default
       config: /tmp/mullgate-home/config/mullgate/config.json
@@ -960,12 +962,13 @@ describe('mullgate doctor command', () => {
          detail: route[1] se-got-wg-101 bind-ip=127.0.0.1
          detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
 
-      7. hostname-resolution: fail
-         summary: One or more route hostnames no longer resolve to their saved bind IPs.
+      7. hostname-resolution: degraded
+         summary: Loopback hostname shortcuts are incomplete, but direct bind-IP entrypoints remain the canonical local access path.
+         detail: Loopback mode without a base domain keeps direct bind-IP entrypoints canonical. Install host-file mappings only if you want local hostname shortcuts.
          detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
          detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.9
          detail: Route at-vie-wg-001 expects at-vie-wg-001 to resolve to 127.0.0.2, but it currently resolves to 127.0.0.9.
-         remediation: Use \`mullgate hosts\` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun \`mullgate doctor\`.
+         remediation: Keep using the direct bind-IP entrypoints for normal loopback access. If you want hostname-based local testing, use \`mullgate hosts\` and install the emitted hosts block on this machine.
 
       8. runtime: degraded
          summary: No live compose containers are running right now.
@@ -980,6 +983,353 @@ describe('mullgate doctor command', () => {
          detail: routing-layer=not present in live compose status
          detail: route se-got-wg-101 publishes se-got-wg-101 -> 127.0.0.1 via route-proxy
          detail: route at-vie-wg-001 publishes at-vie-wg-001 -> 127.0.0.2 via route-proxy
+         remediation: Run \`mullgate start\` after fixing any validation, bind, or last-start issues reported above.
+
+      9. last-start: degraded
+         summary: No persisted last-start diagnostic exists yet.
+         detail: Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.
+         remediation: Run \`mullgate start\` once to capture a persisted launch report that future doctor runs can inspect."
+    `);
+  });
+
+  it('keeps loopback hostname shortcuts advisory when direct bind-IP entrypoints are still canonical', async () => {
+    const env = createTempEnvironment();
+    const { store, paths } = await seedSavedConfig(env, {
+      configure: (config) => ({
+        ...config,
+        runtime: {
+          ...config.runtime,
+          status: {
+            phase: 'running',
+            lastCheckedAt: '2026-03-21T07:58:00.000Z',
+            message: 'Runtime is already up.',
+          },
+        },
+      }),
+    });
+    const stdout = createBufferSink();
+    const stderr = createBufferSink();
+
+    const action = createDoctorCommandAction({
+      store,
+      stdout,
+      stderr,
+      checkedAt: '2026-03-21T08:00:00.000Z',
+      resolveHostname: async (hostname) => {
+        if (hostname === 'se-got-wg-101') {
+          return ['127.0.0.1'];
+        }
+        if (hostname === 'at-vie-wg-001') {
+          throw new Error('getaddrinfo ENOTFOUND at-vie-wg-001');
+        }
+        throw new Error(`Unexpected hostname ${hostname}`);
+      },
+      inspectRuntime: async () =>
+        createComposeStatusSuccess(paths.runtimeComposeFile, [
+          {
+            name: 'mullgate-entry-tunnel-1',
+            service: 'entry-tunnel',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 40 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
+            name: 'mullgate-route-proxy-1',
+            service: 'route-proxy',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 40 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
+            name: 'mullgate-routing-layer-1',
+            service: 'routing-layer',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 40 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+        ]),
+    });
+
+    await action();
+
+    expect(process.exitCode).toBe(0);
+    expect(stderr.value.current).toBe('');
+    expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
+      "
+      Mullgate doctor
+      overall: degraded
+      checked at: 2026-03-21T08:00:00.000Z
+      mode: offline-default
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      runtime dir: /tmp/mullgate-home/state/mullgate/runtime
+      relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+      entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+      route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+      runtime validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
+      last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (missing)
+
+      checks
+      1. config: pass
+         summary: Loaded the canonical Mullgate config successfully.
+         detail: config=/tmp/mullgate-home/config/mullgate/config.json
+         detail: routes=2
+         detail: saved-runtime-phase=running
+         detail: exposure-mode=loopback
+
+      2. platform-support: pass
+         summary: Current platform matches the fully supported Linux runtime contract.
+         detail: platform=linux
+         detail: platform-source=env:MULLGATE_PLATFORM
+         detail: support-level=full
+         detail: mode-label=Linux-first runtime support
+         detail: summary=Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
+         detail: runtime-story=Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.
+         detail: config-paths=supported
+         detail: config-workflow=supported
+         detail: runtime-artifacts=supported
+         detail: runtime-execution=supported
+         detail: diagnostics=supported
+         detail: host-networking=Native host networking available
+         detail: host-networking-summary=Docker host networking behaves as expected on Linux, so the routing layer and shared route-proxy listeners can bind directly to the saved route IPs.
+         detail: guidance=Linux is the reference runtime target for the current Mullgate topology and verification flow.
+         detail: guidance=Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
+
+      3. validation-artifacts: pass
+         summary: Shared entry-wireproxy and route-proxy artifacts are present, and the persisted runtime validation report passed.
+         detail: saved-runtime-phase=running
+         detail: saved-runtime-message=Runtime is already up.
+         detail: entry-wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf (present)
+         detail: route-proxy-config=/tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg (present)
+         detail: validation-report=/tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+         detail: validation-status=success
+         detail: validation-source=validation-suite
+         detail: check[entry-wireproxy]=ok via internal-syntax/internal-syntax
+         detail: check[route-proxy]=ok via internal-syntax/internal-syntax
+
+      4. relay-cache: pass
+         summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
+         detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
+         detail: source=app-wireguard-v1
+         detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/
+         detail: fetched-at=2026-03-21T07:55:00.000Z
+         detail: relay-count=2
+         detail: age=0h
+
+      5. exposure-contract: pass
+         summary: Saved exposure contract is internally coherent.
+         detail: mode=loopback
+         detail: mode-label=Loopback / local-only
+         detail: recommendation=local-default
+         detail: posture-summary=Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
+         detail: remote-story=Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+         detail: base-domain=n/a
+         detail: allow-lan=no
+         detail: dns-records=0
+         detail: routes=2
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
+
+      6. bind-posture: pass
+         summary: Saved bind IPs match the configured exposure posture.
+         detail: setup.bind.host=127.0.0.1
+         detail: route[1] se-got-wg-101 bind-ip=127.0.0.1
+         detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
+
+      7. hostname-resolution: degraded
+         summary: Loopback hostname shortcuts are incomplete, but direct bind-IP entrypoints remain the canonical local access path.
+         detail: Loopback mode without a base domain keeps direct bind-IP entrypoints canonical. Install host-file mappings only if you want local hostname shortcuts.
+         detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
+         detail: Route at-vie-wg-001 could not resolve at-vie-wg-001: getaddrinfo ENOTFOUND at-vie-wg-001.
+         remediation: Keep using the direct bind-IP entrypoints for normal loopback access. If you want hostname-based local testing, use \`mullgate hosts\` and install the emitted hosts block on this machine.
+
+      8. runtime: pass
+         summary: Live Docker Compose status matches the expected shared entry-tunnel, route-proxy, and routing-layer services.
+         detail: compose-command=docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
+         detail: containers=3
+         detail: running=3
+         detail: starting=0
+         detail: stopped=0
+         detail: unhealthy=0
+         detail: entry-tunnel=running (status=Up 40 seconds, health=healthy, exit=0)
+         detail: route-proxy=running (status=Up 40 seconds, health=healthy, exit=0)
+         detail: routing-layer=running (status=Up 40 seconds, health=healthy, exit=0)
+         detail: route se-got-wg-101 publishes se-got-wg-101 -> 127.0.0.1 via route-proxy
+         detail: route at-vie-wg-001 publishes at-vie-wg-001 -> 127.0.0.2 via route-proxy
+
+      9. last-start: degraded
+         summary: No persisted last-start diagnostic exists yet.
+         detail: Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.
+         remediation: Run \`mullgate start\` once to capture a persisted launch report that future doctor runs can inspect."
+    `);
+  });
+
+  it('still fails hostname resolution for DNS-backed hostnames that drift away from their bind IPs', async () => {
+    const env = createTempEnvironment();
+    const { store, paths } = await seedSavedConfig(env, {
+      configure: (config) => ({
+        ...config,
+        setup: {
+          ...config.setup,
+          bind: {
+            ...config.setup.bind,
+            host: '192.168.10.10',
+          },
+          exposure: {
+            ...config.setup.exposure,
+            mode: 'private-network',
+            allowLan: true,
+            baseDomain: 'proxy.example.com',
+          },
+        },
+        routing: {
+          locations: config.routing.locations.map((location, index) => ({
+            ...location,
+            bindIp: index === 0 ? '192.168.10.10' : '192.168.10.11',
+            hostname: `${location.alias}.proxy.example.com`,
+          })),
+        },
+      }),
+    });
+    const stdout = createBufferSink();
+    const stderr = createBufferSink();
+
+    const action = createDoctorCommandAction({
+      store,
+      stdout,
+      stderr,
+      checkedAt: '2026-03-21T08:00:00.000Z',
+      resolveHostname: async (hostname) => {
+        if (hostname === 'sweden-gothenburg.proxy.example.com') {
+          return ['192.168.10.10'];
+        }
+        if (hostname === 'austria-vienna.proxy.example.com') {
+          return ['192.168.10.99'];
+        }
+        throw new Error(`Unexpected hostname ${hostname}`);
+      },
+      inspectRuntime: async () => createComposeStatusSuccess(paths.runtimeComposeFile, []),
+    });
+
+    await action();
+
+    expect(process.exitCode).toBe(1);
+    expect(stdout.value.current).toBe('');
+    expect(`\n${normalizeOutput(stderr.value.current, env)}`).toMatchInlineSnapshot(`
+      "
+      Mullgate doctor
+      overall: fail
+      checked at: 2026-03-21T08:00:00.000Z
+      mode: offline-default
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      runtime dir: /tmp/mullgate-home/state/mullgate/runtime
+      relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+      entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+      route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+      runtime validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json (present)
+      last start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json (missing)
+
+      checks
+      1. config: pass
+         summary: Loaded the canonical Mullgate config successfully.
+         detail: config=/tmp/mullgate-home/config/mullgate/config.json
+         detail: routes=2
+         detail: saved-runtime-phase=validated
+         detail: exposure-mode=private-network
+
+      2. platform-support: pass
+         summary: Current platform matches the fully supported Linux runtime contract.
+         detail: platform=linux
+         detail: platform-source=env:MULLGATE_PLATFORM
+         detail: support-level=full
+         detail: mode-label=Linux-first runtime support
+         detail: summary=Linux is the fully supported Mullgate runtime environment. The shipped Docker host-networking model, per-route bind IP listeners, and runtime-manifest diagnostics are designed around Linux network semantics.
+         detail: runtime-story=Use Linux for the full setup, runtime, status, and doctor workflow with the current Docker-first topology.
+         detail: config-paths=supported
+         detail: config-workflow=supported
+         detail: runtime-artifacts=supported
+         detail: runtime-execution=supported
+         detail: diagnostics=supported
+         detail: host-networking=Native host networking available
+         detail: host-networking-summary=Docker host networking behaves as expected on Linux, so the routing layer and shared route-proxy listeners can bind directly to the saved route IPs.
+         detail: guidance=Linux is the reference runtime target for the current Mullgate topology and verification flow.
+         detail: guidance=Path inspection, runtime-manifest rendering, status, and doctor should all agree on this Linux support posture without extra platform-specific wording.
+
+      3. validation-artifacts: pass
+         summary: Shared entry-wireproxy and route-proxy artifacts are present, and the persisted runtime validation report passed.
+         detail: saved-runtime-phase=validated
+         detail: saved-runtime-message=Fixture config already validated.
+         detail: entry-wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf (present)
+         detail: route-proxy-config=/tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg (present)
+         detail: validation-report=/tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+         detail: validation-status=success
+         detail: validation-source=validation-suite
+         detail: check[entry-wireproxy]=ok via internal-syntax/internal-syntax
+         detail: check[route-proxy]=ok via internal-syntax/internal-syntax
+
+      4. relay-cache: pass
+         summary: Saved Mullvad relay metadata is readable and fresh enough for offline diagnostics.
+         detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
+         detail: source=app-wireguard-v1
+         detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/
+         detail: fetched-at=2026-03-21T07:55:00.000Z
+         detail: relay-count=2
+         detail: age=0h
+
+      5. exposure-contract: pass
+         summary: Saved exposure contract is internally coherent.
+         detail: mode=private-network
+         detail: mode-label=Private network / Tailscale-first
+         detail: recommendation=recommended-remote
+         detail: posture-summary=Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.
+         detail: remote-story=Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate hosts\` when local host-file wiring is the easiest path.
+         detail: base-domain=proxy.example.com
+         detail: allow-lan=yes
+         detail: dns-records=2
+         detail: routes=2
+         detail: bind-remediation=Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.
+         detail: hostname-remediation=Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate hosts\` when host-file wiring is the intended local workaround.
+         detail: restart-remediation=After exposure or bind-IP changes, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
+         detail: info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
+
+      6. bind-posture: pass
+         summary: Saved bind IPs match the configured exposure posture.
+         detail: setup.bind.host=192.168.10.10
+         detail: route[1] se-got-wg-101 bind-ip=192.168.10.10
+         detail: route[2] at-vie-wg-001 bind-ip=192.168.10.11
+
+      7. hostname-resolution: fail
+         summary: One or more route hostnames no longer resolve to their saved bind IPs.
+         detail: route se-got-wg-101: sweden-gothenburg.proxy.example.com -> 192.168.10.10
+         detail: route at-vie-wg-001: austria-vienna.proxy.example.com -> 192.168.10.99
+         detail: Route at-vie-wg-001 expects austria-vienna.proxy.example.com to resolve to 192.168.10.11, but it currently resolves to 192.168.10.99.
+         remediation: Publish or update the saved DNS A records so every route hostname resolves to its saved bind IP, then rerun \`mullgate doctor\`.
+
+      8. runtime: degraded
+         summary: No live compose containers are running right now.
+         detail: compose-command=docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml ps --all --format json
+         detail: containers=0
+         detail: running=0
+         detail: starting=0
+         detail: stopped=0
+         detail: unhealthy=0
+         detail: entry-tunnel=not present in live compose status
+         detail: route-proxy=not present in live compose status
+         detail: routing-layer=not present in live compose status
+         detail: route se-got-wg-101 publishes sweden-gothenburg.proxy.example.com -> 192.168.10.10 via route-proxy
+         detail: route at-vie-wg-001 publishes austria-vienna.proxy.example.com -> 192.168.10.11 via route-proxy
          remediation: Run \`mullgate start\` after fixing any validation, bind, or last-start issues reported above.
 
       9. last-start: degraded
@@ -1158,7 +1508,8 @@ describe('mullgate doctor command', () => {
          detail: route[2] at-vie-wg-001 bind-ip=127.0.0.2
 
       7. hostname-resolution: pass
-         summary: Configured hostnames resolve to the bind IPs promised by the saved exposure contract.
+         summary: Loopback direct bind-IP entrypoints are canonical, and the optional hostname shortcuts currently resolve correctly.
+         detail: Loopback mode without a base domain keeps direct bind-IP entrypoints canonical. Hostname shortcuts are optional for local testing.
          detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
          detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.2
 

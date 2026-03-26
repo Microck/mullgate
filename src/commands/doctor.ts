@@ -644,6 +644,7 @@ async function buildHostnameCheck(
   exposure: ExposureContract,
   resolveHostname: (hostname: string) => Promise<readonly string[]>,
 ): Promise<DoctorCheck> {
+  const directBindIpCanonical = usesDirectBindIpLoopbackAccess(config);
   const details: string[] = [];
   const failures: string[] = [];
 
@@ -674,6 +675,21 @@ async function buildHostnameCheck(
   }
 
   if (failures.length > 0) {
+    if (directBindIpCanonical) {
+      return {
+        name: 'hostname-resolution',
+        outcome: 'degraded',
+        summary:
+          'Loopback hostname shortcuts are incomplete, but direct bind-IP entrypoints remain the canonical local access path.',
+        details: [
+          'Loopback mode without a base domain keeps direct bind-IP entrypoints canonical. Install host-file mappings only if you want local hostname shortcuts.',
+          ...details,
+          ...failures,
+        ],
+        remediation: buildHostnameRemediation(config, exposure),
+      };
+    }
+
     return {
       name: 'hostname-resolution',
       outcome: 'fail',
@@ -686,9 +702,15 @@ async function buildHostnameCheck(
   return {
     name: 'hostname-resolution',
     outcome: 'pass',
-    summary:
-      'Configured hostnames resolve to the bind IPs promised by the saved exposure contract.',
-    details,
+    summary: directBindIpCanonical
+      ? 'Loopback direct bind-IP entrypoints are canonical, and the optional hostname shortcuts currently resolve correctly.'
+      : 'Configured hostnames resolve to the bind IPs promised by the saved exposure contract.',
+    details: directBindIpCanonical
+      ? [
+          'Loopback mode without a base domain keeps direct bind-IP entrypoints canonical. Hostname shortcuts are optional for local testing.',
+          ...details,
+        ]
+      : details,
   };
 }
 
@@ -1116,6 +1138,10 @@ function buildStartFailureRemediation(lastStart: RuntimeStartDiagnostic): string
 }
 
 function buildHostnameRemediation(config: MullgateConfig, exposure: ExposureContract): string {
+  if (usesDirectBindIpLoopbackAccess(config)) {
+    return 'Keep using the direct bind-IP entrypoints for normal loopback access. If you want hostname-based local testing, use `mullgate hosts` and install the emitted hosts block on this machine.';
+  }
+
   if (config.setup.exposure.baseDomain) {
     return 'Publish or update the saved DNS A records so every route hostname resolves to its saved bind IP, then rerun `mullgate doctor`.';
   }
@@ -1125,6 +1151,10 @@ function buildHostnameRemediation(config: MullgateConfig, exposure: ExposureCont
   }
 
   return 'Use the direct bind-IP entrypoints from the saved exposure contract when hostnames are not available.';
+}
+
+function usesDirectBindIpLoopbackAccess(config: MullgateConfig): boolean {
+  return config.setup.exposure.mode === 'loopback' && config.setup.exposure.baseDomain === null;
 }
 
 function describeRouteContext(lastStart: RuntimeStartDiagnostic): string {
