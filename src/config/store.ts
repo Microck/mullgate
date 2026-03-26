@@ -26,9 +26,7 @@ class UnsupportedConfigVersionError extends Error {
   readonly version: number;
 
   constructor(version: number) {
-    super(
-      `Config version ${version} is no longer supported. Mullgate now requires a version ${CONFIG_VERSION} config with one shared WireGuard device and exact per-route exits. Re-run \`mullgate setup\` to create a fresh config.`,
-    );
+    super(`Config version ${version} is no longer supported.`);
     this.name = 'UnsupportedConfigVersionError';
     this.version = version;
   }
@@ -136,7 +134,11 @@ export class ConfigStore {
           source: 'file',
           paths: this.paths,
           artifactPath: this.paths.configFile,
-          message: error.message,
+          message: [
+            `Config version ${error.version} is no longer supported. Mullgate now requires a version ${CONFIG_VERSION} config with one shared WireGuard device and exact per-route exits.`,
+            'This is stale local state, not a config the current CLI will operate.',
+            `Back up or remove ${this.paths.configFile} and the runtime artifacts under ${this.paths.runtimeDir}, then rerun \`mullgate setup\` and \`mullgate start\`.`,
+          ].join(' '),
         };
       }
 

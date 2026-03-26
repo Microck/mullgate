@@ -208,6 +208,10 @@ mullgate status
 mullgate doctor
 ```
 
+In loopback mode, the direct bind-IP entrypoints reported by `mullgate status` and `mullgate exposure` are the canonical local access path. Run `mullgate hosts` only when you want local hostname shortcuts such as `sweden-gothenburg`.
+
+If an installed `mullgate` command reports an unsupported config version, treat that as stale local state. Back up or remove the config/runtime paths it prints, then rerun `mullgate setup` and `mullgate start` instead of trying to reuse the old runtime in place.
+
 ## platform support
 
 `mullgate` is currently a Linux-first runtime with truthful cross-platform install, config, and diagnostics surfaces.
@@ -230,7 +234,7 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 | `mullgate doctor` | none | run deterministic diagnostics for config, runtime, bind, DNS, and last-start failures |
 | `mullgate autostart` | `enable`, `disable`, `status` | manage a Linux `systemd --user` unit that starts the proxy runtime at login |
 | `mullgate path` | none | print active config/state/cache/runtime paths plus platform support posture |
-| `mullgate hosts` | none | print hostname to bind-IP mappings and the copy/paste hosts block |
+| `mullgate hosts` | none | print optional hostname to bind-IP mappings and the copy/paste hosts block for local hostname testing |
 | `mullgate export` | `--guided`, `--dry-run`, `--stdout` | generate authenticated proxy URL inventories with ordered country or region batches plus selective relay filters |
 | `mullgate relays` | `list`, `probe`, `verify` | inspect matching relays, rank candidates, and verify configured route exits through the published proxy protocols |
 | `mullgate recommend` | `--apply`, selector flags | probe matching relays, preview exact routes, and optionally pin recommended relay hostnames into saved config |
@@ -264,7 +268,7 @@ use one of the exposed routes from another client or shell:
 
 ```bash
 curl \
-  --proxy socks5h://sweden-gothenburg:1080 \
+  --proxy socks5h://127.0.0.1:1080 \
   --proxy-user "$MULLGATE_PROXY_USERNAME:$MULLGATE_PROXY_PASSWORD" \
   https://am.i.mullvad.net/json
 ```

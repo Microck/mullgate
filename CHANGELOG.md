@@ -13,6 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [1.0.1] - 2026-03-26
+
+### Changed
+
+- `mullgate doctor` now treats loopback direct bind-IP entrypoints as the canonical local path and downgrades missing local hostname shortcuts to advisory guidance instead of a hard failure
+- unsupported config-version errors now explain that old local config/runtime state must be replaced with a fresh `mullgate setup` plus `mullgate start`
+- README and operator docs now describe loopback direct-IP access as the default local path and document stale-state recovery explicitly
+
+### Fixed
+
+- loopback diagnostics no longer misclassify an otherwise usable local install as broken just because optional `/etc/hosts` shortcuts are incomplete
+
 ## [1.0.0] - 2026-03-25
 
 ### Changed
