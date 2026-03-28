@@ -521,7 +521,7 @@ describe('mullgate config store', () => {
     );
     expect(loaded.message).toContain(paths.configFile);
     expect(loaded.message).toContain(paths.runtimeDir);
-    expect(loaded.message).toContain('rerun `mullgate setup` and `mullgate start`');
+    expect(loaded.message).toContain('rerun `mullgate setup` and `mullgate proxy start`');
   });
 
   it('persists routed configs atomically and mirrors the first route back into legacy fields', async () => {

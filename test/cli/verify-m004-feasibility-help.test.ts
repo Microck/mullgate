@@ -62,7 +62,7 @@ describe('verify-m004-feasibility help contract', () => {
 
       Run the isolated M004 feasibility verifier: provision exactly one Mullvad
       WireGuard device into a temp workspace, start one shared entry wireproxy
-      runtime without touching \`mullgate start\`, chain 2-3 concurrent probes
+      runtime without touching \`mullgate proxy start\`, chain 2-3 concurrent probes
       through distinct Mullvad SOCKS5 relays, compare host-route snapshots, and
       write a secret-safe PASS/FAIL artifact bundle under the chosen output root.
 

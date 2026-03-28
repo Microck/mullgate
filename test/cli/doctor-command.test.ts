@@ -544,7 +544,7 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
          detail: hostname-remediation=For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
          detail: restart-remediation=After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
          detail: info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
@@ -748,7 +748,7 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
          detail: hostname-remediation=For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
          detail: restart-remediation=After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
          detail: info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
@@ -949,12 +949,12 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
          detail: hostname-remediation=For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
          detail: restart-remediation=After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
          detail: info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
          detail: warning: Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
-         remediation: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         remediation: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
 
       6. bind-posture: pass
          summary: Saved bind IPs match the configured exposure posture.
@@ -1136,7 +1136,7 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
          detail: hostname-remediation=For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
          detail: restart-remediation=After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
          detail: info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
@@ -1496,7 +1496,7 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
          detail: hostname-remediation=For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
          detail: restart-remediation=After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
          detail: info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.

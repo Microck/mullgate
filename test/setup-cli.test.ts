@@ -572,7 +572,7 @@ describe('mullgate setup CLI flow', () => {
             - Use \`mullgate proxy access\` if you want a copy/paste /etc/hosts block for this machine.
 
             remediation
-            - bind posture: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+            - bind posture: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
             - hostname resolution: For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
             - restart: After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
 
@@ -805,7 +805,7 @@ describe('mullgate setup CLI flow', () => {
             - Use \`mullgate proxy access\` if you want a copy/paste /etc/hosts block for this machine.
 
             remediation
-            - bind posture: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+            - bind posture: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
             - hostname resolution: For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
             - restart: After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
 
