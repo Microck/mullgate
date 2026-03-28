@@ -20,9 +20,10 @@ async function main(): Promise<void> {
 
     await runDisplayedCliCommand({
       display:
-        'mullgate exposure --mode private-network --base-domain proxy.example.com --route-bind-ip 192.168.10.10 --route-bind-ip 192.168.10.11',
+        'mullgate proxy access --mode private-network --base-domain proxy.example.com --route-bind-ip 192.168.10.10 --route-bind-ip 192.168.10.11',
       args: [
-        'exposure',
+        'proxy',
+        'access',
         '--mode',
         'private-network',
         '--base-domain',

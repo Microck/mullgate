@@ -45,13 +45,13 @@ async function main(): Promise<void> {
     });
 
     await runDisplayedCliCommand({
-      display: 'mullgate status',
-      args: ['status'],
+      display: 'mullgate proxy status',
+      args: ['proxy', 'status'],
       env: demoEnv,
     });
 
     await runDisplayedCliCommand({
-      display: 'mullgate doctor',
+      display: 'mullgate proxy doctor',
       args: ['proxy', 'doctor'],
       env: demoEnv,
       clearScreen: false,

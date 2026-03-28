@@ -348,7 +348,8 @@ export async function seedLoopbackSetup(options: SetupSeedOptions): Promise<void
 
 export async function seedPrivateNetworkExposure(options: ExposureSeedOptions): Promise<void> {
   const args = [
-    'exposure',
+    'proxy',
+    'access',
     '--mode',
     'private-network',
     '--route-bind-ip',

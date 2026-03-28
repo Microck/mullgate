@@ -446,7 +446,7 @@ A fresh verifier run needs one free Mullvad WireGuard device slot total because 
 
 The built-in `pnpm verify:s06` path still keeps its end-to-end probe contract to the first two saved routes so the default proof stays fast and inspectable.
 
-That does not mean Mullgate consumes one Mullvad slot per route. The current shared-entry runtime has also been live-validated with a 50-route sweep on one shared Mullvad device.
+That does not mean Mullgate consumes one Mullvad slot per route. The current shared-entry runtime still uses one shared Mullvad device for the saved route set.
 
 ### HTTPS proof note
 

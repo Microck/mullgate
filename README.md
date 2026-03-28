@@ -11,19 +11,11 @@
 
 ---
 
-`mullgate` turns one Mullvad subscription into many authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. it is built for operators who want a tiny command surface, route-specific exits, and app-level routing without sending the whole machine through a VPN.
-
-the public CLI is now intentionally small:
-
-- `mullgate setup` for onboarding
-- `mullgate proxy ...` for daily runtime, access, export, and relay work
-- `mullgate config ...` for raw paths and advanced config inspection
+`mullgate` turns one Mullvad subscription into many authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. it is built for operators who want route-specific exits, app-level routing, and clear operator surfaces without sending the whole machine through a VPN.
 
 the main setup path is still `mullgate setup`. on a real terminal it opens a guided flow that collects your Mullvad account number, proxy credentials, route aliases, bind posture, and optional HTTPS settings, then persists canonical config plus the derived runtime artifacts needed for `proxy start`, `proxy status`, and `proxy doctor`. if you prefer automation, the same surface also supports a fully non-interactive env-driven setup path.
 
 [documentation](https://mullgate.micr.dev) | [npm](https://www.npmjs.com/package/mullgate) | [github](https://github.com/Microck/mullgate)
-
-![50 proxy proof demo](images/demos/50-proxy-proof.gif)
 
 
 ## why
@@ -32,8 +24,8 @@ if you want Mullvad-backed proxy access without replacing your computer's normal
 
 - expose authenticated SOCKS5, HTTP, and HTTPS proxy endpoints from your own Mullvad subscription
 - route only the traffic you choose instead of tunneling the whole machine
-- scale 50 concurrent routed exits from one shared Mullvad WireGuard device instead of spending one device slot per route
-- keep one small CLI for setup, proxy operations, relay selection, and diagnostics
+- scale many routed exits from one shared Mullvad WireGuard device instead of spending one device slot per route
+- keep setup, proxy operations, relay selection, and diagnostics in one CLI
 - stay in control of the host and credentials instead of depending on a hosted relay service
 
 ## how mullgate differs from mullvad's socks5 proxy
@@ -44,7 +36,7 @@ mullgate is a local operator layer built around a mullvad subscription. it provi
 
 the goal is not "replace mullvad's proxy page with another set of manual steps." the goal is to give self-hosters a managed proxy gateway that uses mullvad exits without forcing the whole machine through the vpn.
 
-mullgate solves mullvad's device cap by provisioning one shared wireguard entry device and fanning out to exact mullvad socks5 exits per route. the current linux runtime has been live-verified with 50 routed exits on one shared mullvad device, with 50 of 50 socks5, 50 of 50 http, and 50 of 50 https checks passing.
+mullgate solves mullvad's device cap by provisioning one shared wireguard entry device and fanning out to exact mullvad socks5 exits per route.
 
 ## architecture
 
@@ -161,7 +153,7 @@ flowchart TB
     wg -.one shared Mullvad device powers many routed exits.-> selectedRelay
 ```
 
-the diagram above shows the current shipped mullgate model end to end: setup writes canonical config, exposure defines bind-ip and hostname truth, relay tooling can pin exact exits, `start` renders and launches the shared-entry runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces. on linux, this runtime has been live-proven with 50 routes on one shared mullvad device.
+the diagram above shows the current shipped mullgate model end to end: setup writes canonical config, exposure defines bind-ip and hostname truth, relay tooling can pin exact exits, `start` renders and launches the shared-entry runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces.
 
 ## quickstart
 
@@ -211,19 +203,6 @@ mullgate proxy status
 mullgate proxy doctor
 ```
 
-## 50-proxy proof
-
-the current linux runtime has already been proven at the headline scale this repo cares about:
-
-- one shared Mullvad device
-- 50 concurrent routed proxies
-- 50 of 50 socks5 checks passed
-- 50 of 50 http checks passed
-- 50 of 50 https checks passed
-- 50 distinct exit IPs observed
-
-the demo above is the proof summary. the setup flow still matters, but it is no longer the main story.
-
 ![setup demo](images/demos/setup-guided.gif)
 
 In loopback mode, the direct bind-IP entrypoints reported by `mullgate proxy status` and `mullgate proxy access` are the canonical local access path. `mullgate proxy access` now combines the old exposure and hosts views into one access report.
@@ -244,24 +223,24 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 
 ## command surface
 
-| root | main use |
-| --- | --- |
-| `mullgate setup` | guided or automated onboarding that writes canonical config and derived runtime artifacts |
-| `mullgate proxy ...` | daily operations: access, export, runtime start/status/doctor, validation, relay tuning, and autostart |
-| `mullgate config ...` | raw config/path inspection and advanced config edits |
-
-Most-used commands:
-
-| command | purpose |
-| --- | --- |
-| `mullgate proxy access` | inspect or update hostnames, bind IPs, DNS guidance, and direct-IP entrypoints |
-| `mullgate proxy start` | launch the runtime |
-| `mullgate proxy status` | inspect live runtime state |
-| `mullgate proxy doctor` | diagnose routing, hostname, and runtime failures |
-| `mullgate proxy export --regions` | list the built-in region groups |
-| `mullgate proxy export --guided` | generate client-ready proxy inventories |
-| `mullgate proxy relay list|probe|recommend|verify` | inspect relays, pick exact exits, and verify route behavior |
-| `mullgate config path` | print config/state/cache/runtime paths and platform posture |
+| command | key flags | purpose |
+| --- | --- | --- |
+| `mullgate setup` | `--non-interactive`, `--location`, `--exposure-mode` | create or update canonical config and derived runtime artifacts |
+| `mullgate proxy access` | `--mode`, `--base-domain`, `--route-bind-ip` | inspect or update hostnames, bind IPs, DNS guidance, and direct-IP entrypoints |
+| `mullgate proxy export` | `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories |
+| `mullgate proxy relay list` | selector flags such as `--country`, `--owner`, `--provider` | inspect relay candidates that match a policy |
+| `mullgate proxy relay probe` | `--country`, `--count` | latency-probe likely relay candidates |
+| `mullgate proxy relay recommend` | `--country`, `--count`, `--apply` | preview or pin an exact relay choice |
+| `mullgate proxy relay verify` | `--route` | verify a configured route across the published proxy protocols |
+| `mullgate proxy validate` | `--refresh` | refresh saved validation metadata and config-derived artifacts |
+| `mullgate proxy start` | none | launch the runtime |
+| `mullgate proxy status` | none | inspect live runtime state |
+| `mullgate proxy doctor` | none | diagnose routing, hostname, and runtime failures |
+| `mullgate proxy autostart` | `enable`, `disable`, `status` | manage login-time startup on supported platforms |
+| `mullgate config path` | none | print config, state, cache, and runtime paths |
+| `mullgate config show` | none | print the saved canonical config |
+| `mullgate config get` | `<key>` | read one saved config value |
+| `mullgate config set` | `<key> <value>` | update one saved config value |
 
 ## examples
 

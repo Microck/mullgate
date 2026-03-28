@@ -13,36 +13,24 @@ The documentation repeatedly anchors itself to the following CLI help contract:
 
 ## Core workflow commands
 
-### `mullgate setup`
-
-Used to create or update the base configuration, including account, proxy credentials, routes, and exposure-related settings.
-
-### `mullgate proxy`
-
-Used for daily operations: access, export, runtime start/status/doctor, validation, relay work, and autostart.
-
-Important subcommands:
-
-- `mullgate proxy access`
-- `mullgate proxy start`
-- `mullgate proxy status`
-- `mullgate proxy doctor`
-- `mullgate proxy validate --refresh`
-- `mullgate proxy export --regions`
-- `mullgate proxy export --guided`
-- `mullgate proxy relay list|probe|recommend|verify`
-- `mullgate proxy autostart enable|disable|status`
-
-### `mullgate config`
-
-Used for raw config/path inspection and advanced config edits.
-
-Important subcommands:
-
-- `mullgate config path`
-- `mullgate config show`
-- `mullgate config get`
-- `mullgate config set`
+| command | key flags | purpose |
+| --- | --- | --- |
+| `mullgate setup` | `--non-interactive`, `--location`, `--exposure-mode` | create or update canonical config and derived runtime artifacts |
+| `mullgate proxy access` | `--mode`, `--base-domain`, `--route-bind-ip` | inspect or update hostnames, bind IPs, DNS guidance, and direct-IP entrypoints |
+| `mullgate proxy export` | `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories |
+| `mullgate proxy relay list` | selector flags such as `--country`, `--owner`, `--provider` | inspect relay candidates that match a policy |
+| `mullgate proxy relay probe` | `--country`, `--count` | latency-probe likely relay candidates |
+| `mullgate proxy relay recommend` | `--country`, `--count`, `--apply` | preview or pin an exact relay choice |
+| `mullgate proxy relay verify` | `--route` | verify a configured route across the published proxy protocols |
+| `mullgate proxy validate` | `--refresh` | refresh saved validation metadata and config-derived artifacts |
+| `mullgate proxy start` | none | launch the runtime |
+| `mullgate proxy status` | none | inspect live runtime state |
+| `mullgate proxy doctor` | none | diagnose routing, hostname, and runtime failures |
+| `mullgate proxy autostart` | `enable`, `disable`, `status` | manage login-time startup on supported platforms |
+| `mullgate config path` | none | print config, state, cache, and runtime paths |
+| `mullgate config show` | none | print the saved canonical config |
+| `mullgate config get` | `<key>` | read one saved config value |
+| `mullgate config set` | `<key> <value>` | update one saved config value |
 
 ## Invocation forms
 
