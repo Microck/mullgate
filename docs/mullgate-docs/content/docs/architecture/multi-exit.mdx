@@ -43,21 +43,16 @@ This architecture does **not** fake or bypass Mullvad device limits.
 
 It still provisions one real Mullvad device. The difference is that the device is shared across many routes instead of being consumed once per route.
 
-## Live proof
+## Validation
 
-The current runtime has been proven with live traffic:
+The current runtime has been validated with live traffic:
 
 - the integrated S06 verifier passed with one shared Mullvad device and multiple routes
-- a preserved proof home was expanded to 50 total routes while reusing that same device
-- the 50-route runtime started successfully with:
+- the shared-entry topology starts with the normal three-container runtime:
   - `entry-tunnel`
   - `route-proxy`
   - `routing-layer`
-- live sweeps through `https://am.i.mullvad.net/json` proved:
-  - 50 of 50 SOCKS5 routes passed
-  - 50 of 50 HTTP routes passed
-  - 50 of 50 HTTPS routes passed after rerunning one transient HTTP/2 framing failure
-- the final sweep exposed 50 distinct exit IPs from one shared Mullvad device
+- live sweeps through `https://am.i.mullvad.net/json` confirmed that route-specific listeners still exit through their configured Mullvad path
 
 ## What still matters
 

@@ -224,6 +224,7 @@ export type ProxyExportCommandOptions = {
   readonly protocol?: string;
   readonly output?: string;
   readonly guided?: boolean;
+  readonly regions?: boolean;
   readonly dryRun?: boolean;
   readonly stdout?: boolean;
   readonly force?: boolean;
@@ -303,27 +304,18 @@ type GuidedPromptClient = {
   readonly close: () => Promise<void>;
 };
 
-export function registerOperatorCommands(program: Command): void {
-  registerPathCommand(program);
-  registerLocationsCommand(program);
-  registerHostsCommand(program);
-  registerRegionsCommand(program);
-  registerExposureCommand(program);
-  registerExportCommand(program);
-  registerValidateCommand(program);
-}
-
 export function registerConfigCommands(program: Command): void {
   const config = program
     .command('config')
-    .description('Inspect or edit the saved Mullgate config directly.');
+    .description('Inspect saved config values, raw paths, and advanced config fields.');
 
+  registerPathCommand(config);
   registerConfigShowCommand(config);
   registerConfigGetCommand(config);
   registerConfigSetCommand(config);
 }
 
-function registerPathCommand(target: Command): void {
+export function registerPathCommand(target: Command): void {
   target
     .command('path')
     .description('Show the resolved Mullgate config, state, cache, and runtime paths.')
@@ -360,10 +352,19 @@ function registerConfigShowCommand(target: Command): void {
     });
 }
 
-function registerLocationsCommand(target: Command): void {
+export function registerLocationsCommand(
+  target: Command,
+  options: {
+    readonly commandName?: string;
+    readonly description?: string;
+  } = {},
+): void {
   target
-    .command('locations')
-    .description('List routed location aliases, bind IPs, relay preferences, and runtime ids.')
+    .command(options.commandName ?? 'locations')
+    .description(
+      options.description ??
+        'List routed location aliases, bind IPs, relay preferences, and runtime ids.',
+    )
     .action(async () => {
       const store = new ConfigStore();
       const result = await store.load();
@@ -386,7 +387,7 @@ function registerLocationsCommand(target: Command): void {
     });
 }
 
-function registerHostsCommand(target: Command): void {
+export function registerHostsCommand(target: Command): void {
   target
     .command('hosts')
     .description('List configured proxy hostnames and their route bind-IP mappings.')
@@ -412,7 +413,7 @@ function registerHostsCommand(target: Command): void {
     });
 }
 
-function registerRegionsCommand(target: Command): void {
+export function registerRegionsCommand(target: Command): void {
   target
     .command('regions')
     .description('List the curated export region groups and their member country codes.')
@@ -421,7 +422,7 @@ function registerRegionsCommand(target: Command): void {
     });
 }
 
-function registerExposureCommand(target: Command): void {
+export function registerExposureCommand(target: Command): void {
   target
     .command('exposure')
     .option('--mode <mode>', 'Set exposure mode to loopback, private-network, or public.')
@@ -554,7 +555,7 @@ function registerExposureCommand(target: Command): void {
     });
 }
 
-function registerExportCommand(target: Command): void {
+export function registerExportCommand(target: Command): void {
   target
     .command('export')
     .option('--protocol <protocol>', 'Export proxy URLs for socks5, http, or https.')
@@ -595,6 +596,7 @@ function registerExportCommand(target: Command): void {
       'Apply a per-selector export cap to the immediately preceding --country or --region batch.',
     )
     .option('--guided', 'Launch a guided flow for creating proxy lists.')
+    .option('--regions', 'Print the curated export region groups and exit without exporting.')
     .option('--dry-run', 'Preview the export without writing a file.')
     .option('--stdout', 'Write the exported proxy URLs to stdout instead of a file.')
     .option('--force', 'Overwrite an existing output file.')
@@ -603,6 +605,11 @@ function registerExportCommand(target: Command): void {
       'Export proxy URLs to a text file with ordered country or region batches plus optional city, server, provider, ownership, run-mode, and port-speed filters.',
     )
     .action(async (options: ProxyExportCommandOptions) => {
+      if (options.regions) {
+        writeCliReport({ sink: process.stdout, text: renderRegionGroupsReport() });
+        return;
+      }
+
       const store = new ConfigStore();
       const result = await store.load();
 
@@ -892,7 +899,7 @@ function registerConfigSetCommand(target: Command): void {
           canonicalConfig,
           'unvalidated',
           null,
-          `Config changed at ${keyPath}; rerun \`mullgate validate\` to refresh derived artifacts.`,
+          `Config changed at ${keyPath}; rerun \`mullgate proxy validate\` to refresh derived artifacts.`,
         );
 
         try {
@@ -933,7 +940,7 @@ function registerConfigSetCommand(target: Command): void {
     );
 }
 
-function registerValidateCommand(target: Command): void {
+export function registerValidateCommand(target: Command): void {
   target
     .command('validate')
     .option(
@@ -1093,7 +1100,7 @@ export function renderExposureReport(config: MullgateConfig, configPath: string)
       : ['- none']),
     '',
     'local host-file mapping',
-    '- `mullgate hosts` remains the copy/paste /etc/hosts view for local-only testing.',
+    '- `mullgate proxy access` remains the copy/paste /etc/hosts view for local-only testing.',
   ].join('\n');
 }
 
@@ -1170,7 +1177,7 @@ export function updateExposureConfig(
       canonicalConfig,
       'unvalidated',
       null,
-      'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
+      'Exposure settings changed; rerun `mullgate proxy validate` or `mullgate proxy start` to refresh runtime artifacts.',
     ),
   };
 }
@@ -1216,7 +1223,7 @@ export function renderRegionGroupsReport(): string {
       '',
       `${index + 1}. ${region.name}`,
       `   countries: ${region.countryCodes.join(', ')}`,
-      `   example: mullgate export --region ${region.name} --count 5`,
+      `   example: mullgate proxy export --region ${region.name} --count 5`,
     ]),
   ].join('\n');
 }
@@ -4309,6 +4316,10 @@ function renderLoadError(result: Extract<LoadConfigResult, { ok: false }>): stri
   ].join('\n');
 }
 
+export function renderLoadConfigError(result: Extract<LoadConfigResult, { ok: false }>): string {
+  return renderLoadError(result);
+}
+
 function renderMissingConfig(message: string, configPath: string): string {
   return [
     'Mullgate config command could not continue.',
@@ -4317,6 +4328,10 @@ function renderMissingConfig(message: string, configPath: string): string {
     `artifact: ${configPath}`,
     `reason: ${message}`,
   ].join('\n');
+}
+
+export function renderMissingConfigError(message: string, configPath: string): string {
+  return renderMissingConfig(message, configPath);
 }
 
 function renderConfigPathError(message: string, keyPath: string): string {
@@ -4489,6 +4504,15 @@ export function extractOrderedCommandArgs(input: {
 }
 
 export function extractProxyExportArgs(argv: readonly string[]): string[] {
+  const proxyExport = extractOrderedCommandArgs({
+    argv,
+    commandPath: ['proxy', 'export'],
+  });
+
+  if (proxyExport.length > 0) {
+    return proxyExport;
+  }
+
   const topLevel = extractOrderedCommandArgs({
     argv,
     commandPath: ['export'],

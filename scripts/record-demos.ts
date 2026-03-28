@@ -20,6 +20,13 @@ const mullvadTheme =
   '0b1020,ffffff,0b1020,ffffff,ffd524,7aa2f7,4dd0e1,b8d27a,ff8a80,c4b5fd,13203a,dbe7ff,ffd524,9cc7ff,7fe7f2,d7ef9a,ffb4a8,ddd0ff';
 const demos: readonly DemoDefinition[] = [
   {
+    name: '50-proxy-proof',
+    runnerPath: path.join(repoRoot, 'scripts', 'demo-50-proxy-proof.ts'),
+    assetPath: path.join(imageDir, '50-proxy-proof.gif'),
+    cols: 112,
+    rows: 58,
+  },
+  {
     name: 'setup-guided',
     runnerPath: path.join(repoRoot, 'scripts', 'demo-setup-guided.ts'),
     assetPath: path.join(imageDir, 'setup-guided.gif'),

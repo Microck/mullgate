@@ -119,7 +119,7 @@ async function main(): Promise<void> {
         });
         assert(setPortResult.status === 0, `config set port failed:\n${setPortResult.stderr}`);
 
-        const validateRefreshResult = await runCli(['validate'], { env });
+        const validateRefreshResult = await runCli(['proxy', 'validate'], { env });
         assert(
           validateRefreshResult.status === 0,
           `validate failed:\n${validateRefreshResult.stderr}`,
@@ -153,7 +153,7 @@ async function main(): Promise<void> {
         );
 
         await writeFile(entryWireproxyPath, '[Interface]\nPrivateKey = broken\n', 'utf8');
-        const validateFailureResult = await runCli(['validate'], { env });
+        const validateFailureResult = await runCli(['proxy', 'validate'], { env });
         assert(
           validateFailureResult.status === 1,
           'corrupted wireproxy config unexpectedly validated',

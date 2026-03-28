@@ -192,7 +192,7 @@ async function verifyScenario(input: {
       });
     }
 
-    const validate = await runCliCommand({ env: seeded.env, args: ['validate'] });
+    const validate = await runCliCommand({ env: seeded.env, args: ['proxy', 'validate'] });
     assertExitCode({
       result: validate,
       expected: 0,
@@ -215,9 +215,9 @@ async function verifyScenario(input: {
     }
 
     const configExposure = await runCliCommand({ env: seeded.env, args: ['exposure'] });
-    const configHosts = await runCliCommand({ env: seeded.env, args: ['hosts'] });
+    const configHosts = await runCliCommand({ env: seeded.env, args: ['proxy', 'access'] });
     const status = await runCliCommand({ env: seeded.env, args: ['status'] });
-    const doctor = await runCliCommand({ env: seeded.env, args: ['doctor'] });
+    const doctor = await runCliCommand({ env: seeded.env, args: ['proxy', 'doctor'] });
     const manifestFile = await loadJsonFile<RuntimeBundleManifest>(
       config.runtime.runtimeBundle.manifestPath,
       'runtime manifest',

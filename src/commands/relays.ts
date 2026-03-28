@@ -52,6 +52,7 @@ type RelayVerifyCommandOptions = {
 type RelaysCommandDependencies = {
   readonly store?: ConfigStore;
   readonly runner?: CommandRunner;
+  readonly commandName?: string;
 };
 
 type ResolvedRelayCommandSelection = {
@@ -64,9 +65,9 @@ type ResolvedRelayCommandSelection = {
 export function registerRelaysCommand(
   program: Command,
   dependencies: RelaysCommandDependencies = {},
-): void {
+): Command {
   const relays = program
-    .command('relays')
+    .command(dependencies.commandName ?? 'relays')
     .description('Inspect, probe, and verify Mullvad relays plus configured route exits.');
 
   relays
@@ -164,6 +165,8 @@ export function registerRelaysCommand(
 
       writeCliReport({ sink: process.stdout, text: result.text, tone: 'success' });
     });
+
+  return relays;
 }
 
 export async function runRelaysListFlow(input: {

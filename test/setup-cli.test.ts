@@ -471,13 +471,13 @@ describe('mullgate setup CLI flow', () => {
             getLocationResult,
             validateResult,
           ] = await Promise.all([
-            runCli(['path'], { env }),
+            runCli(['config', 'path'], { env }),
             runCli(['config', 'show'], { env }),
-            runCli(['locations'], { env }),
-            runCli(['hosts'], { env }),
+            runCli(['proxy', 'list'], { env }),
+            runCli(['proxy', 'access'], { env }),
             runCli(['config', 'get', 'setup.auth.password'], { env }),
             runCli(['config', 'get', 'setup.location.requested'], { env }),
-            runCli(['validate'], { env }),
+            runCli(['proxy', 'validate'], { env }),
           ]);
 
           expect(pathResult.status).toBe(0);
@@ -551,18 +551,58 @@ describe('mullgate setup CLI flow', () => {
                https backend: route-sweden-gothenburg"
           `);
           expect(`\n${normalizeOutput(hostsResult.stdout, env)}`).toMatchInlineSnapshot(`
-          "
-          Mullgate routed hosts
-          phase: inspect-config
-          source: canonical-config
-          config: /tmp/mullgate-home/config/mullgate/config.json
-          routes: 1
-          hostname -> bind ip
-          1. sweden-gothenburg -> 127.0.0.1 (alias: sweden-gothenburg, route id: sweden-gothenburg)
+            "
+            Mullgate exposure report
+            phase: inspect-config
+            source: canonical-config
+            config: /tmp/mullgate-home/config/mullgate/config.json
+            mode: loopback
+            mode label: Loopback / local-only
+            recommendation: local-default
+            posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
+            remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+            base domain: n/a
+            allow lan: no
+            runtime status: validated
+            restart needed: no
+            runtime message: Validated via wireproxy-binary/configtest + docker/3proxy-startup.
 
-          copy/paste hosts block
-          127.0.0.1 sweden-gothenburg"
-        `);
+            guidance
+            - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
+            - Use \`mullgate proxy access\` if you want a copy/paste /etc/hosts block for this machine.
+
+            remediation
+            - bind posture: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+            - hostname resolution: For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+            - restart: After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
+
+            routes
+            1. sweden-gothenburg -> 127.0.0.1
+               alias: sweden-gothenburg
+               route id: sweden-gothenburg
+               dns: not required; use direct bind IP entrypoints
+               socks5 hostname: socks5://[redacted]:[redacted]@sweden-gothenburg:1080
+               socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
+               http hostname: http://[redacted]:[redacted]@sweden-gothenburg:8080
+               http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
+
+            warnings
+            - info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
+
+            local host-file mapping
+            - \`mullgate proxy access\` remains the copy/paste /etc/hosts view for local-only testing.
+
+            Mullgate routed hosts
+            phase: inspect-config
+            source: canonical-config
+            config: /tmp/mullgate-home/config/mullgate/config.json
+            routes: 1
+            hostname -> bind ip
+            1. sweden-gothenburg -> 127.0.0.1 (alias: sweden-gothenburg, route id: sweden-gothenburg)
+
+            copy/paste hosts block
+            127.0.0.1 sweden-gothenburg"
+          `);
           expect(`\n${normalizeOutput(validateResult.stdout, env)}`).toMatchInlineSnapshot(`
             "
             Mullgate validate complete.
@@ -676,8 +716,8 @@ describe('mullgate setup CLI flow', () => {
 
           const savedConfig = await readSavedConfig(env);
           const [locationsResult, hostsResult] = await Promise.all([
-            runCli(['locations'], { env }),
-            runCli(['hosts'], { env }),
+            runCli(['proxy', 'list'], { env }),
+            runCli(['proxy', 'access'], { env }),
           ]);
 
           expect(savedConfig.routing.locations).toHaveLength(2);
@@ -745,6 +785,54 @@ describe('mullgate setup CLI flow', () => {
           `);
           expect(`\n${normalizeOutput(hostsResult.stdout, env)}`).toMatchInlineSnapshot(`
             "
+            Mullgate exposure report
+            phase: inspect-config
+            source: canonical-config
+            config: /tmp/mullgate-home/config/mullgate/config.json
+            mode: loopback
+            mode label: Loopback / local-only
+            recommendation: local-default
+            posture summary: Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
+            remote story: Switch to private-network mode for Tailscale, LAN, or other trusted-overlay remote access.
+            base domain: n/a
+            allow lan: no
+            runtime status: validated
+            restart needed: no
+            runtime message: Validated via wireproxy-binary/configtest + docker/3proxy-startup.
+
+            guidance
+            - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
+            - Use \`mullgate proxy access\` if you want a copy/paste /etc/hosts block for this machine.
+
+            remediation
+            - bind posture: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+            - hostname resolution: For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+            - restart: After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
+
+            routes
+            1. sweden-gothenburg -> 127.0.0.1
+               alias: sweden-gothenburg
+               route id: sweden-gothenburg
+               dns: not required; use direct bind IP entrypoints
+               socks5 hostname: socks5://[redacted]:[redacted]@sweden-gothenburg:1080
+               socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.1:1080
+               http hostname: http://[redacted]:[redacted]@sweden-gothenburg:8080
+               http direct ip: http://[redacted]:[redacted]@127.0.0.1:8080
+            2. austria-vienna -> 127.0.0.2
+               alias: austria-vienna
+               route id: austria-vienna
+               dns: not required; use direct bind IP entrypoints
+               socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna:1080
+               socks5 direct ip: socks5://[redacted]:[redacted]@127.0.0.2:1080
+               http hostname: http://[redacted]:[redacted]@austria-vienna:8080
+               http direct ip: http://[redacted]:[redacted]@127.0.0.2:8080
+
+            warnings
+            - info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
+
+            local host-file mapping
+            - \`mullgate proxy access\` remains the copy/paste /etc/hosts view for local-only testing.
+
             Mullgate routed hosts
             phase: inspect-config
             source: canonical-config
@@ -866,7 +954,7 @@ describe('mullgate setup CLI flow', () => {
           const savedConfig = await readSavedConfig(env);
           const [showResult, hostsResult] = await Promise.all([
             runCli(['config', 'show'], { env }),
-            runCli(['hosts'], { env }),
+            runCli(['proxy', 'access'], { env }),
           ]);
 
           expect(savedConfig.setup.exposure).toEqual({
@@ -887,6 +975,55 @@ describe('mullgate setup CLI flow', () => {
           expect(showResult.stdout).toContain('proxy.example.com');
           expect(`\n${normalizeOutput(hostsResult.stdout, env)}`).toMatchInlineSnapshot(`
             "
+            Mullgate exposure report
+            phase: inspect-config
+            source: canonical-config
+            config: /tmp/mullgate-home/config/mullgate/config.json
+            mode: private-network
+            mode label: Private network / Tailscale-first
+            recommendation: recommended-remote
+            posture summary: Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.
+            remote story: Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate proxy access\` when local host-file wiring is the easiest path.
+            base domain: proxy.example.com
+            allow lan: yes
+            runtime status: validated
+            restart needed: no
+            runtime message: Validated via wireproxy-binary/configtest + docker/3proxy-startup.
+
+            guidance
+            - Private-network mode is the recommended remote posture for Tailscale, LAN, and other trusted overlays. Keep it private by ensuring every bind IP stays reachable only inside that trusted network.
+            - Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.
+            - Publish the DNS records below so every route hostname resolves to its matching bind IP.
+
+            remediation
+            - bind posture: Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.
+            - hostname resolution: Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate proxy access\` when host-file wiring is the intended local workaround.
+            - restart: After exposure or bind-IP changes, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
+
+            routes
+            1. sweden-gothenburg.proxy.example.com -> 192.168.10.10
+               alias: sweden-gothenburg
+               route id: sweden-gothenburg
+               dns: sweden-gothenburg.proxy.example.com A 192.168.10.10
+               socks5 hostname: socks5://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:1080
+               socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.10:1080
+               http hostname: http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080
+               http direct ip: http://[redacted]:[redacted]@192.168.10.10:8080
+            2. austria-vienna.proxy.example.com -> 192.168.10.11
+               alias: austria-vienna
+               route id: austria-vienna
+               dns: austria-vienna.proxy.example.com A 192.168.10.11
+               socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1080
+               socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.11:1080
+               http hostname: http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080
+               http direct ip: http://[redacted]:[redacted]@192.168.10.11:8080
+
+            warnings
+            - info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
+
+            local host-file mapping
+            - \`mullgate proxy access\` remains the copy/paste /etc/hosts view for local-only testing.
+
             Mullgate routed hosts
             phase: inspect-config
             source: canonical-config
@@ -964,7 +1101,18 @@ describe('mullgate setup CLI flow', () => {
         await rm(autoFilename, { force: true });
 
         const autoResult = await runCli(
-          ['export', '--country', 'se', '--count', '1', '--region', 'europe', '--count', '2'],
+          [
+            'proxy',
+            'export',
+            '--country',
+            'se',
+            '--count',
+            '1',
+            '--region',
+            'europe',
+            '--count',
+            '2',
+          ],
           { env },
         );
         expect(autoResult.status).toBe(0);
@@ -1053,7 +1201,7 @@ describe('mullgate setup CLI flow', () => {
           );
 
           const guidedResult = await runCli(
-            ['export', '--guided', '--dry-run', '--protocol', 'http'],
+            ['proxy', 'export', '--guided', '--dry-run', '--protocol', 'http'],
             {
               env,
               input: 'y\n1\n\ny\n1\nn\ny\n1\nn\n',
@@ -1280,7 +1428,7 @@ cause: Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a
         });
         const getPasswordResult = await runCli(['config', 'get', 'setup.auth.password'], { env });
         const getPortResult = await runCli(['config', 'get', 'setup.bind.httpPort'], { env });
-        const validateResult = await runCli(['validate'], { env });
+        const validateResult = await runCli(['proxy', 'validate'], { env });
 
         expect(setPasswordResult.status).toBe(0);
         expect(setPasswordResult.stdout).not.toContain('rotated-password');
@@ -1371,7 +1519,7 @@ runtime status: unvalidated"
             '[Interface]\nPrivateKey = broken\n',
             'utf8',
           );
-          const validateResult = await runCli(['validate'], { env });
+          const validateResult = await runCli(['proxy', 'validate'], { env });
 
           expect(validateResult.status).toBe(1);
           expect(validateResult.stdout).toBe('');
@@ -1395,7 +1543,7 @@ runtime status: unvalidated"
     const env = createTempEnvironment();
     await createFakeWireproxyBinary(requireHome(env));
 
-    const result = await runCli(['validate'], { env });
+    const result = await runCli(['proxy', 'validate'], { env });
 
     expect(result.status).toBe(1);
     expect(`\n${normalizeOutput(result.stderr, env)}`).toMatchInlineSnapshot(`

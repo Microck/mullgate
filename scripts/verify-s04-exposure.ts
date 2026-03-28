@@ -231,7 +231,7 @@ async function verifyScenario(
     const config = await loadConfig(store);
     const savedConfig = await loadJsonFile<MullgateConfig>(paths.configFile, 'saved config');
     const exposureResult = await runCliCommand(env, ['exposure']);
-    const hostsResult = await runCliCommand(env, ['hosts']);
+    const hostsResult = await runCliCommand(env, ['proxy', 'access']);
 
     if (exposureResult.exitCode !== 0) {
       throw new Error(

@@ -9,6 +9,11 @@ const checks = [
     includes: 'images/demos/setup-guided.gif',
   },
   {
+    label: 'Maintainer 50-route generation demo reference',
+    file: path.join(repoRoot, 'docs/maintainers/demos.md'),
+    includes: 'images/demos/50-proxy-proof.gif',
+  },
+  {
     label: 'Quickstart demo reference',
     file: path.join(repoRoot, 'docs/mullgate-docs/content/docs/getting-started/quickstart.mdx'),
     includes: '/images/demos/setup-guided.gif',
@@ -41,10 +46,12 @@ const checks = [
 ] as const;
 
 const assetChecks = [
+  path.join(repoRoot, 'images/demos/50-proxy-proof.gif'),
   path.join(repoRoot, 'images/demos/setup-guided.gif'),
   path.join(repoRoot, 'images/demos/exposure-private-network.gif'),
   path.join(repoRoot, 'images/demos/status-doctor.gif'),
   path.join(repoRoot, 'images/demos/relay-recommend.gif'),
+  path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/50-proxy-proof.gif'),
   path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/setup-guided.gif'),
   path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/exposure-private-network.gif'),
   path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/status-doctor.gif'),

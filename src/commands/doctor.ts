@@ -252,7 +252,7 @@ function renderUnconfiguredFailure(
     summary: 'Mullgate is not configured yet, so doctor cannot inspect runtime or exposure state.',
     details: [message],
     remediation:
-      'Run `mullgate setup` first, then rerun `mullgate doctor` once a canonical config exists.',
+      'Run `mullgate setup` first, then rerun `mullgate proxy doctor` once a canonical config exists.',
   };
 
   return {
@@ -349,7 +349,7 @@ function buildValidationCheck(input: {
         'One or more shared runtime config artifacts are missing from the runtime directory.',
       details,
       remediation:
-        'Run `mullgate validate` or `mullgate start` to regenerate the shared entry-wireproxy and route-proxy artifacts before trusting the saved runtime state.',
+        'Run `mullgate proxy validate` or `mullgate proxy start` to regenerate the shared entry-wireproxy and route-proxy artifacts before trusting the saved runtime state.',
     };
   }
 
@@ -365,7 +365,7 @@ function buildValidationCheck(input: {
         `reason=${input.runtimeValidationReport.result.reason}`,
       ],
       remediation:
-        'Delete the broken runtime validation report and rerun `mullgate validate` so doctor can trust the persisted validation surface again.',
+        'Delete the broken runtime validation report and rerun `mullgate proxy validate` so doctor can trust the persisted validation surface again.',
     };
   }
 
@@ -392,7 +392,7 @@ function buildValidationCheck(input: {
           : 'Saved runtime status is `error`, so the current runtime artifacts should not be trusted.',
         details: reportDetails,
         remediation:
-          'Fix the reported entry-wireproxy or route-proxy config issue, then rerun `mullgate validate` or `mullgate start` to refresh the shared runtime artifacts.',
+          'Fix the reported entry-wireproxy or route-proxy config issue, then rerun `mullgate proxy validate` or `mullgate proxy start` to refresh the shared runtime artifacts.',
       };
     }
 
@@ -404,7 +404,7 @@ function buildValidationCheck(input: {
           'Saved config is marked `unvalidated`, so runtime artifacts may lag behind recent config or exposure edits.',
         details: reportDetails,
         remediation:
-          'Run `mullgate validate` or `mullgate start` to regenerate the shared runtime artifacts and capture a fresh validation report.',
+          'Run `mullgate proxy validate` or `mullgate proxy start` to regenerate the shared runtime artifacts and capture a fresh validation report.',
       };
     }
 
@@ -428,7 +428,7 @@ function buildValidationCheck(input: {
         `validation-report=missing (${input.runtimeValidationReport.reportPath})`,
       ],
       remediation:
-        'Rerun `mullgate validate` or `mullgate start` so the saved error state has a fresh shared-runtime validation report behind it.',
+        'Rerun `mullgate proxy validate` or `mullgate proxy start` so the saved error state has a fresh shared-runtime validation report behind it.',
     };
   }
 
@@ -443,7 +443,7 @@ function buildValidationCheck(input: {
         `validation-report=missing (${input.runtimeValidationReport.reportPath})`,
       ],
       remediation:
-        'Run `mullgate validate` or `mullgate start` to generate the shared runtime validation report before relying on the saved validation metadata.',
+        'Run `mullgate proxy validate` or `mullgate proxy start` to generate the shared runtime validation report before relying on the saved validation metadata.',
     };
   }
 
@@ -457,7 +457,7 @@ function buildValidationCheck(input: {
       `validation-report=missing (${input.runtimeValidationReport.reportPath})`,
     ],
     remediation:
-      'Rerun `mullgate validate` to recreate the missing shared runtime validation report before relying on the saved validation metadata.',
+      'Rerun `mullgate proxy validate` to recreate the missing shared runtime validation report before relying on the saved validation metadata.',
   };
 }
 
@@ -477,7 +477,7 @@ function buildRelayCacheCheck(
         ...(relayCacheResult.cause ? [`cause=${relayCacheResult.cause}`] : []),
       ],
       remediation:
-        'Refresh the saved relay catalog with a fresh `mullgate setup` run, then rerun `mullgate validate` or `mullgate start` to rebuild derived artifacts.',
+        'Refresh the saved relay catalog with a fresh `mullgate setup` run, then rerun `mullgate proxy validate` or `mullgate proxy start` to rebuild derived artifacts.',
     };
   }
 
@@ -512,7 +512,7 @@ function buildRelayCacheCheck(
         'Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.',
       details,
       remediation:
-        'Refresh the saved relay catalog with `mullgate setup`, then rerun `mullgate validate` or `mullgate start` so runtime artifacts use the fresh relay data.',
+        'Refresh the saved relay catalog with `mullgate setup`, then rerun `mullgate proxy validate` or `mullgate proxy start` so runtime artifacts use the fresh relay data.',
     };
   }
 
@@ -551,7 +551,7 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
       summary: 'Saved exposure flags disagree with the configured exposure mode.',
       details,
       remediation:
-        'Re-save the exposure contract with `mullgate exposure ...` so allow-lan and the saved network-mode posture stay aligned.',
+        'Re-save the exposure contract with `mullgate proxy access ...` so allow-lan and the saved network-mode posture stay aligned.',
     };
   }
 
@@ -626,8 +626,8 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
       details: [...details, ...issues],
       remediation:
         config.setup.exposure.mode === 'loopback'
-          ? 'Rerun `mullgate exposure --mode loopback` so each route gets the expected loopback bind IPs, then revalidate the runtime artifacts.'
-          : 'Use `mullgate exposure` to correct the route bind IPs for the current exposure mode, then rerun `mullgate validate` or `mullgate start`.',
+          ? 'Rerun `mullgate proxy access --mode loopback` so each route gets the expected loopback bind IPs, then revalidate the runtime artifacts.'
+          : 'Use `mullgate proxy access` to correct the route bind IPs for the current exposure mode, then rerun `mullgate proxy validate` or `mullgate proxy start`.',
     };
   }
 
@@ -784,7 +784,7 @@ function buildRuntimeCheck(
         : 'No live compose containers are running right now.',
       details,
       remediation:
-        'Run `mullgate start` after fixing any validation, bind, or last-start issues reported above.',
+        'Run `mullgate proxy start` after fixing any validation, bind, or last-start issues reported above.',
     };
   }
 
@@ -796,7 +796,7 @@ function buildRuntimeCheck(
         'Live Docker Compose state shows one or more expected shared Mullgate services are stopped or degraded.',
       details,
       remediation:
-        'Inspect `docker compose ps` / `docker compose logs` for the named shared services, fix the failing entry tunnel, route proxy, or routing layer, then rerun `mullgate start`.',
+        'Inspect `docker compose ps` / `docker compose logs` for the named shared services, fix the failing entry tunnel, route proxy, or routing layer, then rerun `mullgate proxy start`.',
     };
   }
 
@@ -821,7 +821,7 @@ function buildLastStartCheck(
         'The persisted last-start diagnostic report could not be parsed back into the expected shape.',
       details: [`reason=${lastStartResult.reason}`],
       remediation:
-        'Delete the broken last-start report and rerun `mullgate start` so doctor can capture a fresh runtime failure context.',
+        'Delete the broken last-start report and rerun `mullgate proxy start` so doctor can capture a fresh runtime failure context.',
     };
   }
 
@@ -834,7 +834,7 @@ function buildLastStartCheck(
         'Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.',
       ],
       remediation:
-        'Run `mullgate start` once to capture a persisted launch report that future doctor runs can inspect.',
+        'Run `mullgate proxy start` once to capture a persisted launch report that future doctor runs can inspect.',
     };
   }
 
@@ -856,7 +856,7 @@ function buildLastStartCheck(
     return {
       name: 'last-start',
       outcome: 'pass',
-      summary: 'The last recorded `mullgate start` attempt completed successfully.',
+      summary: 'The last recorded `mullgate proxy start` attempt completed successfully.',
       details,
     };
   }
@@ -867,8 +867,8 @@ function buildLastStartCheck(
     name: 'last-start',
     outcome: 'fail',
     summary: authRelated
-      ? 'The last recorded `mullgate start` attempt failed with an auth-related route/runtime error.'
-      : 'The last recorded `mullgate start` attempt failed and should be treated as actionable runtime evidence.',
+      ? 'The last recorded `mullgate proxy start` attempt failed with an auth-related route/runtime error.'
+      : 'The last recorded `mullgate proxy start` attempt failed and should be treated as actionable runtime evidence.',
     details,
     remediation: authRelated
       ? buildAuthFailureRemediation(lastStart)
@@ -1123,7 +1123,7 @@ function buildAuthFailureRemediation(lastStart: RuntimeStartDiagnostic): string 
     routeContext.length > 0
       ? `Check ${routeContext} for rejected proxy auth or stale rendered credentials.`
       : 'Check the failing route/service for rejected proxy auth or stale rendered credentials.',
-    'If credentials changed, update `setup.auth.username` / `setup.auth.password` with `mullgate config set`, then rerun `mullgate validate` and `mullgate start`.',
+    'If credentials changed, update `setup.auth.username` / `setup.auth.password` with `mullgate config set`, then rerun `mullgate proxy validate` and `mullgate proxy start`.',
   ].join(' ');
 }
 
@@ -1133,21 +1133,21 @@ function buildStartFailureRemediation(lastStart: RuntimeStartDiagnostic): string
     routeContext.length > 0
       ? `Inspect ${routeContext} first.`
       : 'Inspect the failing runtime service first.',
-    'Then follow the saved artifact paths and rerun `mullgate start` only after the reported runtime error is fixed.',
+    'Then follow the saved artifact paths and rerun `mullgate proxy start` only after the reported runtime error is fixed.',
   ].join(' ');
 }
 
 function buildHostnameRemediation(config: MullgateConfig, exposure: ExposureContract): string {
   if (usesDirectBindIpLoopbackAccess(config)) {
-    return 'Keep using the direct bind-IP entrypoints for normal loopback access. If you want hostname-based local testing, use `mullgate hosts` and install the emitted hosts block on this machine.';
+    return 'Keep using the direct bind-IP entrypoints for normal loopback access. If you want hostname-based local testing, use `mullgate proxy access` and install the emitted hosts block on this machine.';
   }
 
   if (config.setup.exposure.baseDomain) {
-    return 'Publish or update the saved DNS A records so every route hostname resolves to its saved bind IP, then rerun `mullgate doctor`.';
+    return 'Publish or update the saved DNS A records so every route hostname resolves to its saved bind IP, then rerun `mullgate proxy doctor`.';
   }
 
   if (exposure.routes.some((route) => route.hostname !== route.bindIp)) {
-    return 'Use `mullgate hosts` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun `mullgate doctor`.';
+    return 'Use `mullgate proxy access` and install the emitted hosts block on this machine so each route hostname resolves to its saved bind IP, then rerun `mullgate proxy doctor`.';
   }
 
   return 'Use the direct bind-IP entrypoints from the saved exposure contract when hostnames are not available.';

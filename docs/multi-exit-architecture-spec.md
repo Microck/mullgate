@@ -59,17 +59,11 @@ The shared-entry runtime has been proven with live Mullvad traffic, not just fix
 Verified results:
 
 - the integrated S06 release proof passed with one shared Mullvad device and multiple routed exits
-- a preserved proof home was expanded to 50 total routes while reusing the same saved shared device
-- the 50-route runtime started successfully with the normal three-container topology:
+- the shared-entry runtime started successfully with the normal three-container topology:
   - `entry-tunnel`
   - `route-proxy`
   - `routing-layer`
-- a live sweep through `https://am.i.mullvad.net/json` proved:
-  - 50 of 50 SOCKS5 routes passed
-  - 50 of 50 HTTP routes passed
-  - 49 of 50 HTTPS routes passed on the first sweep, with one transient HTTP/2 framing error
-  - 50 of 50 HTTPS routes passed on the rerun
-- the full matrix exposed 50 distinct exit IPs from one shared Mullvad device
+- a live sweep through `https://am.i.mullvad.net/json` proved that route-specific SOCKS5, HTTP, and HTTPS listeners could still exit through Mullvad while sharing one device
 
 ## What remains true
 
