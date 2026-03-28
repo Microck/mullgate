@@ -110,7 +110,7 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
       code: 'LOOPBACK_ONLY',
       severity: 'info',
       message:
-        'Loopback mode is local-only. Keep using `mullgate hosts` for host-file testing on this machine.',
+        'Loopback mode is local-only. Keep using `mullgate proxy access` for host-file testing on this machine.',
     });
   }
 
@@ -147,7 +147,7 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
       severity: 'warning',
       message:
         config.runtime.status.message ??
-        'Saved exposure settings have not been rendered into runtime artifacts yet. Rerun `mullgate validate` or `mullgate start` after changing exposure settings.',
+        'Saved exposure settings have not been rendered into runtime artifacts yet. Rerun `mullgate proxy validate` or `mullgate proxy start` after changing exposure settings.',
     });
   }
 
@@ -218,10 +218,10 @@ export function validateExposureSettings(input: {
       cause:
         input.routeCount === 1
           ? input.caller === 'config-exposure'
-            ? 'Pass --route-bind-ip <ip> to `mullgate exposure`.'
+            ? 'Pass --route-bind-ip <ip> to `mullgate proxy access`.'
             : 'Pass --route-bind-ip <ip> or set MULLGATE_ROUTE_BIND_IPS to a single IPv4 address.'
           : input.caller === 'config-exposure'
-            ? 'Repeat --route-bind-ip for each route in `mullgate exposure`.'
+            ? 'Repeat --route-bind-ip for each route in `mullgate proxy access`.'
             : 'Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a comma-separated ordered list.',
       artifactPath: input.artifactPath,
     };
@@ -353,7 +353,7 @@ function buildExposureGuidance(config: MullgateConfig, dnsRecords: readonly stri
   if (config.setup.exposure.mode === 'loopback') {
     return [
       'Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.',
-      'Use `mullgate hosts` if you want a copy/paste /etc/hosts block for this machine.',
+      'Use `mullgate proxy access` if you want a copy/paste /etc/hosts block for this machine.',
     ];
   }
 
@@ -396,7 +396,7 @@ function buildExposurePosture(config: MullgateConfig): ExposureContract['posture
       summary:
         'Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.',
       remoteStory:
-        'Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use `mullgate hosts` when local host-file wiring is the easiest path.',
+        'Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use `mullgate proxy access` when local host-file wiring is the easiest path.',
     };
   }
 
@@ -414,11 +414,11 @@ function buildExposureRemediation(config: MullgateConfig): ExposureContract['rem
   if (config.setup.exposure.mode === 'loopback') {
     return {
       bindPosture:
-        'Keep loopback mode on local-only bind IPs. If you need remote access, rerun `mullgate exposure --mode private-network ...` with one trusted-network bind IP per route.',
+        'Keep loopback mode on local-only bind IPs. If you need remote access, rerun `mullgate proxy access --mode private-network ...` with one trusted-network bind IP per route.',
       hostnameResolution:
-        'For local host-file testing, use `mullgate hosts` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.',
+        'For local host-file testing, use `mullgate proxy access` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.',
       restart:
-        'After changing exposure settings, rerun `mullgate validate` or `mullgate start` so the runtime artifacts match the saved local-only posture.',
+        'After changing exposure settings, rerun `mullgate proxy validate` or `mullgate proxy start` so the runtime artifacts match the saved local-only posture.',
     };
   }
 
@@ -427,9 +427,9 @@ function buildExposureRemediation(config: MullgateConfig): ExposureContract['rem
       bindPosture:
         'Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.',
       hostnameResolution:
-        'Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use `mullgate hosts` when host-file wiring is the intended local workaround.',
+        'Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use `mullgate proxy access` when host-file wiring is the intended local workaround.',
       restart:
-        'After exposure or bind-IP changes, rerun `mullgate validate` or `mullgate start` so the runtime artifacts and operator guidance match the recommended private-network posture.',
+        'After exposure or bind-IP changes, rerun `mullgate proxy validate` or `mullgate proxy start` so the runtime artifacts and operator guidance match the recommended private-network posture.',
     };
   }
 
@@ -439,7 +439,7 @@ function buildExposureRemediation(config: MullgateConfig): ExposureContract['rem
     hostnameResolution:
       'Publish DNS A records so every route hostname resolves to its saved public bind IP before expecting remote hostname access to work on the open internet.',
     restart:
-      'After changing exposure or DNS-facing bind IPs, rerun `mullgate validate` or `mullgate start` so runtime artifacts reflect the advanced public posture accurately.',
+      'After changing exposure or DNS-facing bind IPs, rerun `mullgate proxy validate` or `mullgate proxy start` so runtime artifacts reflect the advanced public posture accurately.',
   };
 }
 

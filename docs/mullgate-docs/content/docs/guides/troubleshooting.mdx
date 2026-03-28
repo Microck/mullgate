@@ -9,11 +9,11 @@ This page summarizes the most important troubleshooting patterns described or im
 
 The primary diagnostic surfaces are:
 
-- `mullgate status`
-- `mullgate doctor`
-- `mullgate exposure`
-- `mullgate hosts`
-- `mullgate validate --refresh`
+- `mullgate proxy status`
+- `mullgate proxy doctor`
+- `mullgate proxy access`
+- `mullgate proxy access`
+- `mullgate proxy validate --refresh`
 
 ## Common problems
 
@@ -28,10 +28,10 @@ Check for:
 
 What to do:
 
-1. run `mullgate exposure`
+1. run `mullgate proxy access`
 2. confirm the route-to-bind-IP mapping
 3. if you are intentionally using hostname entrypoints, verify local hosts or DNS resolution
-4. run `mullgate doctor`
+4. run `mullgate proxy doctor`
 
 In loopback mode without a base domain, direct bind-IP entrypoints are the canonical local path. Missing host-file mappings only matter when you want hostname shortcuts on that same machine.
 
@@ -48,7 +48,7 @@ What to do:
 1. assign one explicit bind IP per route
 2. regenerate or review exposure output
 3. publish matching DNS A records
-4. run `mullgate validate --refresh` or `mullgate start`
+4. run `mullgate proxy validate --refresh` or `mullgate proxy start`
 
 ### Saved configuration changed but runtime does not match
 
@@ -59,9 +59,9 @@ Likely cause:
 What to do:
 
 ```bash
-mullgate validate --refresh
+mullgate proxy validate --refresh
 # or
-mullgate start
+mullgate proxy start
 ```
 
 ### Installed command says the config version is unsupported
@@ -74,7 +74,7 @@ What to do:
 
 1. back up or remove the config file and runtime directory named in the error
 2. rerun `mullgate setup`
-3. rerun `mullgate start`
+3. rerun `mullgate proxy start`
 
 Do not expect the current CLI to operate on the old runtime bundle in place.
 
@@ -96,17 +96,17 @@ Look for:
 - validation failures
 - missing HTTPS material when HTTPS is enabled
 
-Use `mullgate status` and `mullgate doctor` to identify which layer failed.
+Use `mullgate proxy status` and `mullgate proxy doctor` to identify which layer failed.
 
 ## Troubleshooting workflow
 
 A reliable sequence is:
 
-1. inspect configuration with `mullgate exposure`
-2. inspect hostname guidance with `mullgate hosts`
-3. refresh derived runtime state with `mullgate validate --refresh`
-4. check runtime truth with `mullgate status`
-5. investigate routing or hostname drift with `mullgate doctor`
+1. inspect configuration with `mullgate proxy access`
+2. inspect hostname guidance with `mullgate proxy access`
+3. refresh derived runtime state with `mullgate proxy validate --refresh`
+4. check runtime truth with `mullgate proxy status`
+5. investigate routing or hostname drift with `mullgate proxy doctor`
 6. verify with a real probe such as `curl` through the intended proxy entrypoint
 
 ## Escalation questions

@@ -52,7 +52,7 @@ async function main(): Promise<void> {
 
     await runDisplayedCliCommand({
       display: 'mullgate doctor',
-      args: ['doctor'],
+      args: ['proxy', 'doctor'],
       env: demoEnv,
       clearScreen: false,
     });

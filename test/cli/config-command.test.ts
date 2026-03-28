@@ -337,7 +337,7 @@ copy/paste hosts block
       mode label: Private network / Tailscale-first
       recommendation: recommended-remote
       posture summary: Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.
-      remote story: Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate hosts\` when local host-file wiring is the easiest path.
+      remote story: Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate proxy access\` when local host-file wiring is the easiest path.
       base domain: proxy.example.com
       allow lan: yes
       runtime status: unvalidated
@@ -351,8 +351,8 @@ copy/paste hosts block
 
       remediation
       - bind posture: Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.
-      - hostname resolution: Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate hosts\` when host-file wiring is the intended local workaround.
-      - restart: After exposure or bind-IP changes, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
+      - hostname resolution: Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate proxy access\` when host-file wiring is the intended local workaround.
+      - restart: After exposure or bind-IP changes, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
 
       routes
       1. sweden-gothenburg.proxy.example.com -> 192.168.10.10
@@ -381,7 +381,7 @@ copy/paste hosts block
       - warning: Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
 
       local host-file mapping
-      - \`mullgate hosts\` remains the copy/paste /etc/hosts view for local-only testing."
+      - \`mullgate proxy access\` remains the copy/paste /etc/hosts view for local-only testing."
     `);
   });
 
@@ -437,7 +437,7 @@ copy/paste hosts block
       remediation
       - bind posture: Use public mode only with intentionally public, distinct bind IPs per route. If you are not deliberately publishing internet-reachable listeners, switch back to private-network mode.
       - hostname resolution: Publish DNS A records so every route hostname resolves to its saved public bind IP before expecting remote hostname access to work on the open internet.
-      - restart: After changing exposure or DNS-facing bind IPs, rerun \`mullgate validate\` or \`mullgate start\` so runtime artifacts reflect the advanced public posture accurately.
+      - restart: After changing exposure or DNS-facing bind IPs, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so runtime artifacts reflect the advanced public posture accurately.
 
       routes
       1. 203.0.113.10 -> 203.0.113.10
@@ -466,7 +466,7 @@ copy/paste hosts block
       - warning: Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
 
       local host-file mapping
-      - \`mullgate hosts\` remains the copy/paste /etc/hosts view for local-only testing."
+      - \`mullgate proxy access\` remains the copy/paste /etc/hosts view for local-only testing."
     `);
   });
 
@@ -505,7 +505,7 @@ copy/paste hosts block
       phase: 'unvalidated',
       lastCheckedAt: null,
       message:
-        'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
+        'Exposure settings changed; rerun `mullgate proxy validate` or `mullgate proxy start` to refresh runtime artifacts.',
     });
     expect(
       `\n${renderExposureReport(result.config, '/tmp/mullgate-home/config/mullgate/config.json')}`,

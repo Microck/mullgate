@@ -137,7 +137,7 @@ export class ConfigStore {
           message: [
             `Config version ${error.version} is no longer supported. Mullgate now requires a version ${CONFIG_VERSION} config with one shared WireGuard device and exact per-route exits.`,
             'This is stale local state, not a config the current CLI will operate.',
-            `Back up or remove ${this.paths.configFile} and the runtime artifacts under ${this.paths.runtimeDir}, then rerun \`mullgate setup\` and \`mullgate start\`.`,
+            `Back up or remove ${this.paths.configFile} and the runtime artifacts under ${this.paths.runtimeDir}, then rerun \`mullgate setup\` and \`mullgate proxy start\`.`,
           ].join(' '),
         };
       }

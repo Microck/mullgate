@@ -150,9 +150,9 @@ export async function enableAutostart(
       'phase: autostart-enable',
       'platform: linux',
       `unit: ${support.unitPath}`,
-      `exec start: ${support.binaryPath} start`,
+      `exec start: ${support.binaryPath} proxy start`,
       'service: enabled and started',
-      'next step: run `mullgate autostart status` if you want to verify the user service state.',
+      'next step: run `mullgate proxy autostart status` if you want to verify the user service state.',
     ].join('\n'),
   };
 }
@@ -215,7 +215,7 @@ export async function disableAutostart(
       'platform: linux',
       `unit: ${support.unitPath}`,
       'service: stopped and removed',
-      'next step: run `mullgate start` manually whenever you want the proxy runtime online.',
+      'next step: run `mullgate proxy start` manually whenever you want the proxy runtime online.',
     ].join('\n'),
   };
 }
@@ -255,7 +255,7 @@ export async function inspectAutostart(
       'platform: linux',
       `unit: ${support.unitPath}`,
       `unit file: ${unitState}`,
-      `exec start: ${support.binaryPath} start`,
+      `exec start: ${support.binaryPath} proxy start`,
       `enabled: ${enabledState}`,
       `active: ${activeState}`,
       ...(unitContents === null ? [] : ['preview:', ...unitContents.split('\n')]),
@@ -272,7 +272,7 @@ export function buildAutostartUnitFile(input: { readonly binaryPath: string }): 
     '',
     '[Service]',
     'Type=simple',
-    `ExecStart=${escapeSystemdExecArgument(input.binaryPath)} start`,
+    `ExecStart=${escapeSystemdExecArgument(input.binaryPath)} proxy start`,
     'Restart=on-failure',
     'RestartSec=15',
     'WorkingDirectory=%h',
@@ -324,7 +324,7 @@ async function resolveSupportedAutostartPaths(
     return renderAutostartFailure({
       action: 'status',
       message:
-        'Could not resolve an installed `mullgate` executable on PATH. Install the CLI first, then retry `mullgate autostart enable`.',
+        'Could not resolve an installed `mullgate` executable on PATH. Install the CLI first, then retry `mullgate proxy autostart enable`.',
     });
   }
 
@@ -450,7 +450,7 @@ function renderAutostartFailure(input: {
       'Mullgate autostart failed.',
       `phase: autostart-${input.action}`,
       ...(input.unitPath ? [`unit: ${input.unitPath}`] : []),
-      ...(input.binaryPath ? [`exec start: ${input.binaryPath} start`] : []),
+      ...(input.binaryPath ? [`exec start: ${input.binaryPath} proxy start`] : []),
       `reason: ${input.message}`,
       ...(input.cause ? [`cause: ${input.cause}`] : []),
     ].join('\n'),

@@ -225,7 +225,7 @@ async function main(): Promise<void> {
 
     context.phase = 'config-hosts';
     logPhase(context.phase, 'Inspecting emitted hostname → bind IP mappings.');
-    const hostsResult = await runCliCommand(context, env, ['hosts'], 'hosts');
+    const hostsResult = await runCliCommand(context, env, ['proxy', 'access'], 'hosts');
     context.hostsOutputPath = hostsResult.stdoutPath;
     assertExitCode(hostsResult, 0, context, 'mullgate hosts failed.');
     assertHostsOutput(hostsResult.stdout, configAfterSetup);
@@ -242,7 +242,7 @@ async function main(): Promise<void> {
 
     context.phase = 'start';
     logPhase(context.phase, 'Starting the real Docker runtime via mullgate start.');
-    const startResult = await runCliCommand(context, env, ['start'], 'start');
+    const startResult = await runCliCommand(context, env, ['proxy', 'start'], 'start');
     context.runtimeStarted = startResult.exitCode === 0;
     assertExitCode(startResult, 0, context, 'mullgate start failed.');
 
@@ -301,14 +301,14 @@ async function main(): Promise<void> {
 
     context.phase = 'doctor';
     logPhase(context.phase, 'Checking mullgate doctor for route-aware recovery truth.');
-    const doctorResult = await runCliCommand(context, env, ['doctor'], 'doctor');
+    const doctorResult = await runCliCommand(context, env, ['proxy', 'doctor'], 'doctor');
 
     if (doctorResult.exitCode !== 0) {
       const doctorOutput = doctorResult.stderr || doctorResult.stdout;
       const extraGuidance = doctorOutput.includes('hostname-resolution: fail')
         ? [
             'Doctor reported hostname-resolution drift.',
-            'Install the hosts block emitted by `mullgate hosts` or publish DNS so each route hostname resolves to its saved bind IP, then rerun `pnpm verify:s06`.',
+            'Install the hosts block emitted by `mullgate proxy access` or publish DNS so each route hostname resolves to its saved bind IP, then rerun `pnpm verify:s06`.',
             ...(context.hostsOutputPath ? [`hosts output: ${context.hostsOutputPath}`] : []),
           ]
         : [];
@@ -735,7 +735,7 @@ function assertAtLeastTwoRoutes(config: MullgateConfig): void {
 
 function assertHostsOutput(output: string, config: MullgateConfig): void {
   if (!output.includes('copy/paste hosts block')) {
-    throw new Error('`mullgate hosts` output did not include the copy/paste hosts block.');
+    throw new Error('`mullgate proxy access` output did not include the copy/paste hosts block.');
   }
 
   for (const route of config.routing.locations) {
@@ -785,12 +785,14 @@ function assertStartSummary(
   config: MullgateConfig,
 ): void {
   if (!output.includes('Mullgate runtime started.')) {
-    throw new Error('`mullgate start` success output did not include the runtime started banner.');
+    throw new Error(
+      '`mullgate proxy start` success output did not include the runtime started banner.',
+    );
   }
 
   if (!output.includes('exposure entrypoints:')) {
     throw new Error(
-      '`mullgate start` success output did not include the exposure entrypoint inventory.',
+      '`mullgate proxy start` success output did not include the exposure entrypoint inventory.',
     );
   }
 

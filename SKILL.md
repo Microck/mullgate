@@ -27,11 +27,11 @@ Choose the path that matches the user’s goal:
 
 - Install or verify the CLI:
   - Prefer the checked-in installer path from `README.md`
-  - Verify with `mullgate --help` and `mullgate path`
+  - Verify with `mullgate --help` and `mullgate config path`
 - First-time local proof:
   - Prefer Linux
   - Prefer `loopback` exposure with two routes
-  - Run `mullgate setup`, then `mullgate hosts`
+  - Run `mullgate setup`, then `mullgate proxy access`
 - Automated or repeatable setup:
   - Use `mullgate setup --non-interactive`
   - Start from `.env.example`
@@ -43,9 +43,9 @@ Choose the path that matches the user’s goal:
   - Use only when internet-reachable listeners are explicitly intended
   - Treat it as a higher-risk posture and verify it carefully
 - Relay choice and exact-exit proof:
-  - Use `mullgate relays list`, `mullgate relays probe`, `mullgate recommend`, and `mullgate relays verify`
+  - Use `mullgate relays list`, `mullgate relays probe`, `mullgate proxy relay recommend`, and `mullgate relays verify`
 - Runtime diagnosis:
-  - Start with `mullgate exposure`, `mullgate hosts`, `mullgate status`, and `mullgate doctor`
+  - Start with `mullgate proxy access`, `mullgate proxy access`, `mullgate proxy status`, and `mullgate proxy doctor`
 
 ## Mental Model
 
@@ -64,8 +64,8 @@ Choose the path that matches the user’s goal:
 - Use `mullgate setup --non-interactive` only when all required inputs are available through flags or environment variables.
 - Do not describe Mullgate as consuming one Mullvad WireGuard device per route. The current runtime uses one shared entry device and many logical exits.
 - Keep hostname-based routing truthful: each non-loopback route needs its own bind IP, and each hostname must resolve to that route’s bind IP.
-- Prefer `mullgate exposure` and `mullgate hosts` over hand-written explanations when deciding whether a hostname or bind plan is correct.
-- Use `mullgate validate --refresh` or `mullgate start` after exposure changes when derived runtime state may be stale.
+- Prefer `mullgate proxy access` and `mullgate proxy access` over hand-written explanations when deciding whether a hostname or bind plan is correct.
+- Use `mullgate validate --refresh` or `mullgate proxy start` after exposure changes when derived runtime state may be stale.
 - Keep `mullgate recommend --apply` tied to exact relay hostnames, not broad selectors.
 
 ## Practical Command Sequences
@@ -76,33 +76,33 @@ Use these sequences as the default operator flow:
 
 1. Install Mullgate.
 2. Run `mullgate --help`.
-3. Run `mullgate path`.
+3. Run `mullgate config path`.
 
 ### First working setup
 
 1. Run `mullgate setup` or `mullgate setup --non-interactive`.
-2. Run `mullgate hosts` for local hostname mapping.
-3. Run `mullgate exposure` to inspect mode, hostnames, and bind IPs.
-4. Run `mullgate start`.
-5. Run `mullgate status`.
-6. Run `mullgate doctor`.
+2. Run `mullgate proxy access` for local hostname mapping.
+3. Run `mullgate proxy access` to inspect mode, hostnames, and bind IPs.
+4. Run `mullgate proxy start`.
+5. Run `mullgate proxy status`.
+6. Run `mullgate proxy doctor`.
 
 ### Client export and exit tuning
 
-1. Run `mullgate regions`.
+1. Run `mullgate proxy export --regions`.
 2. Run `mullgate export --guided` or a deterministic `mullgate export ...` selector sequence.
 3. Run `mullgate relays list` to inspect candidates.
 4. Run `mullgate relays probe` to compare likely exits.
-5. Run `mullgate recommend` to preview, then `--apply` if requested.
+5. Run `mullgate proxy relay recommend` to preview, then `--apply` if requested.
 6. Run `mullgate relays verify --route <route>` to prove the configured exit.
 
 ### Troubleshooting
 
-1. Run `mullgate exposure`.
-2. Run `mullgate hosts`.
+1. Run `mullgate proxy access`.
+2. Run `mullgate proxy access`.
 3. Run `mullgate validate --refresh` if config changed.
-4. Run `mullgate status`.
-5. Run `mullgate doctor`.
+4. Run `mullgate proxy status`.
+5. Run `mullgate proxy doctor`.
 6. Run a real probe through the intended proxy entrypoint.
 
 ## What To Watch For
@@ -110,7 +110,7 @@ Use these sequences as the default operator flow:
 - Missing required non-interactive inputs
 - Shared bind IPs across multiple non-loopback routes
 - Hostnames resolving to the wrong bind IP
-- DNS that does not match `mullgate exposure`
+- DNS that does not match `mullgate proxy access`
 - Runtime state that was not refreshed after config edits
 - HTTPS enabled without both cert and key material
 - Users expecting macOS or Windows Docker runtime behavior to match Linux

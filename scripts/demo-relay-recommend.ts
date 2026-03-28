@@ -54,13 +54,13 @@ async function main(): Promise<void> {
 
     await runDisplayedCliCommand({
       display: 'mullgate relays probe --country Sweden --count 2',
-      args: ['relays', 'probe', '--country', 'Sweden', '--count', '2'],
+      args: ['proxy', 'relay', 'probe', '--country', 'Sweden', '--count', '2'],
       env: demoEnv,
     });
 
     await runDisplayedCliCommand({
       display: 'mullgate recommend --country Sweden --count 1',
-      args: ['recommend', '--country', 'Sweden', '--count', '1'],
+      args: ['proxy', 'relay', 'recommend', '--country', 'Sweden', '--count', '1'],
       env: demoEnv,
     });
   } finally {

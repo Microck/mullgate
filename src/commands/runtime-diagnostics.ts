@@ -136,7 +136,7 @@ export function renderComposeRemediation(
 ): string {
   switch (code) {
     case 'DOCKER_COMPOSE_MISSING':
-      return 'Install Docker plus the Compose plugin, then rerun `mullgate status`, `mullgate doctor`, or `mullgate start`.';
+      return 'Install Docker plus the Compose plugin, then rerun `mullgate proxy status`, `mullgate proxy doctor`, or `mullgate proxy start`.';
     case 'COMPOSE_PS_FAILED':
       return 'Check `docker compose ps` / `docker compose logs` for the saved compose file and resolve the runtime failure before retrying.';
     case 'COMPOSE_PS_INVALID_JSON':

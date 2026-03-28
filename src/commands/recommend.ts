@@ -166,10 +166,21 @@ export async function runRecommendFlow(input: {
   }
 
   const selectorResult = parseProxyExportSelectors(
-    extractOrderedCommandArgs({
-      argv: process.argv,
-      commandPath: ['recommend'],
-    }),
+    (() => {
+      const proxyRelayRecommend = extractOrderedCommandArgs({
+        argv: process.argv,
+        commandPath: ['proxy', 'relay', 'recommend'],
+      });
+
+      if (proxyRelayRecommend.length > 0) {
+        return proxyRelayRecommend;
+      }
+
+      return extractOrderedCommandArgs({
+        argv: process.argv,
+        commandPath: ['recommend'],
+      });
+    })(),
   );
 
   if (!selectorResult.ok) {

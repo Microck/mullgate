@@ -7,11 +7,11 @@ export default function HomePage() {
         Mullgate Documentation
       </p>
       <h1 className="mb-4 text-4xl font-bold sm:text-5xl">
-        Privacy-focused proxy and gateway docs
+        50 concurrent proxies, one shared Mullvad device
       </h1>
       <p className="mb-8 max-w-2xl text-fd-muted-foreground sm:text-lg">
-        Learn how to install, configure, operate, and understand Mullgate, including its CLI
-        workflows, exposure model, and proposed multi-exit architecture.
+        Learn the smaller `setup` / `proxy` / `config` command model, see the 50-route proof, and
+        operate Mullgate without turning the whole machine into a VPN tunnel.
       </p>
       <div className="flex flex-wrap items-center justify-center gap-4">
         <Link

@@ -4,14 +4,29 @@ import path from 'node:path';
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const checks = [
   {
+    label: 'README 50 proxy proof demo reference',
+    file: path.join(repoRoot, 'README.md'),
+    includes: 'images/demos/50-proxy-proof.gif',
+  },
+  {
     label: 'README setup demo reference',
     file: path.join(repoRoot, 'README.md'),
     includes: 'images/demos/setup-guided.gif',
   },
   {
+    label: 'Quickstart 50 proxy proof demo reference',
+    file: path.join(repoRoot, 'docs/mullgate-docs/content/docs/getting-started/quickstart.mdx'),
+    includes: '/images/demos/50-proxy-proof.gif',
+  },
+  {
     label: 'Quickstart demo reference',
     file: path.join(repoRoot, 'docs/mullgate-docs/content/docs/getting-started/quickstart.mdx'),
     includes: '/images/demos/setup-guided.gif',
+  },
+  {
+    label: 'Docs index 50 proxy proof demo reference',
+    file: path.join(repoRoot, 'docs/mullgate-docs/content/docs/index.mdx'),
+    includes: '/images/demos/50-proxy-proof.gif',
   },
   {
     label: 'Usage exposure demo reference',
@@ -38,13 +53,20 @@ const checks = [
     file: path.join(repoRoot, 'docs/maintainers/demos.md'),
     includes: 'images/demos/relay-recommend.gif',
   },
+  {
+    label: 'Maintainer 50 proxy proof demo reference',
+    file: path.join(repoRoot, 'docs/maintainers/demos.md'),
+    includes: 'images/demos/50-proxy-proof.gif',
+  },
 ] as const;
 
 const assetChecks = [
+  path.join(repoRoot, 'images/demos/50-proxy-proof.gif'),
   path.join(repoRoot, 'images/demos/setup-guided.gif'),
   path.join(repoRoot, 'images/demos/exposure-private-network.gif'),
   path.join(repoRoot, 'images/demos/status-doctor.gif'),
   path.join(repoRoot, 'images/demos/relay-recommend.gif'),
+  path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/50-proxy-proof.gif'),
   path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/setup-guided.gif'),
   path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/exposure-private-network.gif'),
   path.join(repoRoot, 'docs/mullgate-docs/public/images/demos/status-doctor.gif'),

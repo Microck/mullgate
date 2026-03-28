@@ -222,7 +222,7 @@ async function verifyScenario(input: {
     const configPathResult = await runCliCommand({
       env: seeded.env,
       cwd: seeded.root,
-      args: ['path'],
+      args: ['config', 'path'],
     });
     const statusResult = await runCliCommand({
       env: seeded.env,
@@ -232,7 +232,7 @@ async function verifyScenario(input: {
     const doctorResult = await runCliCommand({
       env: seeded.env,
       cwd: seeded.root,
-      args: ['doctor'],
+      args: ['proxy', 'doctor'],
     });
     const manifest = await readJsonFile<RuntimeBundleManifest>({
       filePath: resolveArtifactPath({

@@ -376,7 +376,7 @@ export async function seedPrivateNetworkExposure(options: ExposureSeedOptions): 
 
 export async function validateSavedConfig(env: NodeJS.ProcessEnv): Promise<void> {
   const result = await runCli({
-    args: ['validate'],
+    args: ['proxy', 'validate'],
     env,
   });
 

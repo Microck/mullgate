@@ -11,11 +11,8 @@ The usage guide is anchored to these CLI help surfaces:
 
 - `mullgate --help`
 - `mullgate setup --help`
-- `mullgate start --help`
-- `mullgate status --help`
-- `mullgate doctor --help`
-- `mullgate relays --help`
-- `mullgate recommend --help`
+- `mullgate proxy --help`
+- `mullgate proxy relay --help`
 - `mullgate config --help`
 
 ## Know the invocation forms
@@ -35,9 +32,22 @@ A normal Mullgate workflow looks like this:
 2. inspect generated configuration, region groups, and exposure details
 3. export client-ready proxy lists when needed
 4. inspect or probe relay candidates when you want a better exact exit
-5. start the runtime with `mullgate start`
-6. verify behavior with `mullgate status` and `mullgate doctor`
+5. start the runtime with `mullgate proxy start`
+6. verify behavior with `mullgate proxy status` and `mullgate proxy doctor`
 7. access routes by hostname or direct bind IP
+
+## Headline proof
+
+The current Linux runtime has already been proven at the scale this project is claiming:
+
+- 50 concurrent routed proxies
+- 1 shared Mullvad device
+- 50 of 50 SOCKS5 checks passed
+- 50 of 50 HTTP checks passed
+- 50 of 50 HTTPS checks passed
+- 50 distinct exit IPs observed
+
+![50 proxy proof](/images/demos/50-proxy-proof.gif)
 
 ## Recommended first run
 
@@ -53,10 +63,10 @@ For a low-friction Linux proof, start with a local loopback setup using two rout
 Once setup is saved, the next low-friction inspection path is usually:
 
 ```bash
-mullgate regions
-mullgate export --guided
-mullgate relays probe --country Sweden --count 2
-mullgate recommend --country Sweden --count 1
+mullgate proxy export --regions
+mullgate proxy export --guided
+mullgate proxy relay probe --country Sweden --count 2
+mullgate proxy relay recommend --country Sweden --count 1
 ```
 
 That gives you a guided `proxies.txt` flow with real country and region pick-lists, plus a relay-inspection path when you want to preview a faster exact exit instead of guessing.
