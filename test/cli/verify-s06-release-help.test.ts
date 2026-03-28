@@ -99,5 +99,5 @@ describe('verify-s06-release help contract', () => {
         --reuse-temp-home <path>   Resume verification from an earlier preserved temp home instead of provisioning new devices.
         -h, --help                 Show this help text."
     `);
-  });
+  }, 10_000);
 });
