@@ -66,7 +66,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.2.6",
+    "@biomejs/biome": "2.4.9",
     "@types/node": "^24.10.1",
     "@vitest/coverage-v8": "4.1.1",
     "simple-git-hooks": "2.13.1",
