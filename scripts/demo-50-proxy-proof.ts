@@ -40,10 +40,9 @@ async function main(): Promise<void> {
     });
 
     await runDisplayedShellCommand({
-      display:
-        "mullgate proxy access | awk '/^hostname -> bind ip/{show=1; next} /^copy\\/paste hosts block/{exit} show && /^[0-9]+\\./ { print }'",
+      display: 'mullgate proxy export --protocol socks5 --stdout 2>/dev/null',
       command:
-        "node node_modules/tsx/dist/cli.mjs src/cli.ts proxy access | awk '/^hostname -> bind ip/{show=1; next} /^copy\\/paste hosts block/{exit} show && /^[0-9]+\\./ { print }'",
+        'node node_modules/tsx/dist/cli.mjs src/cli.ts proxy export --protocol socks5 --stdout 2>/dev/null',
       env: environment.env,
     });
   } finally {
@@ -71,8 +70,8 @@ async function seedFiftyRouteSetup(input: {
     env: {
       ...input.env,
       MULLGATE_ACCOUNT_NUMBER: '123456789012',
-      MULLGATE_PROXY_USERNAME: 'alice',
-      MULLGATE_PROXY_PASSWORD: 'demo-secret-password',
+      MULLGATE_PROXY_USERNAME: 'user',
+      MULLGATE_PROXY_PASSWORD: 'pass',
       MULLGATE_LOCATIONS: input.routes.map((route) => route.alias).join(','),
     },
   });

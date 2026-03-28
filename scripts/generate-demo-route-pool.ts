@@ -69,7 +69,7 @@ export const demoRoutePool: readonly DemoRouteEntry[] = [
   { alias: 'japan-tokyo', countryName: 'Japan', cityName: 'Tokyo' },
   { alias: 'mexico-queretaro', countryName: 'Mexico', cityName: 'Queretaro' },
   { alias: 'malaysia-kuala-lumpur', countryName: 'Malaysia', cityName: 'Kuala Lumpur' },
-  { alias: 'nigeria-lagos', countryName: 'Nigeria', cityName: 'Lagos' },
+  { alias: 'sweden-stockholm', countryName: 'Sweden', cityName: 'Stockholm' },
   { alias: 'netherlands-amsterdam', countryName: 'Netherlands', cityName: 'Amsterdam' },
   { alias: 'norway-oslo', countryName: 'Norway', cityName: 'Oslo' },
   { alias: 'norway-stavanger', countryName: 'Norway', cityName: 'Stavanger' },
