@@ -7,56 +7,30 @@ The documentation repeatedly anchors itself to the following CLI help contract:
 
 - `mullgate --help`
 - `mullgate setup --help`
-- `mullgate start --help`
-- `mullgate status --help`
-- `mullgate doctor --help`
-- `mullgate autostart --help`
-- `mullgate relays --help`
-- `mullgate recommend --help`
+- `mullgate proxy --help`
+- `mullgate proxy relay --help`
 - `mullgate config --help`
 
 ## Core workflow commands
 
-### `mullgate setup`
-
-Used to create or update the base configuration, including account, proxy credentials, routes, and exposure-related settings.
-
-### `mullgate start`
-
-Used to render or launch the runtime environment.
-
-### `mullgate status`
-
-Used to inspect current runtime state.
-
-### `mullgate doctor`
-
-Used to diagnose runtime, routing, and hostname or exposure drift.
-
-### `mullgate autostart`
-
-Used on Linux to install, inspect, or remove the `systemd --user` service that starts `mullgate start` at login.
-
-### `mullgate config`
-
-Used to inspect and modify configuration surfaces.
-
-Important subcommands referenced in the docs include:
-
-- `mullgate exposure`
-- `mullgate export`
-- `mullgate regions`
-- `mullgate hosts`
-- `mullgate validate --refresh`
-- `mullgate path`
-
-`mullgate export` is the proxy-list generation surface. It supports ordered repeated selector batches such as `--country se --city got --count 1 --region europe --provider m247 --count 2`, guided `proxies.txt` creation via `--guided` with country and region pick-lists, preview mode via `--dry-run`, stdout delivery via `--stdout`, and safe file overwrite behavior with `--force`.
-
-`mullgate regions` prints the curated export region groups that `export --region ...` accepts.
-
-`mullgate relays` is the relay-inspection surface. `relays list` shows matching relay metadata, `relays probe` ranks selected candidates by `ping` latency, and `relays verify` checks whether one configured route still exits through Mullvad on the published proxy protocols.
-
-`mullgate recommend` turns broad selector intent into exact relay-hostname recommendations. By default it stays advisory and previews the exact route Mullgate would use. With `--apply`, it pins the recommended relay hostname into saved config and refreshes the runtime artifacts.
+| command | key flags | purpose |
+| --- | --- | --- |
+| `mullgate setup` | `--non-interactive`, `--location`, `--exposure-mode` | create or update canonical config and derived runtime artifacts |
+| `mullgate proxy access` | `--mode`, `--base-domain`, `--route-bind-ip` | inspect or update hostnames, bind IPs, DNS guidance, and direct-IP entrypoints |
+| `mullgate proxy export` | `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories |
+| `mullgate proxy relay list` | selector flags such as `--country`, `--owner`, `--provider` | inspect relay candidates that match a policy |
+| `mullgate proxy relay probe` | `--country`, `--count` | latency-probe likely relay candidates |
+| `mullgate proxy relay recommend` | `--country`, `--count`, `--apply` | preview or pin an exact relay choice |
+| `mullgate proxy relay verify` | `--route` | verify a configured route across the published proxy protocols |
+| `mullgate proxy validate` | `--refresh` | refresh saved validation metadata and config-derived artifacts |
+| `mullgate proxy start` | none | launch the runtime |
+| `mullgate proxy status` | none | inspect live runtime state |
+| `mullgate proxy doctor` | none | diagnose routing, hostname, and runtime failures |
+| `mullgate proxy autostart` | `enable`, `disable`, `status` | manage login-time startup on supported platforms |
+| `mullgate config path` | none | print config, state, cache, and runtime paths |
+| `mullgate config show` | none | print the saved canonical config |
+| `mullgate config get` | `<key>` | read one saved config value |
+| `mullgate config set` | `<key> <value>` | update one saved config value |
 
 ## Invocation forms
 
@@ -70,17 +44,17 @@ Mullgate is documented in two operator-facing forms:
 A practical workflow usually looks like this:
 
 1. `mullgate setup`
-2. `mullgate exposure`
-3. `mullgate export`
-4. `mullgate regions`
-5. `mullgate relays list`
-6. `mullgate relays probe`
-7. `mullgate recommend`
-8. `mullgate hosts`
-9. `mullgate validate --refresh`
-10. `mullgate start`
-11. `mullgate status`
-12. `mullgate doctor`
+2. `mullgate proxy access`
+3. `mullgate proxy export --regions`
+4. `mullgate proxy export --guided`
+5. `mullgate proxy relay list`
+6. `mullgate proxy relay probe`
+7. `mullgate proxy relay recommend`
+8. `mullgate proxy access`
+9. `mullgate proxy validate --refresh`
+10. `mullgate proxy start`
+11. `mullgate proxy status`
+12. `mullgate proxy doctor`
 
 ## Reference practice
 

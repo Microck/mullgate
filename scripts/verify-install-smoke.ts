@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     });
 
     const pathResult = await runShellCommand({
-      command: `${shellEscape(installedCliPath)} path`,
+      command: `${shellEscape(installedCliPath)} config path`,
     });
     assertSuccess(pathResult);
     assertContains({
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
         `- tarball: ${tarballPath}`,
         `- installed cli: ${installedCliPath}`,
         '- installed mullgate help: ok',
-        '- installed mullgate path: ok',
+        '- installed mullgate config path: ok',
       ].join('\n')}\n`,
     );
   } finally {

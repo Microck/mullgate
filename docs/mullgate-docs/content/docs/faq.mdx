@@ -21,7 +21,7 @@ Mullgate's routing layer dispatches by destination bind IP. That is what keeps h
 
 ## What is the easiest way to test Mullgate locally?
 
-Use a Linux machine and start with a two-route loopback setup. Then run `mullgate hosts`, install the emitted hosts block, and probe the published entrypoints with a real client such as `curl`.
+Use a Linux machine and start with a two-route loopback setup. Then run `mullgate proxy access`, install the emitted hosts block, and probe the published entrypoints with a real client such as `curl`.
 
 ## Does Mullgate fully support macOS and Windows runtime behavior?
 
@@ -29,11 +29,11 @@ The CLI, config inspection, and diagnostic surfaces are supported, but the curre
 
 ## Does each route consume its own Mullvad WireGuard device?
 
-No. The current runtime provisions one shared Mullvad WireGuard entry device and fans out to route-specific Mullvad SOCKS5 exits from inside that tunnel. On Linux, that shared-entry runtime has been live-validated with 50 routed exits on one shared device.
+No. The current runtime provisions one shared Mullvad WireGuard entry device and fans out to route-specific Mullvad SOCKS5 exits from inside that tunnel.
 
 ## Why is there still a multi-exit architecture page?
 
-That page now explains the redesign history and the live proof that closed the original slot-limit problem. It is no longer an aspirational next-step document.
+That page explains the redesign history that closed the original slot-limit problem. It is no longer an aspirational next-step document.
 
 ## Which pages should I read first?
 
@@ -49,9 +49,9 @@ A good path is:
 
 Check the output from:
 
-- `mullgate exposure`
-- `mullgate hosts`
-- `mullgate doctor`
+- `mullgate proxy access`
+- `mullgate proxy access`
+- `mullgate proxy doctor`
 
 Most hostname issues come down to a missing hosts block, incorrect DNS, or a hostname resolving to the wrong bind IP.
 

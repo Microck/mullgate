@@ -365,7 +365,7 @@ describe('mullgate start command', () => {
          https hostname: https://[redacted]:[redacted]@at-vie-wg-001:8443
          https direct ip: https://[redacted]:[redacted]@127.0.0.2:8443
       warnings:
-      - info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
+      - info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
       runtime status: running"
     `);
     expect(`\n${normalizeReport(persistedReport, env)}`).toMatchInlineSnapshot(`

@@ -2,31 +2,20 @@
 
 import { Command } from 'commander';
 import { writeCliReport } from './cli-output.js';
-import { registerAutostartCommand } from './commands/autostart.js';
-import { registerConfigCommands, registerOperatorCommands } from './commands/config.js';
-import { registerDoctorCommand } from './commands/doctor.js';
-import { registerRecommendCommand } from './commands/recommend.js';
-import { registerRelaysCommand } from './commands/relays.js';
+import { registerConfigCommands } from './commands/config.js';
+import { registerProxyCommand } from './commands/proxy.js';
 import { registerSetupCommand } from './commands/setup.js';
-import { registerStartCommand } from './commands/start.js';
-import { registerStatusCommand } from './commands/status.js';
 
 export function createCli(): Command {
   const program = new Command();
 
   program
     .name('mullgate')
-    .description('CLI-first Mullvad proxy provisioning and config management')
+    .description('Minimal Mullvad proxy CLI for setup, daily proxy operations, and advanced config')
     .showHelpAfterError();
 
   registerSetupCommand(program);
-  registerStartCommand(program);
-  registerStatusCommand(program);
-  registerDoctorCommand(program);
-  registerAutostartCommand(program);
-  registerOperatorCommands(program);
-  registerRelaysCommand(program);
-  registerRecommendCommand(program);
+  registerProxyCommand(program);
   registerConfigCommands(program);
 
   return program;

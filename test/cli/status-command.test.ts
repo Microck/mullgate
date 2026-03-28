@@ -420,7 +420,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
 
       network-mode guidance
       - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
-      - Use \`mullgate hosts\` if you want a copy/paste /etc/hosts block for this machine.
+      - Use \`mullgate proxy access\` if you want a copy/paste /etc/hosts block for this machine.
 
       warnings
       - none
@@ -583,12 +583,12 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
 
       network-mode guidance
       - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
-      - Use \`mullgate hosts\` if you want a copy/paste /etc/hosts block for this machine.
+      - Use \`mullgate proxy access\` if you want a copy/paste /etc/hosts block for this machine.
 
       warnings
       - route-proxy is not fully healthy: exited (status=Exited (2) 3 seconds ago, exit=2).
-      - saved runtime status says running, but live compose status shows stopped or degraded shared services. Trust live compose over the saved phase and rerun \`mullgate start\` after fixing the failing service.
-      - the last recorded \`mullgate start\` attempt failed; inspect the last-start diagnostics below before restarting blindly.
+      - saved runtime status says running, but live compose status shows stopped or degraded shared services. Trust live compose over the saved phase and rerun \`mullgate proxy start\` after fixing the failing service.
+      - the last recorded \`mullgate proxy start\` attempt failed; inspect the last-start diagnostics below before restarting blindly.
 
       last start diagnostics
       status: failure
@@ -730,10 +730,10 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
 
       network-mode guidance
       - Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.
-      - Use \`mullgate hosts\` if you want a copy/paste /etc/hosts block for this machine.
+      - Use \`mullgate proxy access\` if you want a copy/paste /etc/hosts block for this machine.
 
       warnings
-      - no persisted last-start report exists yet; run \`mullgate start\` to capture a fresh launch diagnostic.
+      - no persisted last-start report exists yet; run \`mullgate proxy start\` to capture a fresh launch diagnostic.
       - entry-tunnel is not fully healthy: not present in live compose status.
       - route-proxy is not fully healthy: not present in live compose status.
       - routing-layer is not fully healthy: not present in live compose status.

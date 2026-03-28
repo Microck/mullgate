@@ -65,7 +65,7 @@ As a result:
 ## Inspect current exposure
 
 ```bash
-mullgate exposure
+mullgate proxy access
 ```
 
 Use this report to verify:
@@ -84,7 +84,7 @@ Make changes with the CLI instead of editing JSON files manually.
 Example:
 
 ```bash
-mullgate exposure \
+mullgate proxy access \
   --mode private-network \
   --base-domain proxy.example.com \
   --route-bind-ip 192.168.10.10 \
@@ -94,13 +94,13 @@ mullgate exposure \
 Then refresh runtime state:
 
 ```bash
-mullgate validate --refresh
+mullgate proxy validate --refresh
 ```
 
 Or start the runtime again:
 
 ```bash
-mullgate start
+mullgate proxy start
 ```
 
 ## Route planning checklist
@@ -119,8 +119,8 @@ Before claiming hostname-selected routing works remotely, verify all of the foll
 
 - every route has a distinct bind IP
 - every hostname resolves to the intended bind IP
-- `mullgate exposure` matches your DNS plan
-- `mullgate doctor` shows no hostname drift
+- `mullgate proxy access` matches your DNS plan
+- `mullgate proxy doctor` shows no hostname drift
 - real proxy probes produce the expected route behavior
 
 ## See also

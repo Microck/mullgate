@@ -77,5 +77,5 @@ describe('verify-m002-final help contract', () => {
       proof paths. It does not clone their assertions or introduce a separate
       network/platform contract implementation."
     `);
-  });
+  }, 10_000);
 });

@@ -352,15 +352,15 @@ describe('renderRuntimeBundle', () => {
     });
     expect(parsedManifest.exposure.guidance).toEqual([
       'Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.',
-      'Use `mullgate hosts` if you want a copy/paste /etc/hosts block for this machine.',
+      'Use `mullgate proxy access` if you want a copy/paste /etc/hosts block for this machine.',
     ]);
     expect(parsedManifest.exposure.remediation).toEqual({
       bindPosture:
-        'Keep loopback mode on local-only bind IPs. If you need remote access, rerun `mullgate exposure --mode private-network ...` with one trusted-network bind IP per route.',
+        'Keep loopback mode on local-only bind IPs. If you need remote access, rerun `mullgate proxy access --mode private-network ...` with one trusted-network bind IP per route.',
       hostnameResolution:
-        'For local host-file testing, use `mullgate hosts` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.',
+        'For local host-file testing, use `mullgate proxy access` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.',
       restart:
-        'After changing exposure settings, rerun `mullgate validate` or `mullgate start` so the runtime artifacts match the saved local-only posture.',
+        'After changing exposure settings, rerun `mullgate proxy validate` or `mullgate proxy start` so the runtime artifacts match the saved local-only posture.',
     });
     expect(parsedManifest.platform).toEqual({
       platform: 'linux',
@@ -518,7 +518,7 @@ describe('renderRuntimeBundle', () => {
       phase: 'unvalidated',
       lastCheckedAt: null,
       message:
-        'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
+        'Exposure settings changed; rerun `mullgate proxy validate` or `mullgate proxy start` to refresh runtime artifacts.',
     };
 
     const result = await renderRuntimeBundle({
@@ -553,7 +553,7 @@ describe('renderRuntimeBundle', () => {
       hostnameResolution:
         'Publish DNS A records so every route hostname resolves to its saved public bind IP before expecting remote hostname access to work on the open internet.',
       restart:
-        'After changing exposure or DNS-facing bind IPs, rerun `mullgate validate` or `mullgate start` so runtime artifacts reflect the advanced public posture accurately.',
+        'After changing exposure or DNS-facing bind IPs, rerun `mullgate proxy validate` or `mullgate proxy start` so runtime artifacts reflect the advanced public posture accurately.',
     });
     expect(exposure.warnings.map((warning) => warning.code)).toEqual([
       'DNS_REQUIRED',

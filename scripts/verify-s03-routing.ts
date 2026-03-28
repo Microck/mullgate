@@ -63,7 +63,7 @@ async function main(): Promise<void> {
 
   const routeBefore = await captureRoute(options.routeCheckIp);
   const directBefore = await runDirectProbe(options.targetUrl);
-  const hostsCommand = await runCliCommand(['hosts']);
+  const hostsCommand = await runCliCommand(['proxy', 'access']);
 
   if (hostsCommand.exitCode !== 0) {
     throw new Error(
@@ -77,7 +77,7 @@ async function main(): Promise<void> {
   assertHostsOutput(hostsCommand.stdout, configBeforeStart);
   assertNoSecretLeaks('hosts output', hostsCommand.stdout, configBeforeStart);
 
-  const startResult = await runCliCommand(['start']);
+  const startResult = await runCliCommand(['proxy', 'start']);
 
   if (startResult.exitCode !== 0) {
     throw new Error(

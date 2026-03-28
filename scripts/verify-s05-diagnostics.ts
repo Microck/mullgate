@@ -149,7 +149,7 @@ async function verifyUnconfiguredScenario(): Promise<string> {
   try {
     const env = await createTempEnvironment(root, 'unconfigured');
     const status = await runCliCommand(env, ['status']);
-    const doctor = await runCliCommand(env, ['doctor']);
+    const doctor = await runCliCommand(env, ['proxy', 'doctor']);
 
     await writeScenarioArtifacts(root, { status, doctor });
 
@@ -208,7 +208,7 @@ async function verifyHealthyScenario(options: VerificationOptions): Promise<stri
     );
 
     const status = await runCliCommand(seeded.env, ['status']);
-    const doctor = await runCliCommand(seeded.env, ['doctor']);
+    const doctor = await runCliCommand(seeded.env, ['proxy', 'doctor']);
 
     await writeScenarioArtifacts(root, { status, doctor });
 
@@ -362,7 +362,7 @@ async function verifyDegradedAuthScenario(): Promise<string> {
     );
 
     const status = await runCliCommand(seeded.env, ['status']);
-    const doctor = await runCliCommand(seeded.env, ['doctor']);
+    const doctor = await runCliCommand(seeded.env, ['proxy', 'doctor']);
 
     await writeScenarioArtifacts(root, { status, doctor });
 
@@ -466,7 +466,7 @@ async function verifyHostnameDriftScenario(): Promise<string> {
     );
 
     const status = await runCliCommand(seeded.env, ['status']);
-    const doctor = await runCliCommand(seeded.env, ['doctor']);
+    const doctor = await runCliCommand(seeded.env, ['proxy', 'doctor']);
 
     await writeScenarioArtifacts(root, { status, doctor });
 

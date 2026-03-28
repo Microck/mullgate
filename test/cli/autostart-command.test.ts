@@ -43,22 +43,22 @@ describe('mullgate autostart command', () => {
     expect(
       `\n${buildAutostartUnitFile({ binaryPath: '/usr/local/bin/mullgate' })}`,
     ).toMatchInlineSnapshot(`
-        "
-        [Unit]
-        Description=Mullgate proxy runtime
-        Wants=network-online.target
-        After=network-online.target
+      "
+      [Unit]
+      Description=Mullgate proxy runtime
+      Wants=network-online.target
+      After=network-online.target
 
-        [Service]
-        Type=simple
-        ExecStart=/usr/local/bin/mullgate start
-        Restart=on-failure
-        RestartSec=15
-        WorkingDirectory=%h
+      [Service]
+      Type=simple
+      ExecStart=/usr/local/bin/mullgate proxy start
+      Restart=on-failure
+      RestartSec=15
+      WorkingDirectory=%h
 
-        [Install]
-        WantedBy=default.target"
-      `);
+      [Install]
+      WantedBy=default.target"
+    `);
   });
 
   it('writes and enables the user service', async () => {
@@ -87,9 +87,9 @@ describe('mullgate autostart command', () => {
       phase: autostart-enable
       platform: linux
       unit: /tmp/mullgate-autostart-REPLACED/config/systemd/user/mullgate.service
-      exec start: /tmp/mullgate-autostart-REPLACED/bin/mullgate start
+      exec start: /tmp/mullgate-autostart-REPLACED/bin/mullgate proxy start
       service: enabled and started
-      next step: run \`mullgate autostart status\` if you want to verify the user service state."
+      next step: run \`mullgate proxy autostart status\` if you want to verify the user service state."
     `);
   });
 

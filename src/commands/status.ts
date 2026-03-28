@@ -449,7 +449,7 @@ function buildDiagnostics(input: {
 
   if (input.manifestResult.kind === 'missing') {
     diagnostics.push(
-      'runtime manifest is missing; rerun `mullgate start` to re-render the Docker/runtime artifact bundle.',
+      'runtime manifest is missing; rerun `mullgate proxy start` to re-render the Docker/runtime artifact bundle.',
     );
   } else if (input.manifestResult.kind === 'invalid') {
     diagnostics.push(`runtime manifest could not be parsed: ${input.manifestResult.reason}`);
@@ -457,7 +457,7 @@ function buildDiagnostics(input: {
 
   if (input.lastStartResult.kind === 'missing' && !input.config.diagnostics.lastRuntimeStart) {
     diagnostics.push(
-      'no persisted last-start report exists yet; run `mullgate start` to capture a fresh launch diagnostic.',
+      'no persisted last-start report exists yet; run `mullgate proxy start` to capture a fresh launch diagnostic.',
     );
   } else if (input.lastStartResult.kind === 'invalid') {
     diagnostics.push(`last-start report could not be parsed: ${input.lastStartResult.reason}`);
@@ -481,7 +481,7 @@ function buildDiagnostics(input: {
     input.sharedServiceViews.some((service) => service.liveState !== 'running')
   ) {
     diagnostics.push(
-      'saved runtime status says running, but live compose status shows stopped or degraded shared services. Trust live compose over the saved phase and rerun `mullgate start` after fixing the failing service.',
+      'saved runtime status says running, but live compose status shows stopped or degraded shared services. Trust live compose over the saved phase and rerun `mullgate proxy start` after fixing the failing service.',
     );
   }
 
@@ -493,7 +493,7 @@ function buildDiagnostics(input: {
 
   if (input.lastStart?.status === 'failure') {
     diagnostics.push(
-      'the last recorded `mullgate start` attempt failed; inspect the last-start diagnostics below before restarting blindly.',
+      'the last recorded `mullgate proxy start` attempt failed; inspect the last-start diagnostics below before restarting blindly.',
     );
   }
 

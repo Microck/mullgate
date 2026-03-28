@@ -36,9 +36,10 @@ async function main(): Promise<void> {
 
     await runDisplayedCliCommand({
       display:
-        'mullgate relays list --country Sweden --owner mullvad --run-mode ram --min-port-speed 9000',
+        'mullgate proxy relay list --country Sweden --owner mullvad --run-mode ram --min-port-speed 9000',
       args: [
-        'relays',
+        'proxy',
+        'relay',
         'list',
         '--country',
         'Sweden',
@@ -53,14 +54,14 @@ async function main(): Promise<void> {
     });
 
     await runDisplayedCliCommand({
-      display: 'mullgate relays probe --country Sweden --count 2',
-      args: ['relays', 'probe', '--country', 'Sweden', '--count', '2'],
+      display: 'mullgate proxy relay probe --country Sweden --count 2',
+      args: ['proxy', 'relay', 'probe', '--country', 'Sweden', '--count', '2'],
       env: demoEnv,
     });
 
     await runDisplayedCliCommand({
-      display: 'mullgate recommend --country Sweden --count 1',
-      args: ['recommend', '--country', 'Sweden', '--count', '1'],
+      display: 'mullgate proxy relay recommend --country Sweden --count 1',
+      args: ['proxy', 'relay', 'recommend', '--country', 'Sweden', '--count', '1'],
       env: demoEnv,
     });
   } finally {

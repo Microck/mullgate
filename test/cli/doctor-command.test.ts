@@ -544,10 +544,10 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
-         detail: hostname-remediation=For local host-file testing, use \`mullgate hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
-         detail: restart-remediation=After changing exposure settings, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
-         detail: info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
 
       6. bind-posture: pass
          summary: Saved bind IPs match the configured exposure posture.
@@ -576,7 +576,7 @@ describe('mullgate doctor command', () => {
          detail: route at-vie-wg-001 publishes at-vie-wg-001 -> 127.0.0.2 via route-proxy
 
       9. last-start: pass
-         summary: The last recorded \`mullgate start\` attempt completed successfully.
+         summary: The last recorded \`mullgate proxy start\` attempt completed successfully.
          detail: status=success
          detail: attempted-at=2026-03-21T07:58:00.000Z
          detail: phase=compose-launch
@@ -622,7 +622,7 @@ describe('mullgate doctor command', () => {
       1. config: fail
          summary: Mullgate is not configured yet, so doctor cannot inspect runtime or exposure state.
          detail: Mullgate is not configured yet. Run \`mullgate setup\` to create /tmp/mullgate-home/config/mullgate/config.json.
-         remediation: Run \`mullgate setup\` first, then rerun \`mullgate doctor\` once a canonical config exists."
+         remediation: Run \`mullgate setup\` first, then rerun \`mullgate proxy doctor\` once a canonical config exists."
     `);
   });
 
@@ -748,10 +748,10 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
-         detail: hostname-remediation=For local host-file testing, use \`mullgate hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
-         detail: restart-remediation=After changing exposure settings, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
-         detail: info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
 
       6. bind-posture: pass
          summary: Saved bind IPs match the configured exposure posture.
@@ -770,12 +770,12 @@ describe('mullgate doctor command', () => {
          detail: command=docker compose version
          detail: code=DOCKER_COMPOSE_MISSING
          detail: cause=spawn docker ENOENT
-         remediation: Install Docker plus the Compose plugin, then rerun \`mullgate status\`, \`mullgate doctor\`, or \`mullgate start\`.
+         remediation: Install Docker plus the Compose plugin, then rerun \`mullgate proxy status\`, \`mullgate proxy doctor\`, or \`mullgate proxy start\`.
 
       9. last-start: degraded
          summary: No persisted last-start diagnostic exists yet.
          detail: Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.
-         remediation: Run \`mullgate start\` once to capture a persisted launch report that future doctor runs can inspect."
+         remediation: Run \`mullgate proxy start\` once to capture a persisted launch report that future doctor runs can inspect."
     `);
   });
 
@@ -926,7 +926,7 @@ describe('mullgate doctor command', () => {
          detail: entry-wireproxy-config=/tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf (present)
          detail: route-proxy-config=/tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg (present)
          detail: validation-report=missing (/tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json)
-         remediation: Run \`mullgate validate\` or \`mullgate start\` to generate the shared runtime validation report before relying on the saved validation metadata.
+         remediation: Run \`mullgate proxy validate\` or \`mullgate proxy start\` to generate the shared runtime validation report before relying on the saved validation metadata.
 
       4. relay-cache: degraded
          summary: Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.
@@ -936,7 +936,7 @@ describe('mullgate doctor command', () => {
          detail: fetched-at=2026-03-10T08:00:00.000Z
          detail: relay-count=2
          detail: age=11d
-         remediation: Refresh the saved relay catalog with \`mullgate setup\`, then rerun \`mullgate validate\` or \`mullgate start\` so runtime artifacts use the fresh relay data.
+         remediation: Refresh the saved relay catalog with \`mullgate setup\`, then rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so runtime artifacts use the fresh relay data.
 
       5. exposure-contract: degraded
          summary: Saved exposure contract includes warning-level posture guidance that operators should resolve or consciously accept.
@@ -949,12 +949,12 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
-         detail: hostname-remediation=For local host-file testing, use \`mullgate hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
-         detail: restart-remediation=After changing exposure settings, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
-         detail: info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
          detail: warning: Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
-         remediation: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
+         remediation: Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
 
       6. bind-posture: pass
          summary: Saved bind IPs match the configured exposure posture.
@@ -968,7 +968,7 @@ describe('mullgate doctor command', () => {
          detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
          detail: route at-vie-wg-001: at-vie-wg-001 -> 127.0.0.9
          detail: Route at-vie-wg-001 expects at-vie-wg-001 to resolve to 127.0.0.2, but it currently resolves to 127.0.0.9.
-         remediation: Keep using the direct bind-IP entrypoints for normal loopback access. If you want hostname-based local testing, use \`mullgate hosts\` and install the emitted hosts block on this machine.
+         remediation: Keep using the direct bind-IP entrypoints for normal loopback access. If you want hostname-based local testing, use \`mullgate proxy access\` and install the emitted hosts block on this machine.
 
       8. runtime: degraded
          summary: No live compose containers are running right now.
@@ -983,12 +983,12 @@ describe('mullgate doctor command', () => {
          detail: routing-layer=not present in live compose status
          detail: route se-got-wg-101 publishes se-got-wg-101 -> 127.0.0.1 via route-proxy
          detail: route at-vie-wg-001 publishes at-vie-wg-001 -> 127.0.0.2 via route-proxy
-         remediation: Run \`mullgate start\` after fixing any validation, bind, or last-start issues reported above.
+         remediation: Run \`mullgate proxy start\` after fixing any validation, bind, or last-start issues reported above.
 
       9. last-start: degraded
          summary: No persisted last-start diagnostic exists yet.
          detail: Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.
-         remediation: Run \`mullgate start\` once to capture a persisted launch report that future doctor runs can inspect."
+         remediation: Run \`mullgate proxy start\` once to capture a persisted launch report that future doctor runs can inspect."
     `);
   });
 
@@ -1136,10 +1136,10 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
-         detail: hostname-remediation=For local host-file testing, use \`mullgate hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
-         detail: restart-remediation=After changing exposure settings, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
-         detail: info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
 
       6. bind-posture: pass
          summary: Saved bind IPs match the configured exposure posture.
@@ -1152,7 +1152,7 @@ describe('mullgate doctor command', () => {
          detail: Loopback mode without a base domain keeps direct bind-IP entrypoints canonical. Install host-file mappings only if you want local hostname shortcuts.
          detail: route se-got-wg-101: se-got-wg-101 -> 127.0.0.1
          detail: Route at-vie-wg-001 could not resolve at-vie-wg-001: getaddrinfo ENOTFOUND at-vie-wg-001.
-         remediation: Keep using the direct bind-IP entrypoints for normal loopback access. If you want hostname-based local testing, use \`mullgate hosts\` and install the emitted hosts block on this machine.
+         remediation: Keep using the direct bind-IP entrypoints for normal loopback access. If you want hostname-based local testing, use \`mullgate proxy access\` and install the emitted hosts block on this machine.
 
       8. runtime: pass
          summary: Live Docker Compose status matches the expected shared entry-tunnel, route-proxy, and routing-layer services.
@@ -1171,7 +1171,7 @@ describe('mullgate doctor command', () => {
       9. last-start: degraded
          summary: No persisted last-start diagnostic exists yet.
          detail: Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.
-         remediation: Run \`mullgate start\` once to capture a persisted launch report that future doctor runs can inspect."
+         remediation: Run \`mullgate proxy start\` once to capture a persisted launch report that future doctor runs can inspect."
     `);
   });
 
@@ -1294,14 +1294,14 @@ describe('mullgate doctor command', () => {
          detail: mode-label=Private network / Tailscale-first
          detail: recommendation=recommended-remote
          detail: posture-summary=Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.
-         detail: remote-story=Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate hosts\` when local host-file wiring is the easiest path.
+         detail: remote-story=Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate proxy access\` when local host-file wiring is the easiest path.
          detail: base-domain=proxy.example.com
          detail: allow-lan=yes
          detail: dns-records=2
          detail: routes=2
          detail: bind-remediation=Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.
-         detail: hostname-remediation=Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate hosts\` when host-file wiring is the intended local workaround.
-         detail: restart-remediation=After exposure or bind-IP changes, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
+         detail: hostname-remediation=Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate proxy access\` when host-file wiring is the intended local workaround.
+         detail: restart-remediation=After exposure or bind-IP changes, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
          detail: info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
 
       6. bind-posture: pass
@@ -1315,7 +1315,7 @@ describe('mullgate doctor command', () => {
          detail: route se-got-wg-101: sweden-gothenburg.proxy.example.com -> 192.168.10.10
          detail: route at-vie-wg-001: austria-vienna.proxy.example.com -> 192.168.10.99
          detail: Route at-vie-wg-001 expects austria-vienna.proxy.example.com to resolve to 192.168.10.11, but it currently resolves to 192.168.10.99.
-         remediation: Publish or update the saved DNS A records so every route hostname resolves to its saved bind IP, then rerun \`mullgate doctor\`.
+         remediation: Publish or update the saved DNS A records so every route hostname resolves to its saved bind IP, then rerun \`mullgate proxy doctor\`.
 
       8. runtime: degraded
          summary: No live compose containers are running right now.
@@ -1330,12 +1330,12 @@ describe('mullgate doctor command', () => {
          detail: routing-layer=not present in live compose status
          detail: route se-got-wg-101 publishes sweden-gothenburg.proxy.example.com -> 192.168.10.10 via route-proxy
          detail: route at-vie-wg-001 publishes austria-vienna.proxy.example.com -> 192.168.10.11 via route-proxy
-         remediation: Run \`mullgate start\` after fixing any validation, bind, or last-start issues reported above.
+         remediation: Run \`mullgate proxy start\` after fixing any validation, bind, or last-start issues reported above.
 
       9. last-start: degraded
          summary: No persisted last-start diagnostic exists yet.
          detail: Doctor can still inspect saved config and live runtime state, but there is no persisted start failure/success context yet.
-         remediation: Run \`mullgate start\` once to capture a persisted launch report that future doctor runs can inspect."
+         remediation: Run \`mullgate proxy start\` once to capture a persisted launch report that future doctor runs can inspect."
     `);
   });
 
@@ -1496,10 +1496,10 @@ describe('mullgate doctor command', () => {
          detail: allow-lan=no
          detail: dns-records=0
          detail: routes=2
-         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate exposure --mode private-network ...\` with one trusted-network bind IP per route.
-         detail: hostname-remediation=For local host-file testing, use \`mullgate hosts\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
-         detail: restart-remediation=After changing exposure settings, rerun \`mullgate validate\` or \`mullgate start\` so the runtime artifacts match the saved local-only posture.
-         detail: info: Loopback mode is local-only. Keep using \`mullgate hosts\` for host-file testing on this machine.
+         detail: bind-remediation=Keep loopback mode on local-only bind IPs. If you need remote access, rerun \`mullgate proxy access --mode private-network ...\` with one trusted-network bind IP per route.
+         detail: hostname-remediation=For local host-file testing, use \`mullgate proxy access\` and apply the emitted block on this machine so each route hostname resolves to its saved loopback bind IP.
+         detail: restart-remediation=After changing exposure settings, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts match the saved local-only posture.
+         detail: info: Loopback mode is local-only. Keep using \`mullgate proxy access\` for host-file testing on this machine.
 
       6. bind-posture: pass
          summary: Saved bind IPs match the configured exposure posture.
@@ -1526,10 +1526,10 @@ describe('mullgate doctor command', () => {
          detail: routing-layer=running (status=Up 2 minutes, health=healthy, exit=0)
          detail: route se-got-wg-101 publishes se-got-wg-101 -> 127.0.0.1 via route-proxy
          detail: route at-vie-wg-001 publishes at-vie-wg-001 -> 127.0.0.2 via route-proxy
-         remediation: Inspect \`docker compose ps\` / \`docker compose logs\` for the named shared services, fix the failing entry tunnel, route proxy, or routing layer, then rerun \`mullgate start\`.
+         remediation: Inspect \`docker compose ps\` / \`docker compose logs\` for the named shared services, fix the failing entry tunnel, route proxy, or routing layer, then rerun \`mullgate proxy start\`.
 
       9. last-start: fail
-         summary: The last recorded \`mullgate start\` attempt failed with an auth-related route/runtime error.
+         summary: The last recorded \`mullgate proxy start\` attempt failed with an auth-related route/runtime error.
          detail: status=failure
          detail: attempted-at=2026-03-21T08:10:00.000Z
          detail: phase=compose-launch
@@ -1541,7 +1541,7 @@ describe('mullgate doctor command', () => {
          detail: service=route-proxy
          detail: reason=Docker Compose failed for [redacted] / [redacted] / private-key-value-2 while authenticating route at-vie-wg-001.
          detail: cause=service route-proxy rejected username alice password [redacted] while reading [redacted]
-         remediation: Check route at-vie-wg-001, service route-proxy, hostname at-vie-wg-001, bind 127.0.0.2 for rejected proxy auth or stale rendered credentials. If credentials changed, update \`setup.auth.username\` / \`setup.auth.password\` with \`mullgate config set\`, then rerun \`mullgate validate\` and \`mullgate start\`."
+         remediation: Check route at-vie-wg-001, service route-proxy, hostname at-vie-wg-001, bind 127.0.0.2 for rejected proxy auth or stale rendered credentials. If credentials changed, update \`setup.auth.username\` / \`setup.auth.password\` with \`mullgate config set\`, then rerun \`mullgate proxy validate\` and \`mullgate proxy start\`."
     `);
   });
 });
