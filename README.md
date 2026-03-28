@@ -17,7 +17,9 @@ the main setup path is `mullgate setup`. on a real terminal it opens a guided fl
 
 [documentation](https://mullgate.micr.dev) | [npm](https://www.npmjs.com/package/mullgate) | [github](https://github.com/Microck/mullgate)
 
-![50 proxy demo](images/demos/50-proxy-proof.gif)
+<p align="center">
+  <img src="images/demos/50-proxy-proof.gif" alt="50 proxy demo" width="60%">
+</p>
 
 
 ## why
