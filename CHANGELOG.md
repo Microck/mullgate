@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [1.0.2] - 2026-03-28
+
+### Changed
+
+- the public CLI is now grouped under `mullgate setup`, `mullgate proxy ...`, and `mullgate config ...`, with README and docs updated to match the simplified command surface
+- the README hero and command reference now present the updated install and command story with a cleaner top-level demo
+- the 50-route demo recording now shows a real `mullgate proxy export --protocol socks5 --stdout` flow with stable generic `user:pass@host:port` output
+
+### Fixed
+
+- install-smoke verification now exercises `mullgate config path`, matching the shipped grouped CLI
+- CLI, doctor, runtime-bundle, setup, and verifier help snapshots now match the simplified command names and current operator guidance
+- slow Windows verifier help tests now have enough timeout budget to pass reliably in CI
+
 ## [1.0.1] - 2026-03-26
 
 ### Changed
