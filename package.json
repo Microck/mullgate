@@ -71,7 +71,7 @@
     "@vitest/coverage-v8": "4.1.1",
     "simple-git-hooks": "2.13.1",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.2",
     "vitest": "^4.1.1"
   },
   "packageManager": "pnpm@10.18.3",
