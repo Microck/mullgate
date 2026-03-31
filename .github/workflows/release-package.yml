@@ -116,7 +116,7 @@ jobs:
             binary_name: mullgate
             smoke_command: ''
             run_smoke: false
-          - os: macos-15-intel
+          - os: macos-13
             target: x86_64-apple-darwin
             bun_target: bun-darwin-x64
             archive_ext: tar.gz
