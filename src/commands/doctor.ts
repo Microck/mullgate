@@ -575,7 +575,10 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
 }
 
 function buildBindCheck(config: MullgateConfig): DoctorCheck {
-  const routeBindIps = config.routing.locations.map((location) => location.bindIp);
+  const routeBindIps =
+    config.setup.exposure.mode === 'private-network'
+      ? [config.setup.bind.host]
+      : config.routing.locations.map((location) => location.bindIp);
   const details = [
     `setup.bind.host=${config.setup.bind.host}`,
     ...config.routing.locations.map(
@@ -589,6 +592,16 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
     issues.push(
       `Primary bind host ${config.setup.bind.host} does not match route ${config.routing.locations[0]?.runtime.routeId} bind IP ${config.routing.locations[0]?.bindIp}.`,
     );
+  }
+
+  if (config.setup.exposure.mode === 'private-network') {
+    for (const location of config.routing.locations) {
+      if (location.bindIp !== config.setup.bind.host) {
+        issues.push(
+          `Route ${location.runtime.routeId} should reuse the shared private-network host ${config.setup.bind.host}, but saved config has ${location.bindIp}.`,
+        );
+      }
+    }
   }
 
   if (config.setup.exposure.mode === 'loopback') {
@@ -626,8 +639,8 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
       details: [...details, ...issues],
       remediation:
         config.setup.exposure.mode === 'loopback'
-          ? 'Rerun `mullgate proxy access --mode loopback` so each route gets the expected loopback bind IPs, then revalidate the runtime artifacts.'
-          : 'Use `mullgate proxy access` to correct the route bind IPs for the current exposure mode, then rerun `mullgate proxy validate` or `mullgate proxy start`.',
+        ? 'Rerun `mullgate proxy access --mode loopback` so each route gets the expected loopback bind IPs, then revalidate the runtime artifacts.'
+        : 'Use `mullgate proxy access` to correct the route bind IPs for the current exposure mode, then rerun `mullgate proxy validate` or `mullgate proxy start`.',
     };
   }
 

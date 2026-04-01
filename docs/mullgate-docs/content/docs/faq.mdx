@@ -13,11 +13,11 @@ Not in the usual full-device sense. Mullgate's documented goal is standalone pro
 
 ## How do I choose a route?
 
-Use the route's configured hostname or its direct bind IP entrypoint. The name-to-route mapping is only truthful when the hostname resolves to the bind IP assigned to that route.
+Use the route's configured hostname or its direct entrypoint. In `private-network` mode, multiple routes can share one host IP because the ports differ. In `loopback` and `public` mode, hostname truth still depends on the hostname resolving to the route's bind IP.
 
 ## Why are bind IPs so important?
 
-Mullgate's routing layer dispatches by destination bind IP. That is what keeps hostname-selected behavior stable across SOCKS5, HTTP, and HTTPS surfaces.
+They still define the published host story, but the runtime is now split by mode. `private-network` uses one shared trusted-network host IP and route-specific ports. `loopback` and `public` still rely on destination bind IPs.
 
 ## What is the easiest way to test Mullgate locally?
 
@@ -54,6 +54,7 @@ Check the output from:
 - `mullgate proxy doctor`
 
 Most hostname issues come down to a missing hosts block, incorrect DNS, or a hostname resolving to the wrong bind IP.
+In `private-network`, "wrong" usually means the hostname does not resolve to the shared host IP that `mullgate proxy access` reported.
 
 ## See also
 

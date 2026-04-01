@@ -25,7 +25,9 @@ import {
 import { writeCliRaw, writeCliReport } from '../cli-output.js';
 import {
   buildExposureContract,
+  computePublishedPort,
   deriveExposureHostname,
+  deriveRuntimeListenerHost,
   type ExposureValidationFailure,
   normalizeExposureBaseDomain,
   validateExposureSettings,
@@ -433,7 +435,7 @@ export function registerExposureCommand(target: Command): void {
     )
     .option(
       '--route-bind-ip <ip>',
-      'Set an ordered per-route bind IP. Repeat once per route.',
+      'Set the shared private-network host IP, or repeat once per route for public exposure.',
       collectRepeatedValues,
       [],
     )
@@ -1118,9 +1120,11 @@ export function updateExposureConfig(
     input.routeBindIps ??
     (nextMode === 'loopback'
       ? []
-      : config.setup.exposure.mode === 'loopback' && input.mode !== undefined
-        ? []
-        : existingBindIps);
+      : nextMode === 'private-network'
+        ? [config.setup.bind.host]
+        : config.setup.exposure.mode === 'loopback' && input.mode !== undefined
+          ? []
+          : existingBindIps);
   const validated = validateExposureSettings({
     routeCount: config.routing.locations.length,
     exposureMode: nextMode,
@@ -3460,6 +3464,13 @@ function deriveAddedRouteBindIps(input: {
     };
   }
 
+  if (input.config.setup.exposure.mode === 'private-network') {
+    return {
+      ok: true,
+      routeBindIps: Array.from({ length: input.count }, () => input.config.setup.bind.host),
+    };
+  }
+
   const nextRouteBindIps: string[] = [];
   let previousBindIp =
     input.config.routing.locations.at(-1)?.bindIp ?? input.config.setup.bind.host;
@@ -4227,21 +4238,7 @@ async function validateSavedConfig(input: {
     entryWireproxyConfigText,
     routeProxyConfigPath,
     routeProxyConfigText,
-    routes: loadResult.config.routing.locations.map((route) => ({
-      routeId: route.runtime.routeId,
-      routeAlias: route.alias,
-      routeHostname: route.hostname,
-      routeBindIp: route.bindIp,
-      httpsBackendName: route.runtime.httpsBackendName,
-      exitRelayHostname: route.mullvad.exit.relayHostname,
-      exitRelayFqdn: route.mullvad.exit.relayFqdn,
-      exitSocksHostname: route.mullvad.exit.socksHostname,
-      exitSocksPort: route.mullvad.exit.socksPort,
-      entryParent: {
-        host: '127.0.0.1',
-        port: ENTRY_WIREPROXY_SOCKS_PORT,
-      },
-    })),
+    routes: buildRuntimeValidationRoutes(loadResult.config),
     bind: {
       socksPort: loadResult.config.setup.bind.socksPort,
       httpPort: loadResult.config.setup.bind.httpPort,
@@ -4285,6 +4282,36 @@ async function validateSavedConfig(input: {
     reportPath: validationResult.reportPath ?? input.store.paths.runtimeValidationReportFile,
     message: `Validated via ${summarizeValidationSource(validationResult)}.`,
   };
+}
+
+function buildRuntimeValidationRoutes(config: MullgateConfig) {
+  return config.routing.locations.map((route, index) => ({
+    routeIndex: index,
+    routeId: route.runtime.routeId,
+    routeAlias: route.alias,
+    routeHostname: route.hostname,
+    routeBindIp: route.bindIp,
+    routeListenHost: deriveRuntimeListenerHost(config.setup.exposure.mode, route.bindIp),
+    routeSocksPort: computePublishedPort(
+      config.setup.exposure.mode,
+      config.setup.bind.socksPort,
+      index,
+    ),
+    routeHttpPort: computePublishedPort(
+      config.setup.exposure.mode,
+      config.setup.bind.httpPort,
+      index,
+    ),
+    httpsBackendName: route.runtime.httpsBackendName,
+    exitRelayHostname: route.mullvad.exit.relayHostname,
+    exitRelayFqdn: route.mullvad.exit.relayFqdn,
+    exitSocksHostname: route.mullvad.exit.socksHostname,
+    exitSocksPort: route.mullvad.exit.socksPort,
+    entryParent: {
+      host: '127.0.0.1' as const,
+      port: ENTRY_WIREPROXY_SOCKS_PORT,
+    },
+  }));
 }
 
 async function saveRuntimeStatus(

@@ -1126,7 +1126,7 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
     );
   });
 
-  it('fails setup validation when private-network exposure omits per-route bind ips', async () => {
+  it('fails setup validation when private-network uses an unsafe shared bind host', async () => {
     const env = createTempEnvironment();
     const store = new ConfigStore(resolveMullgatePaths(env));
 
@@ -1137,7 +1137,7 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
         accountNumber: '123456789012',
         username: 'alice',
         password: 'missing-bind-secret',
-        bindHost: '192.168.10.10',
+        bindHost: '127.0.0.1',
         exposureMode: 'private-network',
         locations: ['sweden-gothenburg', 'austria-vienna'] as [string, ...string[]],
       },
@@ -1150,11 +1150,10 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
       source: 'input',
       exitCode: 1,
       paths: store.paths,
-      code: 'BIND_IP_COUNT_MISMATCH',
-      message:
-        'Non-loopback exposure requires one explicit bind IP per routed location (2 locations, 1 bind IPs).',
+      code: 'UNSAFE_PRIVATE_BIND_IP',
+      message: 'Private-network exposure requires a trusted-network IPv4 host, but received 127.0.0.1.',
       cause:
-        'Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a comma-separated ordered list.',
+        'Use an RFC1918 address, a Tailscale 100.x address, or 0.0.0.0 as the wildcard fallback when Tailscale is unavailable.',
       artifactPath: store.paths.configFile,
     });
   });

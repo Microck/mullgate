@@ -5,6 +5,8 @@ import { REDACTED } from './redact.js';
 import type { ExposureMode, MullgateConfig } from './schema.js';
 
 const HTTPS_DEFAULT_PORT = 8443;
+const PRIVATE_NETWORK_LISTEN_HOST = '0.0.0.0';
+const PRIVATE_NETWORK_BACKEND_HOST = '127.0.0.1';
 
 type ExposureProtocol = 'socks5' | 'http' | 'https';
 
@@ -91,6 +93,22 @@ export type ExposureContract = {
   };
 };
 
+export function computePublishedPort(
+  exposureMode: ExposureMode,
+  basePort: number,
+  routeIndex: number,
+): number {
+  return exposureMode === 'private-network' ? basePort + routeIndex : basePort;
+}
+
+export function deriveRuntimeListenerHost(exposureMode: ExposureMode, bindIp: string): string {
+  return exposureMode === 'private-network' ? PRIVATE_NETWORK_LISTEN_HOST : bindIp;
+}
+
+export function deriveRuntimeBackendHost(exposureMode: ExposureMode, bindIp: string): string {
+  return exposureMode === 'private-network' ? PRIVATE_NETWORK_BACKEND_HOST : bindIp;
+}
+
 export function buildExposureContract(config: MullgateConfig): ExposureContract {
   const ports = collectExposurePorts(config);
   const routes = config.routing.locations.map((route, index) => ({
@@ -100,7 +118,12 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
     hostname: route.hostname,
     bindIp: route.bindIp,
     dnsRecord: config.setup.exposure.baseDomain ? `${route.hostname} A ${route.bindIp}` : null,
-    endpoints: ports.map((entry) => createExposureEndpoint(route.hostname, route.bindIp, entry)),
+    endpoints: ports.map((entry) =>
+      createExposureEndpoint(route.hostname, route.bindIp, {
+        ...entry,
+        port: computePublishedPort(config.setup.exposure.mode, entry.port, index),
+      }),
+    ),
   }));
   const dnsRecords = routes.flatMap((route) => (route.dnsRecord ? [route.dnsRecord] : []));
   const warnings: ExposureWarning[] = [];
@@ -132,7 +155,7 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
     });
   }
 
-  if (config.setup.exposure.mode !== 'loopback' && config.routing.locations.length === 1) {
+  if (config.setup.exposure.mode === 'public' && config.routing.locations.length === 1) {
     warnings.push({
       code: 'SINGLE_ROUTE',
       severity: 'warning',
@@ -205,6 +228,65 @@ export function validateExposureSettings(input: {
     };
   }
 
+  if (input.exposureMode === 'private-network') {
+    if (input.routeBindIps.length !== 1) {
+      return {
+        ok: false,
+        phase: 'setup-validation',
+        source: 'input',
+        code: 'BIND_IP_COUNT_MISMATCH',
+        message: `Private-network exposure publishes every route on one shared host IP, so exactly one bind IP is required, but received ${input.routeBindIps.length}.`,
+        cause:
+          input.caller === 'config-exposure'
+            ? 'Pass exactly one --route-bind-ip <ip> for the shared host, or omit it to keep the saved host IP.'
+            : 'Pass one bind IP or set MULLGATE_ROUTE_BIND_IPS / --bind-host to the trusted-network host IP that remote clients should reach.',
+        artifactPath: input.artifactPath,
+      };
+    }
+
+    const bindHost = requireDefined(
+      input.routeBindIps[0],
+      'Expected one shared bind IP for private-network exposure.',
+    );
+
+    if (isIP(bindHost) !== 4) {
+      return {
+        ok: false,
+        phase: 'setup-validation',
+        source: 'input',
+        code: 'INVALID_BIND_IP',
+        message: `Private-network exposure requires one valid IPv4 host, but received ${bindHost}.`,
+        artifactPath: input.artifactPath,
+      };
+    }
+
+    if (!isPrivateNetworkHostIpv4(bindHost)) {
+      return {
+        ok: false,
+        phase: 'setup-validation',
+        source: 'input',
+        code: 'UNSAFE_PRIVATE_BIND_IP',
+        message: `Private-network exposure requires a trusted-network IPv4 host, but received ${bindHost}.`,
+        cause:
+          'Use an RFC1918 address, a Tailscale 100.x address, or 0.0.0.0 as the wildcard fallback when Tailscale is unavailable.',
+        artifactPath: input.artifactPath,
+      };
+    }
+
+    const routeBindIps = Array.from({ length: input.routeCount }, () => bindHost) as [
+      string,
+      ...string[],
+    ];
+
+    return {
+      ok: true,
+      mode: input.exposureMode,
+      baseDomain,
+      bindHost,
+      routeBindIps,
+    };
+  }
+
   if (input.routeBindIps.length !== input.routeCount) {
     return {
       ok: false,
@@ -250,19 +332,6 @@ export function validateExposureSettings(input: {
         source: 'input',
         code: 'INVALID_BIND_IP',
         message: `Route ${index + 1} bind IP must be a valid IPv4 address, but received ${bindIp}.`,
-        artifactPath: input.artifactPath,
-      };
-    }
-
-    if (input.exposureMode === 'private-network' && !isPrivateIpv4(bindIp)) {
-      return {
-        ok: false,
-        phase: 'setup-validation',
-        source: 'input',
-        code: 'UNSAFE_PRIVATE_BIND_IP',
-        message: `Private-network exposure requires RFC1918 IPv4 bind IPs, but route ${index + 1} uses ${bindIp}.`,
-        cause:
-          'Use 10.0.0.0/8, 172.16.0.0/12, or 192.168.0.0/16 addresses for private-network exposure.',
         artifactPath: input.artifactPath,
       };
     }
@@ -359,18 +428,24 @@ function buildExposureGuidance(config: MullgateConfig, dnsRecords: readonly stri
 
   const guidance = [
     config.setup.exposure.mode === 'private-network'
-      ? 'Private-network mode is the recommended remote posture for Tailscale, LAN, and other trusted overlays. Keep it private by ensuring every bind IP stays reachable only inside that trusted network.'
+      ? 'Private-network mode is the recommended remote posture for Tailscale, LAN, and other trusted overlays. Mullgate publishes every route on one shared private host IP so other trusted-network machines can reach that host directly.'
       : 'Public mode is advanced operator territory. Only use it when you intentionally want internet-reachable listeners and are prepared to harden the host around them.',
-    'Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.',
+    config.setup.exposure.mode === 'private-network'
+      ? 'Each private-network route gets a dedicated published port on that shared host. This is the canonical Tailscale-first access model.'
+      : 'Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.',
   ];
 
   if (dnsRecords.length > 0) {
     guidance.push(
-      'Publish the DNS records below so every route hostname resolves to its matching bind IP.',
+      config.setup.exposure.mode === 'private-network'
+        ? 'Publish the DNS records below so every route hostname resolves to the shared private host IP.'
+        : 'Publish the DNS records below so every route hostname resolves to its matching bind IP.',
     );
   } else {
     guidance.push(
-      'No base domain is configured, so clients must reach each route via the direct bind IP entrypoints below.',
+      config.setup.exposure.mode === 'private-network'
+        ? 'No base domain is configured, so clients should reach each route via the shared host IP entrypoints below.'
+        : 'No base domain is configured, so clients must reach each route via the direct bind IP entrypoints below.',
     );
   }
 
@@ -396,7 +471,7 @@ function buildExposurePosture(config: MullgateConfig): ExposureContract['posture
       summary:
         'Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.',
       remoteStory:
-        'Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use `mullgate proxy access` when local host-file wiring is the easiest path.',
+        'Prefer the host Tailscale IP when available, then connect from other trusted-network machines to the published per-route ports on that shared host.',
     };
   }
 
@@ -425,9 +500,9 @@ function buildExposureRemediation(config: MullgateConfig): ExposureContract['rem
   if (config.setup.exposure.mode === 'private-network') {
     return {
       bindPosture:
-        'Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.',
+        'Keep private-network mode on one trusted-network host IP only. Mullgate binds wildcard listeners at runtime and publishes dedicated per-route ports on that shared host.',
       hostnameResolution:
-        'Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use `mullgate proxy access` when host-file wiring is the intended local workaround.',
+        'Make each route hostname resolve to the saved shared private-network host IP inside Tailscale/LAN DNS, or use the direct host-IP entrypoints if DNS is unnecessary.',
       restart:
         'After exposure or bind-IP changes, rerun `mullgate proxy validate` or `mullgate proxy start` so the runtime artifacts and operator guidance match the recommended private-network posture.',
     };
@@ -481,6 +556,15 @@ function isPrivateIpv4(value: string): boolean {
     (first === 172 && second >= 16 && second <= 31) ||
     (first === 192 && second === 168)
   );
+}
+
+function isTailscaleIpv4(value: string): boolean {
+  const [first, second] = parseIpv4Octets(value);
+  return first === 100 && second >= 64 && second <= 127;
+}
+
+function isPrivateNetworkHostIpv4(value: string): boolean {
+  return value === PRIVATE_NETWORK_LISTEN_HOST || isPrivateIpv4(value) || isTailscaleIpv4(value);
 }
 
 function isPublicExposureIpv4(value: string): boolean {

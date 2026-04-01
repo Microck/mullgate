@@ -1,7 +1,12 @@
 import type { Command } from 'commander';
 
 import { writeCliReport } from '../cli-output.js';
-import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
+import {
+  buildExposureContract,
+  computePublishedPort,
+  deriveRuntimeListenerHost,
+  type ExposureContract,
+} from '../config/exposure-contract.js';
 import { redactSensitiveText } from '../config/redact.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
 import { ConfigStore, type LoadConfigResult } from '../config/store.js';
@@ -313,13 +318,16 @@ function buildRouteSurfaces(
         ROUTE_PROXY_SERVICE,
       listeners: {
         socks5:
-          manifestRoute?.listeners.socks5 ?? `${location.bindIp}:${config.setup.bind.socksPort}`,
-        http: manifestRoute?.listeners.http ?? `${location.bindIp}:${config.setup.bind.httpPort}`,
+          manifestRoute?.listeners.socks5 ??
+          `${deriveRuntimeListenerHost(config.setup.exposure.mode, location.bindIp)}:${computePublishedPort(config.setup.exposure.mode, config.setup.bind.socksPort, index)}`,
+        http:
+          manifestRoute?.listeners.http ??
+          `${deriveRuntimeListenerHost(config.setup.exposure.mode, location.bindIp)}:${computePublishedPort(config.setup.exposure.mode, config.setup.bind.httpPort, index)}`,
         https:
           manifestRoute?.listeners.https ??
           (config.setup.bind.httpsPort === null
             ? null
-            : `${location.bindIp}:${config.setup.bind.httpsPort}`),
+            : `${deriveRuntimeListenerHost(config.setup.exposure.mode, location.bindIp)}:${computePublishedPort(config.setup.exposure.mode, config.setup.bind.httpsPort, index)}`),
       },
       httpsBackendName: manifestRoute?.services.backends.https ?? location.runtime.httpsBackendName,
       dnsRecord: exposureRoute?.dnsRecord ?? null,

@@ -895,10 +895,8 @@ describe('mullgate setup CLI flow', () => {
               'private-network',
               '--base-domain',
               'proxy.example.com',
-              '--route-bind-ip',
+              '--bind-host',
               '192.168.10.10',
-              '--route-bind-ip',
-              '192.168.10.11',
               '--location',
               'sweden-gothenburg',
               '--location',
@@ -944,7 +942,7 @@ describe('mullgate setup CLI flow', () => {
                exit socks: se-got-wg-socks5-101.relays.mullvad.net:1080
             2. austria-vienna
                hostname: austria-vienna.proxy.example.com
-               bind ip: 192.168.10.11
+               bind ip: 192.168.10.10
                exit relay: at-vie-wg-001
                exit socks: at-vie-wg-socks5-001.relays.mullvad.net:1080
             tunnel ipv4: 10.64.22.21/32
@@ -970,7 +968,7 @@ describe('mullgate setup CLI flow', () => {
             })),
           ).toEqual([
             { hostname: 'sweden-gothenburg.proxy.example.com', bindIp: '192.168.10.10' },
-            { hostname: 'austria-vienna.proxy.example.com', bindIp: '192.168.10.11' },
+            { hostname: 'austria-vienna.proxy.example.com', bindIp: '192.168.10.10' },
           ]);
           expect(showResult.stdout).toContain('proxy.example.com');
           expect(`\n${normalizeOutput(hostsResult.stdout, env)}`).toMatchInlineSnapshot(`
@@ -983,7 +981,7 @@ describe('mullgate setup CLI flow', () => {
             mode label: Private network / Tailscale-first
             recommendation: recommended-remote
             posture summary: Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.
-            remote story: Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate proxy access\` when local host-file wiring is the easiest path.
+            remote story: Prefer the host Tailscale IP when available, then connect from other trusted-network machines to the published per-route ports on that shared host.
             base domain: proxy.example.com
             allow lan: yes
             runtime status: validated
@@ -991,13 +989,13 @@ describe('mullgate setup CLI flow', () => {
             runtime message: Validated via wireproxy-binary/configtest + docker/3proxy-startup.
 
             guidance
-            - Private-network mode is the recommended remote posture for Tailscale, LAN, and other trusted overlays. Keep it private by ensuring every bind IP stays reachable only inside that trusted network.
-            - Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.
-            - Publish the DNS records below so every route hostname resolves to its matching bind IP.
+            - Private-network mode is the recommended remote posture for Tailscale, LAN, and other trusted overlays. Mullgate publishes every route on one shared private host IP so other trusted-network machines can reach that host directly.
+            - Each private-network route gets a dedicated published port on that shared host. This is the canonical Tailscale-first access model.
+            - Publish the DNS records below so every route hostname resolves to the shared private host IP.
 
             remediation
-            - bind posture: Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.
-            - hostname resolution: Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate proxy access\` when host-file wiring is the intended local workaround.
+            - bind posture: Keep private-network mode on one trusted-network host IP only. Mullgate binds wildcard listeners at runtime and publishes dedicated per-route ports on that shared host.
+            - hostname resolution: Make each route hostname resolve to the saved shared private-network host IP inside Tailscale/LAN DNS, or use the direct host-IP entrypoints if DNS is unnecessary.
             - restart: After exposure or bind-IP changes, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
 
             routes
@@ -1009,14 +1007,14 @@ describe('mullgate setup CLI flow', () => {
                socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.10:1080
                http hostname: http://[redacted]:[redacted]@sweden-gothenburg.proxy.example.com:8080
                http direct ip: http://[redacted]:[redacted]@192.168.10.10:8080
-            2. austria-vienna.proxy.example.com -> 192.168.10.11
+            2. austria-vienna.proxy.example.com -> 192.168.10.10
                alias: austria-vienna
                route id: austria-vienna
-               dns: austria-vienna.proxy.example.com A 192.168.10.11
-               socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1080
-               socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.11:1080
-               http hostname: http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080
-               http direct ip: http://[redacted]:[redacted]@192.168.10.11:8080
+               dns: austria-vienna.proxy.example.com A 192.168.10.10
+               socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1081
+               socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.10:1081
+               http hostname: http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8081
+               http direct ip: http://[redacted]:[redacted]@192.168.10.10:8081
 
             warnings
             - info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
@@ -1031,11 +1029,11 @@ describe('mullgate setup CLI flow', () => {
             routes: 2
             hostname -> bind ip
             1. sweden-gothenburg.proxy.example.com -> 192.168.10.10 (alias: sweden-gothenburg, route id: sweden-gothenburg)
-            2. austria-vienna.proxy.example.com -> 192.168.10.11 (alias: austria-vienna, route id: austria-vienna)
+            2. austria-vienna.proxy.example.com -> 192.168.10.10 (alias: austria-vienna, route id: austria-vienna)
 
             copy/paste hosts block
             192.168.10.10 sweden-gothenburg.proxy.example.com
-            192.168.10.11 austria-vienna.proxy.example.com"
+            192.168.10.10 austria-vienna.proxy.example.com"
           `);
         },
       );
@@ -1137,7 +1135,7 @@ describe('mullgate setup CLI flow', () => {
         expect(`\n${autoFileContents}`).toMatchInlineSnapshot(`
           "
           socks5://alice:export-secret@sweden-gothenburg.proxy.example.com:1080
-          socks5://alice:export-secret@austria-vienna.proxy.example.com:1080
+          socks5://alice:export-secret@austria-vienna.proxy.example.com:1081
           "
         `);
       },
@@ -1245,7 +1243,7 @@ describe('mullgate setup CLI flow', () => {
         '--exposure-mode',
         'private-network',
         '--bind-host',
-        '192.168.10.10',
+        '127.0.0.1',
         '--location',
         'sweden-gothenburg',
         '--location',
@@ -1266,15 +1264,16 @@ describe('mullgate setup CLI flow', () => {
     expect(setupResult.stderr).not.toContain('123456789012');
     expect(setupResult.stderr).not.toContain('missing-bind-secret');
     expect(`\n${normalizeOutput(setupResult.stderr, env)}`).toMatchInlineSnapshot(`
-"\nMullgate setup failed.
-phase: setup-validation
-source: input
-code: BIND_IP_COUNT_MISMATCH
-artifact: /tmp/mullgate-home/config/mullgate/config.json
-reason: Non-loopback exposure requires one explicit bind IP per routed location (2 locations, 1 bind IPs).
-config: /tmp/mullgate-home/config/mullgate/config.json
-cause: Repeat --route-bind-ip for each route or set MULLGATE_ROUTE_BIND_IPS to a comma-separated ordered list."
-`);
+      "
+      Mullgate setup failed.
+      phase: setup-validation
+      source: input
+      code: UNSAFE_PRIVATE_BIND_IP
+      artifact: /tmp/mullgate-home/config/mullgate/config.json
+      reason: Private-network exposure requires a trusted-network IPv4 host, but received 127.0.0.1.
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      cause: Use an RFC1918 address, a Tailscale 100.x address, or 0.0.0.0 as the wildcard fallback when Tailscale is unavailable."
+    `);
   });
 
   it('reports shared-device provisioning failures with the raw upstream details', async () => {

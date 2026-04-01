@@ -35,6 +35,7 @@ import {
   type ProvisionWireguardResult,
   provisionWireguard,
 } from '../mullvad/provision-wireguard.js';
+import { deriveDefaultBindHost } from '../network/tailscale.js';
 import { requireArrayValue, requireDefined } from '../required.js';
 import { renderRuntimeProxyArtifacts } from '../runtime/render-runtime-proxies.js';
 import {
@@ -42,7 +43,6 @@ import {
   validateRuntimeArtifacts,
 } from '../runtime/validate-runtime.js';
 
-const DEFAULT_BIND_HOST = '127.0.0.1';
 const DEFAULT_SOCKS_PORT = 1080;
 const DEFAULT_HTTP_PORT = 8080;
 const DEFAULT_HTTPS_PORT = 8443;
@@ -1093,17 +1093,6 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
-  const bindHost = await text({
-    message: 'Bind host',
-    initialValue: values.bindHost,
-    validate: (value) => ((value ?? '').trim().length > 0 ? undefined : 'Bind host is required.'),
-  });
-
-  if (isCancel(bindHost)) {
-    clackCancel('Setup cancelled.');
-    return PROMPT_CANCELLED;
-  }
-
   const socksPort = await text({
     message: 'SOCKS5 port',
     initialValue: String(values.socksPort),
@@ -1176,6 +1165,23 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
+  const selectedExposureMode = parseExposureMode(exposureModeInput.trim());
+  const bindHost = await text({
+    message:
+      selectedExposureMode === 'private-network' ? 'Private-network host IP' : 'Bind host',
+    initialValue: deriveInteractiveBindHostDefault({
+      selectedExposureMode,
+      initialValues: input.initialValues,
+      normalizedBindHost: values.bindHost,
+    }),
+    validate: (value) => ((value ?? '').trim().length > 0 ? undefined : 'Bind host is required.'),
+  });
+
+  if (isCancel(bindHost)) {
+    clackCancel('Setup cancelled.');
+    return PROMPT_CANCELLED;
+  }
+
   const baseDomainInput = await text({
     message: 'Base domain for derived route hostnames (optional)',
     initialValue: values.exposureBaseDomain ?? '',
@@ -1189,7 +1195,7 @@ async function collectSetupInputs(input: {
   }
 
   const routeBindIpInput =
-    exposureModeInput.trim() === 'loopback'
+    selectedExposureMode !== 'public'
       ? undefined
       : await text({
           message: 'Route bind IPs (comma-separated, ordered)',
@@ -1274,7 +1280,7 @@ async function collectSetupInputs(input: {
     accountNumber: accountNumber.trim(),
     bindHost: bindHost.trim(),
     routeBindIps: parseBindIpList(routeBindIpInput),
-    exposureMode: parseExposureMode(exposureModeInput.trim()),
+    exposureMode: selectedExposureMode,
     exposureBaseDomain: normalizeExposureBaseDomain(baseDomainInput.trim()),
     socksPort: Number(socksPort.trim()),
     httpPort: Number(httpPort.trim()),
@@ -1321,6 +1327,7 @@ async function saveConfigSafely(
 function normalizeInitialSetupValues(
   initialValues: Partial<RawSetupInputValues> | undefined,
 ): Partial<RawSetupInputValues> {
+  const exposureMode = initialValues?.exposureMode ?? DEFAULT_EXPOSURE_MODE;
   const normalizedLocations = parseLocationList(
     initialValues?.locations ?? initialValues?.location,
   );
@@ -1332,9 +1339,10 @@ function normalizeInitialSetupValues(
 
   return {
     accountNumber: initialValues?.accountNumber?.trim(),
-    bindHost: initialValues?.bindHost?.trim() || routeBindIps[0] || DEFAULT_BIND_HOST,
+    bindHost:
+      initialValues?.bindHost?.trim() || routeBindIps[0] || deriveDefaultBindHost(exposureMode),
     routeBindIps,
-    exposureMode: initialValues?.exposureMode ?? DEFAULT_EXPOSURE_MODE,
+    exposureMode,
     exposureBaseDomain: normalizeExposureBaseDomain(initialValues?.exposureBaseDomain),
     socksPort: initialValues?.socksPort ?? DEFAULT_SOCKS_PORT,
     httpPort: initialValues?.httpPort ?? DEFAULT_HTTP_PORT,
@@ -1350,14 +1358,15 @@ function normalizeInitialSetupValues(
 }
 
 function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputValues {
+  const exposureMode = values.exposureMode ?? DEFAULT_EXPOSURE_MODE;
+  const bindHost = values.bindHost?.trim() || deriveDefaultBindHost(exposureMode);
   const parsedLocations = parseLocationList(values.locations ?? values.location);
   const locations = (parsedLocations.length > 0 ? parsedLocations : ['se-gothenburg']) as [
     string,
     ...string[],
   ];
-  const routeBindIps = parseBindIpList(values.routeBindIps ?? values.bindHost);
+  const routeBindIps = parseBindIpList(values.routeBindIps ?? bindHost);
   const accountNumber = values.accountNumber?.trim();
-  const bindHost = values.bindHost?.trim();
   const socksPort = values.socksPort;
   const httpPort = values.httpPort;
   const username = values.username?.trim();
@@ -1383,7 +1392,7 @@ function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputVa
     accountNumber,
     bindHost,
     routeBindIps: finalizedRouteBindIps,
-    exposureMode: values.exposureMode ?? DEFAULT_EXPOSURE_MODE,
+    exposureMode,
     exposureBaseDomain: normalizeExposureBaseDomain(values.exposureBaseDomain),
     socksPort,
     httpPort,
@@ -1426,6 +1435,32 @@ function parseBindIpList(value: readonly string[] | string | undefined): string[
   }
 
   return [];
+}
+
+function deriveInteractiveBindHostDefault(input: {
+  readonly selectedExposureMode: ExposureMode;
+  readonly initialValues?: Partial<RawSetupInputValues>;
+  readonly normalizedBindHost?: string;
+}): string {
+  const explicitRouteBindIps = parseBindIpList(input.initialValues?.routeBindIps);
+  const explicitBindHost = input.initialValues?.bindHost?.trim();
+
+  if (explicitRouteBindIps.length > 0) {
+    return explicitRouteBindIps[0] ?? deriveDefaultBindHost(input.selectedExposureMode);
+  }
+
+  if (explicitBindHost) {
+    return explicitBindHost;
+  }
+
+  if (
+    input.initialValues?.exposureMode === input.selectedExposureMode &&
+    input.normalizedBindHost?.trim()
+  ) {
+    return input.normalizedBindHost.trim();
+  }
+
+  return deriveDefaultBindHost(input.selectedExposureMode);
 }
 
 function resolveSetupInputs(

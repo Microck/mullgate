@@ -1,7 +1,13 @@
 import { chmod, type FileHandle, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import { buildExposureContract, type ExposureContract } from '../config/exposure-contract.js';
+import {
+  buildExposureContract,
+  computePublishedPort,
+  deriveRuntimeBackendHost,
+  deriveRuntimeListenerHost,
+  type ExposureContract,
+} from '../config/exposure-contract.js';
 import type { MullgatePaths } from '../config/paths.js';
 import { REDACTED } from '../config/redact.js';
 import type { MullgateConfig, RoutedLocation } from '../config/schema.js';
@@ -316,14 +322,14 @@ function buildPublishedEndpoints(
   config: MullgateConfig,
   https: Extract<ResolvedHttpsRuntime, { ok: true }>,
 ): RuntimeEndpoint[] {
-  return config.routing.locations.flatMap((route) => {
+  return config.routing.locations.flatMap((route, index) => {
     const endpoints: RuntimeEndpoint[] = [
-      createEndpoint(route, 'socks5', config.setup.bind.socksPort),
-      createEndpoint(route, 'http', config.setup.bind.httpPort),
+      createEndpoint(config, route, index, 'socks5', config.setup.bind.socksPort),
+      createEndpoint(config, route, index, 'http', config.setup.bind.httpPort),
     ];
 
     if (https.enabled) {
-      endpoints.push(createEndpoint(route, 'https', https.port));
+      endpoints.push(createEndpoint(config, route, index, 'https', https.port));
     }
 
     return endpoints;
@@ -331,27 +337,31 @@ function buildPublishedEndpoints(
 }
 
 function createEndpoint(
+  config: MullgateConfig,
   route: RoutedLocation,
+  routeIndex: number,
   protocol: RuntimeEndpoint['protocol'],
   port: number,
 ): RuntimeEndpoint {
+  const publishedPort = computePublishedPort(config.setup.exposure.mode, port, routeIndex);
+
   return {
     routeId: route.runtime.routeId,
     hostname: route.hostname,
     bindIp: route.bindIp,
     protocol,
     host: route.hostname,
-    port,
+    port: publishedPort,
     containerHost: CONTAINER_BIND_HOST,
-    containerPort: port,
+    containerPort: publishedPort,
     auth: {
       username: REDACTED,
       password: REDACTED,
     },
-    hostnameUrl: `${protocol}://${route.hostname}:${port}`,
-    bindUrl: `${protocol}://${route.bindIp}:${port}`,
-    redactedHostnameUrl: `${protocol}://${REDACTED}:${REDACTED}@${route.hostname}:${port}`,
-    redactedBindUrl: `${protocol}://${REDACTED}:${REDACTED}@${route.bindIp}:${port}`,
+    hostnameUrl: `${protocol}://${route.hostname}:${publishedPort}`,
+    bindUrl: `${protocol}://${route.bindIp}:${publishedPort}`,
+    redactedHostnameUrl: `${protocol}://${REDACTED}:${REDACTED}@${route.hostname}:${publishedPort}`,
+    redactedBindUrl: `${protocol}://${REDACTED}:${REDACTED}@${route.bindIp}:${publishedPort}`,
   };
 }
 
@@ -362,10 +372,16 @@ function buildRuntimeBundleManifest(
   https: Extract<ResolvedHttpsRuntime, { ok: true }>,
   publishedEndpoints: readonly RuntimeEndpoint[],
 ): RuntimeBundleManifest {
-  const routeManifests = config.routing.locations.map((route) => {
+  const routeManifests = config.routing.locations.map((route, index) => {
     const routeEndpoints = publishedEndpoints.filter(
       (endpoint) => endpoint.routeId === route.runtime.routeId,
     );
+    const socks5Port = computePublishedPort(config.setup.exposure.mode, config.setup.bind.socksPort, index);
+    const httpPort = computePublishedPort(config.setup.exposure.mode, config.setup.bind.httpPort, index);
+    const httpsPort = https.enabled
+      ? computePublishedPort(config.setup.exposure.mode, https.port, index)
+      : null;
+    const listenerHost = deriveRuntimeListenerHost(config.setup.exposure.mode, route.bindIp);
 
     return {
       routeId: route.runtime.routeId,
@@ -381,9 +397,9 @@ function buildRuntimeBundleManifest(
         cityCode: route.mullvad.exit.cityCode,
       },
       listeners: {
-        socks5: `${route.bindIp}:${config.setup.bind.socksPort}`,
-        http: `${route.bindIp}:${config.setup.bind.httpPort}`,
-        https: https.enabled ? `${route.bindIp}:${https.port}` : null,
+        socks5: `${listenerHost}:${socks5Port}`,
+        http: `${listenerHost}:${httpPort}`,
+        https: https.enabled && httpsPort !== null ? `${listenerHost}:${httpsPort}` : null,
       },
       services: {
         routeProxy: {
@@ -422,8 +438,14 @@ function buildRuntimeBundleManifest(
       routeProxy: {
         name: ROUTE_PROXY_SERVICE,
         listeners: {
-          socks5: `per-route bind IPs on port ${config.setup.bind.socksPort}`,
-          http: `per-route bind IPs on port ${config.setup.bind.httpPort}`,
+          socks5:
+            config.setup.exposure.mode === 'private-network'
+              ? `shared host ${CONTAINER_BIND_HOST} with per-route ports starting at ${config.setup.bind.socksPort}`
+              : `per-route bind IPs on port ${config.setup.bind.socksPort}`,
+          http:
+            config.setup.exposure.mode === 'private-network'
+              ? `shared host ${CONTAINER_BIND_HOST} with per-route ports starting at ${config.setup.bind.httpPort}`
+              : `per-route bind IPs on port ${config.setup.bind.httpPort}`,
         },
         networkMode: HOST_NETWORK_MODE,
         mountPaths: {
@@ -433,7 +455,11 @@ function buildRuntimeBundleManifest(
       routingLayer: {
         name: ROUTING_LAYER_SERVICE,
         listeners: {
-          https: https.enabled ? `per-route bind IPs on port ${https.port}` : null,
+          https: https.enabled
+            ? config.setup.exposure.mode === 'private-network'
+              ? `shared host ${CONTAINER_BIND_HOST} with per-route ports starting at ${https.port}`
+              : `per-route bind IPs on port ${https.port}`
+            : null,
         },
         networkMode: HOST_NETWORK_MODE,
         publishedPorts: [],
@@ -544,7 +570,17 @@ function buildHttpsSidecarConfig(
     '',
   ];
 
-  if (https.enabled) {
+  if (https.enabled && config.setup.exposure.mode === 'private-network') {
+    for (const [index, route] of config.routing.locations.entries()) {
+      const publishedPort = computePublishedPort(config.setup.exposure.mode, https.port, index);
+      lines.push(
+        `frontend https_proxy_${route.runtime.routeId}`,
+        `  bind ${CONTAINER_BIND_HOST}:${publishedPort} ssl crt ${HAPROXY_COMBINED_PEM_PATH}`,
+        `  default_backend ${route.runtime.httpsBackendName}`,
+        '',
+      );
+    }
+  } else if (https.enabled) {
     const primaryRoute = requireDefined(
       config.routing.locations[0],
       'Expected at least one routed location when rendering the HTTPS runtime bundle.',
@@ -562,7 +598,7 @@ function buildHttpsSidecarConfig(
     if (https.enabled) {
       lines.push(
         `backend ${route.runtime.httpsBackendName}`,
-        `  server ${route.runtime.routeId} ${route.bindIp}:${config.setup.bind.httpPort} check`,
+        `  server ${route.runtime.routeId} ${deriveRuntimeBackendHost(config.setup.exposure.mode, route.bindIp)}:${resolveHttpBackendPort(config, route.runtime.routeId)} check`,
         '',
       );
     }
@@ -579,6 +615,11 @@ function buildRouteSelectionRules(routes: readonly RoutedLocation[]): string[] {
       `  use_backend ${route.runtime.httpsBackendName} if ${aclName}`,
     ];
   });
+}
+
+function resolveHttpBackendPort(config: MullgateConfig, routeId: string): number {
+  const routeIndex = config.routing.locations.findIndex((route) => route.runtime.routeId === routeId);
+  return computePublishedPort(config.setup.exposure.mode, config.setup.bind.httpPort, routeIndex < 0 ? 0 : routeIndex);
 }
 
 async function ensureDirectory(directoryPath: string): Promise<void> {

@@ -4,6 +4,10 @@ import path from 'node:path';
 import type { MullgatePaths } from '../config/paths.js';
 import type { MullgateConfig, RoutedLocation } from '../config/schema.js';
 import {
+  computePublishedPort,
+  deriveRuntimeListenerHost,
+} from '../config/exposure-contract.js';
+import {
   createLocationAliasCatalog,
   type LocationAliasTarget,
   resolveLocationAlias,
@@ -21,10 +25,14 @@ export const ENTRY_WIREPROXY_SOCKS_PORT = 39_101;
 export const ENTRY_WIREPROXY_HTTP_PORT = 39_102;
 
 export type RouteProxyIdentity = {
+  readonly routeIndex: number;
   readonly routeId: string;
   readonly routeAlias: string;
   readonly routeHostname: string;
   readonly routeBindIp: string;
+  readonly routeListenHost: string;
+  readonly routeSocksPort: number;
+  readonly routeHttpPort: number;
   readonly httpsBackendName: string;
 };
 
@@ -129,7 +137,7 @@ export function planRuntimeProxyArtifacts(
     };
   }
 
-  const routes = options.config.routing.locations.map((route) => {
+  const routes = options.config.routing.locations.map((route, index) => {
     const exit = route.mullvad.exit;
 
     if (!exit.relayHostname || !exit.relayFqdn || !exit.socksHostname || !exit.socksPort) {
@@ -142,10 +150,22 @@ export function planRuntimeProxyArtifacts(
     return {
       ok: true as const,
       value: {
+        routeIndex: index,
         routeId: route.runtime.routeId,
         routeAlias: route.alias,
         routeHostname: route.hostname,
         routeBindIp: route.bindIp,
+        routeListenHost: deriveRuntimeListenerHost(options.config.setup.exposure.mode, route.bindIp),
+        routeSocksPort: computePublishedPort(
+          options.config.setup.exposure.mode,
+          options.config.setup.bind.socksPort,
+          index,
+        ),
+        routeHttpPort: computePublishedPort(
+          options.config.setup.exposure.mode,
+          options.config.setup.bind.httpPort,
+          index,
+        ),
         httpsBackendName: route.runtime.httpsBackendName,
         exitRelayHostname: exit.relayHostname,
         exitRelayFqdn: exit.relayFqdn,
@@ -305,16 +325,16 @@ function buildRouteProxyConfig(input: {
   for (const route of input.routes) {
     // The shared entry hop must preserve the next-hop Mullvad SOCKS hostname through the tunnel.
     lines.push(
-      `# Route ${route.routeId} (${route.routeHostname} -> ${route.routeBindIp}) exit ${route.exitRelayHostname}`,
+      `# Route ${route.routeId} (${route.routeHostname} -> ${route.routeBindIp}:${route.routeSocksPort}/${route.routeHttpPort}) exit ${route.exitRelayHostname}`,
       `allow ${input.config.setup.auth.username}`,
       `parent 1000 socks5+ ${route.entryParent.host} ${route.entryParent.port}`,
       `parent 1000 socks5+ ${route.exitSocksHostname} ${route.exitSocksPort}`,
-      `socks -p${input.config.setup.bind.socksPort} -i${route.routeBindIp} -e${route.routeBindIp}`,
+      `socks -p${route.routeSocksPort} -i${route.routeListenHost} -e${route.routeBindIp}`,
       'flush',
       `allow ${input.config.setup.auth.username}`,
       `parent 1000 socks5+ ${route.entryParent.host} ${route.entryParent.port}`,
       `parent 1000 socks5+ ${route.exitSocksHostname} ${route.exitSocksPort}`,
-      `proxy -p${input.config.setup.bind.httpPort} -i${route.routeBindIp} -e${route.routeBindIp}`,
+      `proxy -p${route.routeHttpPort} -i${route.routeListenHost} -e${route.routeBindIp}`,
       'flush',
       '',
     );
@@ -507,10 +527,14 @@ function formatRelayEndpoint(relay: MullvadRelay): string {
 
 function describeRoute(route: RoutedLocation): RouteProxyIdentity {
   return {
+    routeIndex: -1,
     routeId: route.runtime.routeId,
     routeAlias: route.alias,
     routeHostname: route.hostname,
     routeBindIp: route.bindIp,
+    routeListenHost: route.bindIp,
+    routeSocksPort: 0,
+    routeHttpPort: 0,
     httpsBackendName: route.runtime.httpsBackendName,
   };
 }

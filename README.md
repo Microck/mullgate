@@ -71,14 +71,14 @@ flowchart TB
 
     subgraph planner[Route and exposure planning]
         routeIntent[route aliases plus requested locations]
-        bindPlan[bind IP plan\nloopback or private-network or public]
+        bindPlan[bind IP plan\nloopback or shared private host or public]
         hostnamePlan[hostname plan\nroute alias or base-domain hostname or direct IP]
         exactExit[exact relay hostname per route\noptional pinned recommendation]
     end
 
     subgraph runtime[Linux-first live runtime]
         listeners[route-specific SOCKS5, HTTP, and HTTPS listeners]
-        router[routing by destination bind IP]
+        router[routing by shared-host ports or destination bind IP]
         backends[one rendered backend per configured route]
         docker[Docker runtime bundle]
     end
@@ -152,12 +152,12 @@ flowchart TB
     path --> config
     path --> artifacts
 
-    bindPlan -.non-loopback multi-route requires one distinct bind IP per route.-> listeners
-    hostnamePlan -.hostname-selected routing stays truthful only when the hostname resolves to that route's bind IP.-> dns
+    bindPlan -.private-network reuses one trusted host IP; public still needs distinct bind IPs per route.-> listeners
+    hostnamePlan -.private-network hostnames can share one host IP because route selection moves to per-route ports.-> dns
     wg -.one shared Mullvad device powers many routed exits.-> selectedRelay
 ```
 
-the diagram above shows the current shipped mullgate model end to end: setup writes canonical config, exposure defines bind-ip and hostname truth, relay tooling can pin exact exits, `start` renders and launches the shared-entry runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces.
+the diagram above shows the current shipped mullgate model end to end: setup writes canonical config, exposure defines the published host and hostname truth, relay tooling can pin exact exits, `start` renders and launches the shared-entry runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces.
 
 ## quickstart
 
@@ -230,7 +230,7 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 | command | key flags | purpose |
 | --- | --- | --- |
 | `mullgate setup` | `--non-interactive`, `--location`, `--exposure-mode` | create or update canonical config and derived runtime artifacts |
-| `mullgate proxy access` | `--mode`, `--base-domain`, `--route-bind-ip` | inspect or update hostnames, bind IPs, DNS guidance, and direct-IP entrypoints |
+| `mullgate proxy access` | `--mode`, `--base-domain`, `--route-bind-ip` | inspect or update hostnames, the shared private-network host or public bind IPs, DNS guidance, and direct-IP entrypoints |
 | `mullgate proxy export` | `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories |
 | `mullgate proxy relay list` | selector flags such as `--country`, `--owner`, `--provider` | inspect relay candidates that match a policy |
 | `mullgate proxy relay probe` | `--country`, `--count` | latency-probe likely relay candidates |
@@ -255,6 +255,16 @@ export MULLGATE_ACCOUNT_NUMBER=123456789012
 export MULLGATE_PROXY_USERNAME=alice
 export MULLGATE_PROXY_PASSWORD='replace-me'
 export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
+
+mullgate setup --non-interactive
+mullgate proxy access
+```
+
+set up private-network exposure for other Tailscale devices. if Tailscale is running, Mullgate defaults to the host's `100.x` address; otherwise it falls back to `0.0.0.0` until you override the shared host:
+
+```bash
+export MULLGATE_EXPOSURE_MODE=private-network
+export MULLGATE_BIND_HOST=100.124.44.113
 
 mullgate setup --non-interactive
 mullgate proxy access
@@ -302,6 +312,8 @@ enable login-time startup on Linux when you want the proxy runtime to come back 
 mullgate proxy autostart enable
 mullgate proxy autostart status
 ```
+
+`mullgate proxy autostart enable` now ensures `loginctl` linger is enabled for the current user, because a `systemd --user` unit does not reliably come back after reboot without it.
 
 ## documentation
 

@@ -22,12 +22,14 @@ type SystemctlResult = {
 };
 
 type SystemctlRunner = (args: readonly string[]) => Promise<SystemctlResult>;
+type LoginctlRunner = (args: readonly string[]) => Promise<SystemctlResult>;
 
 type AutostartCommandDependencies = {
   readonly env?: NodeJS.ProcessEnv;
   readonly argv?: readonly string[];
   readonly platform?: NodeJS.Platform;
   readonly runSystemctl?: SystemctlRunner;
+  readonly runLoginctl?: LoginctlRunner;
   readonly stdout?: WritableTextSink;
   readonly stderr?: WritableTextSink;
 };
@@ -50,6 +52,8 @@ type AutostartSupport = {
   readonly ok: true;
   readonly binaryPath: string;
   readonly unitPath: string;
+  readonly userName: string;
+  readonly loginctlAvailable: boolean;
 };
 
 export function registerAutostartCommand(
@@ -97,6 +101,7 @@ export async function enableAutostart(
     argv: dependencies.argv ?? process.argv,
     platform: dependencies.platform ?? process.platform,
     requireSystemctlOnPath: dependencies.runSystemctl === undefined,
+    loginctlAvailableOverride: dependencies.runLoginctl ? true : undefined,
   });
 
   if (!support.ok) {
@@ -104,6 +109,16 @@ export async function enableAutostart(
   }
 
   const runSystemctl = dependencies.runSystemctl ?? runSystemctlCommand;
+  const runLoginctl = dependencies.runLoginctl ?? runLoginctlCommand;
+  const lingerResult = await ensureUserLinger({
+    support,
+    runLoginctl,
+  });
+
+  if (!lingerResult.ok) {
+    return lingerResult;
+  }
+
   const unitFile = buildAutostartUnitFile({ binaryPath: support.binaryPath });
 
   try {
@@ -149,8 +164,10 @@ export async function enableAutostart(
       'Mullgate autostart enabled.',
       'phase: autostart-enable',
       'platform: linux',
+      `user: ${support.userName}`,
       `unit: ${support.unitPath}`,
       `exec start: ${support.binaryPath} proxy start`,
+      `linger: ${lingerResult.state}`,
       'service: enabled and started',
       'next step: run `mullgate proxy autostart status` if you want to verify the user service state.',
     ].join('\n'),
@@ -166,6 +183,7 @@ export async function disableAutostart(
     argv: dependencies.argv ?? process.argv,
     platform: dependencies.platform ?? process.platform,
     requireSystemctlOnPath: dependencies.runSystemctl === undefined,
+    loginctlAvailableOverride: dependencies.runLoginctl ? true : undefined,
   });
 
   if (!support.ok) {
@@ -213,8 +231,10 @@ export async function disableAutostart(
       'Mullgate autostart disabled.',
       'phase: autostart-disable',
       'platform: linux',
+      `user: ${support.userName}`,
       `unit: ${support.unitPath}`,
       'service: stopped and removed',
+      'linger: unchanged',
       'next step: run `mullgate proxy start` manually whenever you want the proxy runtime online.',
     ].join('\n'),
   };
@@ -229,6 +249,7 @@ export async function inspectAutostart(
     argv: dependencies.argv ?? process.argv,
     platform: dependencies.platform ?? process.platform,
     requireSystemctlOnPath: dependencies.runSystemctl === undefined,
+    loginctlAvailableOverride: dependencies.runLoginctl ? true : undefined,
   });
 
   if (!support.ok) {
@@ -236,11 +257,15 @@ export async function inspectAutostart(
   }
 
   const runSystemctl = dependencies.runSystemctl ?? runSystemctlCommand;
+  const runLoginctl = dependencies.runLoginctl ?? runLoginctlCommand;
   const [enabled, active, unitContents] = await Promise.all([
     runSystemctl(['--user', 'is-enabled', AUTOSTART_UNIT_NAME]),
     runSystemctl(['--user', 'is-active', AUTOSTART_UNIT_NAME]),
     readExistingUnitFile(support.unitPath),
   ]);
+  const lingerState = support.loginctlAvailable
+    ? await queryLingerState({ support, runLoginctl })
+    : 'unknown (loginctl unavailable)';
 
   const unitState = unitContents === null ? 'missing' : 'present';
   const enabledState = normalizeSystemctlState(enabled, 'disabled');
@@ -253,9 +278,11 @@ export async function inspectAutostart(
       'Mullgate autostart status',
       'phase: autostart-status',
       'platform: linux',
+      `user: ${support.userName}`,
       `unit: ${support.unitPath}`,
       `unit file: ${unitState}`,
       `exec start: ${support.binaryPath} proxy start`,
+      `linger: ${lingerState}`,
       `enabled: ${enabledState}`,
       `active: ${activeState}`,
       ...(unitContents === null ? [] : ['preview:', ...unitContents.split('\n')]),
@@ -271,8 +298,9 @@ export function buildAutostartUnitFile(input: { readonly binaryPath: string }): 
     'After=network-online.target',
     '',
     '[Service]',
-    'Type=simple',
+    'Type=oneshot',
     `ExecStart=${escapeSystemdExecArgument(input.binaryPath)} proxy start`,
+    'RemainAfterExit=yes',
     'Restart=on-failure',
     'RestartSec=15',
     'WorkingDirectory=%h',
@@ -287,6 +315,7 @@ async function resolveAutostartSupport(input: {
   readonly argv: readonly string[];
   readonly platform: NodeJS.Platform;
   readonly requireSystemctlOnPath: boolean;
+  readonly loginctlAvailableOverride?: boolean;
 }): Promise<AutostartSupport | AutostartFailure> {
   if (input.platform !== 'linux') {
     return renderAutostartFailure({
@@ -297,9 +326,12 @@ async function resolveAutostartSupport(input: {
 
   if (input.requireSystemctlOnPath) {
     const systemctlPath = await resolveExecutableFromPath('systemctl', input.env);
+    const loginctlAvailable =
+      input.loginctlAvailableOverride ??
+      Boolean(await resolveExecutableFromPath('loginctl', input.env));
 
     if (systemctlPath) {
-      return resolveSupportedAutostartPaths(input.env, input.argv);
+      return resolveSupportedAutostartPaths(input.env, input.argv, loginctlAvailable);
     }
 
     return renderAutostartFailure({
@@ -308,12 +340,17 @@ async function resolveAutostartSupport(input: {
     });
   }
 
-  return resolveSupportedAutostartPaths(input.env, input.argv);
+  const loginctlAvailable =
+    input.loginctlAvailableOverride ??
+    Boolean(await resolveExecutableFromPath('loginctl', input.env));
+
+  return resolveSupportedAutostartPaths(input.env, input.argv, loginctlAvailable);
 }
 
 async function resolveSupportedAutostartPaths(
   env: NodeJS.ProcessEnv,
   argv: readonly string[],
+  loginctlAvailable: boolean,
 ): Promise<AutostartSupport | AutostartFailure> {
   const binaryPath = await resolveMullgateBinaryPath({
     env,
@@ -328,12 +365,23 @@ async function resolveSupportedAutostartPaths(
     });
   }
 
+  const userName = resolveCurrentUserName(env);
+
+  if (!userName) {
+    return renderAutostartFailure({
+      action: 'status',
+      message: 'Could not determine the current Linux user for the autostart service.',
+    });
+  }
+
   const paths = resolveMullgatePaths(env);
 
   return {
     ok: true,
     binaryPath,
     unitPath: path.join(paths.configHome, 'systemd', 'user', AUTOSTART_UNIT_NAME),
+    userName,
+    loginctlAvailable,
   };
 }
 
@@ -395,8 +443,19 @@ async function resolveExecutableFromPath(
 }
 
 async function runSystemctlCommand(args: readonly string[]): Promise<SystemctlResult> {
+  return runCommand('systemctl', args);
+}
+
+async function runLoginctlCommand(args: readonly string[]): Promise<SystemctlResult> {
+  return runCommand('loginctl', args);
+}
+
+async function runCommand(
+  command: string,
+  args: readonly string[],
+): Promise<SystemctlResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn('systemctl', [...args], {
+    const child = spawn(command, [...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: process.env,
     });
@@ -419,6 +478,68 @@ async function runSystemctlCommand(args: readonly string[]): Promise<SystemctlRe
       });
     });
   });
+}
+
+async function ensureUserLinger(input: {
+  readonly support: AutostartSupport;
+  readonly runLoginctl: LoginctlRunner;
+}): Promise<{ readonly ok: true; readonly state: 'enabled' | 'already-enabled' } | AutostartFailure> {
+  if (!input.support.loginctlAvailable) {
+    return renderAutostartFailure({
+      action: 'enable',
+      unitPath: input.support.unitPath,
+      binaryPath: input.support.binaryPath,
+      message:
+        'loginctl was not found on PATH, so Mullgate cannot guarantee reboot-time startup for the systemd user service.',
+      cause:
+        `Install loginctl support or enable linger manually for ${input.support.userName} before retrying \`mullgate proxy autostart enable\`.`,
+    });
+  }
+
+  const currentState = await queryLingerState(input);
+
+  if (currentState === 'yes') {
+    return {
+      ok: true,
+      state: 'already-enabled',
+    };
+  }
+
+  const result = await input.runLoginctl(['enable-linger', input.support.userName]);
+
+  if (result.code !== 0) {
+    return renderAutostartFailure({
+      action: 'enable',
+      unitPath: input.support.unitPath,
+      binaryPath: input.support.binaryPath,
+      message:
+        'loginctl enable-linger failed, so Mullgate cannot guarantee reboot-time startup for the systemd user service.',
+      cause: collectSystemctlCause(result),
+    });
+  }
+
+  return {
+    ok: true,
+    state: 'enabled',
+  };
+}
+
+async function queryLingerState(input: {
+  readonly support: AutostartSupport;
+  readonly runLoginctl: LoginctlRunner;
+}): Promise<string> {
+  const result = await input.runLoginctl([
+    'show-user',
+    input.support.userName,
+    '--property=Linger',
+    '--value',
+  ]);
+
+  if (result.code !== 0) {
+    return `unknown (${collectSystemctlCause(result)})`;
+  }
+
+  return result.stdout || 'unknown';
 }
 
 function writeAutostartResult(
@@ -494,4 +615,9 @@ async function readExistingUnitFile(unitPath: string): Promise<string | null> {
 
 function escapeSystemdExecArgument(value: string): string {
   return value.replace(/([\\\s])/g, '\\$1');
+}
+
+function resolveCurrentUserName(env: NodeJS.ProcessEnv): string | null {
+  const user = env.USER?.trim() || env.LOGNAME?.trim();
+  return user ? user : null;
 }

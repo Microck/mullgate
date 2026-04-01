@@ -30,6 +30,8 @@ async function createAutostartFixture(): Promise<{
     env: {
       ...process.env,
       HOME: homeDir,
+      USER: 'mullgate-user',
+      LOGNAME: 'mullgate-user',
       XDG_CONFIG_HOME: path.join(homeDir, 'config'),
       XDG_STATE_HOME: path.join(homeDir, 'state'),
       XDG_CACHE_HOME: path.join(homeDir, 'cache'),
@@ -50,8 +52,9 @@ describe('mullgate autostart command', () => {
       After=network-online.target
 
       [Service]
-      Type=simple
+      Type=oneshot
       ExecStart=/usr/local/bin/mullgate proxy start
+      RemainAfterExit=yes
       Restart=on-failure
       RestartSec=15
       WorkingDirectory=%h
@@ -63,14 +66,24 @@ describe('mullgate autostart command', () => {
 
   it('writes and enables the user service', async () => {
     const fixture = await createAutostartFixture();
-    const commands: string[] = [];
+    const systemctlCommands: string[] = [];
+    const loginctlCommands: string[] = [];
 
     const result = await enableAutostart({
       env: fixture.env,
       argv: ['node', fixture.binaryPath],
       platform: 'linux',
       runSystemctl: async (args) => {
-        commands.push(args.join(' '));
+        systemctlCommands.push(args.join(' '));
+        return { code: 0, stdout: '', stderr: '' };
+      },
+      runLoginctl: async (args) => {
+        loginctlCommands.push(args.join(' '));
+
+        if (args[0] === 'show-user') {
+          return { code: 0, stdout: 'no', stderr: '' };
+        }
+
         return { code: 0, stdout: '', stderr: '' };
       },
     });
@@ -80,14 +93,23 @@ describe('mullgate autostart command', () => {
 
     expect(result.ok).toBe(true);
     expect(unitContents).toBe(`${buildAutostartUnitFile({ binaryPath: fixture.binaryPath })}\n`);
-    expect(commands).toEqual(['--user daemon-reload', '--user enable --now mullgate.service']);
+    expect(loginctlCommands).toEqual([
+      'show-user mullgate-user --property=Linger --value',
+      'enable-linger mullgate-user',
+    ]);
+    expect(systemctlCommands).toEqual([
+      '--user daemon-reload',
+      '--user enable --now mullgate.service',
+    ]);
     expect(`\n${normalizeTempPath(result.summary, fixture.homeDir)}`).toMatchInlineSnapshot(`
       "
       Mullgate autostart enabled.
       phase: autostart-enable
       platform: linux
+      user: mullgate-user
       unit: /tmp/mullgate-autostart-REPLACED/config/systemd/user/mullgate.service
       exec start: /tmp/mullgate-autostart-REPLACED/bin/mullgate proxy start
+      linger: enabled
       service: enabled and started
       next step: run \`mullgate proxy autostart status\` if you want to verify the user service state."
     `);
@@ -95,7 +117,8 @@ describe('mullgate autostart command', () => {
 
   it('accepts a relative release-binary invocation when mullgate is not on PATH', async () => {
     const fixture = await createAutostartFixture();
-    const commands: string[] = [];
+    const systemctlCommands: string[] = [];
+    const loginctlCommands: string[] = [];
     const relativeBinaryPath = path.relative(process.cwd(), fixture.binaryPath);
 
     const result = await enableAutostart({
@@ -106,8 +129,12 @@ describe('mullgate autostart command', () => {
       argv: ['node', relativeBinaryPath],
       platform: 'linux',
       runSystemctl: async (args) => {
-        commands.push(args.join(' '));
+        systemctlCommands.push(args.join(' '));
         return { code: 0, stdout: '', stderr: '' };
+      },
+      runLoginctl: async (args) => {
+        loginctlCommands.push(args.join(' '));
+        return { code: 0, stdout: 'yes', stderr: '' };
       },
     });
 
@@ -116,7 +143,11 @@ describe('mullgate autostart command', () => {
 
     expect(result.ok).toBe(true);
     expect(unitContents).toBe(`${buildAutostartUnitFile({ binaryPath: fixture.binaryPath })}\n`);
-    expect(commands).toEqual(['--user daemon-reload', '--user enable --now mullgate.service']);
+    expect(loginctlCommands).toEqual(['show-user mullgate-user --property=Linger --value']);
+    expect(systemctlCommands).toEqual([
+      '--user daemon-reload',
+      '--user enable --now mullgate.service',
+    ]);
   });
 
   it('reports status with the generated unit preview', async () => {
@@ -127,6 +158,7 @@ describe('mullgate autostart command', () => {
       argv: ['node', fixture.binaryPath],
       platform: 'linux',
       runSystemctl: async () => ({ code: 0, stdout: '', stderr: '' }),
+      runLoginctl: async () => ({ code: 0, stdout: 'yes', stderr: '' }),
     });
 
     const result = await inspectAutostart({
@@ -146,10 +178,16 @@ describe('mullgate autostart command', () => {
 
         throw new Error(`Unexpected command: ${command}`);
       },
+      runLoginctl: async (args) => {
+        expect(args.join(' ')).toBe('show-user mullgate-user --property=Linger --value');
+        return { code: 0, stdout: 'yes', stderr: '' };
+      },
     });
 
     expect(result.ok).toBe(true);
     expect(result.summary).toContain(unitPath);
+    expect(result.summary).toContain('user: mullgate-user');
+    expect(result.summary).toContain('linger: yes');
     expect(result.summary).toContain('enabled: enabled');
     expect(result.summary).toContain('active: active');
     expect(result.summary).toContain('preview:');
@@ -188,6 +226,7 @@ describe('mullgate autostart command', () => {
       argv: ['node', fixture.binaryPath],
       platform: 'linux',
       runSystemctl: async () => ({ code: 0, stdout: '', stderr: '' }),
+      runLoginctl: async () => ({ code: 0, stdout: 'yes', stderr: '' }),
     });
 
     const result = await disableAutostart({
@@ -205,6 +244,42 @@ describe('mullgate autostart command', () => {
     expect(result.ok).toBe(true);
     await expect(readFile(unitPath, 'utf8')).rejects.toThrow();
     expect(commands).toEqual(['--user disable --now mullgate.service', '--user daemon-reload']);
+  });
+
+  it('fails clearly when linger cannot be enabled', async () => {
+    const fixture = await createAutostartFixture();
+
+    const result = await enableAutostart({
+      env: fixture.env,
+      argv: ['node', fixture.binaryPath],
+      platform: 'linux',
+      runSystemctl: async () => ({ code: 0, stdout: '', stderr: '' }),
+      runLoginctl: async (args) => {
+        if (args[0] === 'show-user') {
+          return { code: 0, stdout: 'no', stderr: '' };
+        }
+
+        return {
+          code: 1,
+          stdout: '',
+          stderr: 'Failed to enable lingering: Access denied',
+        };
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      exitCode: 1,
+    });
+    expect(`\n${normalizeTempPath(result.summary, fixture.homeDir)}`).toMatchInlineSnapshot(`
+      "
+      Mullgate autostart failed.
+      phase: autostart-enable
+      unit: /tmp/mullgate-autostart-REPLACED/config/systemd/user/mullgate.service
+      exec start: /tmp/mullgate-autostart-REPLACED/bin/mullgate proxy start
+      reason: loginctl enable-linger failed, so Mullgate cannot guarantee reboot-time startup for the systemd user service.
+      cause: Failed to enable lingering: Access denied"
+    `);
   });
 
   it('fails clearly on non-linux platforms', async () => {

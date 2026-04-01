@@ -1196,7 +1196,7 @@ describe('mullgate doctor command', () => {
         routing: {
           locations: config.routing.locations.map((location, index) => ({
             ...location,
-            bindIp: index === 0 ? '192.168.10.10' : '192.168.10.11',
+            bindIp: '192.168.10.10',
             hostname: `${location.alias}.proxy.example.com`,
           })),
         },
@@ -1294,13 +1294,13 @@ describe('mullgate doctor command', () => {
          detail: mode-label=Private network / Tailscale-first
          detail: recommendation=recommended-remote
          detail: posture-summary=Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.
-         detail: remote-story=Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate proxy access\` when local host-file wiring is the easiest path.
+         detail: remote-story=Prefer the host Tailscale IP when available, then connect from other trusted-network machines to the published per-route ports on that shared host.
          detail: base-domain=proxy.example.com
          detail: allow-lan=yes
          detail: dns-records=2
          detail: routes=2
-         detail: bind-remediation=Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.
-         detail: hostname-remediation=Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate proxy access\` when host-file wiring is the intended local workaround.
+         detail: bind-remediation=Keep private-network mode on one trusted-network host IP only. Mullgate binds wildcard listeners at runtime and publishes dedicated per-route ports on that shared host.
+         detail: hostname-remediation=Make each route hostname resolve to the saved shared private-network host IP inside Tailscale/LAN DNS, or use the direct host-IP entrypoints if DNS is unnecessary.
          detail: restart-remediation=After exposure or bind-IP changes, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
          detail: info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
 
@@ -1308,13 +1308,13 @@ describe('mullgate doctor command', () => {
          summary: Saved bind IPs match the configured exposure posture.
          detail: setup.bind.host=192.168.10.10
          detail: route[1] se-got-wg-101 bind-ip=192.168.10.10
-         detail: route[2] at-vie-wg-001 bind-ip=192.168.10.11
+         detail: route[2] at-vie-wg-001 bind-ip=192.168.10.10
 
       7. hostname-resolution: fail
          summary: One or more route hostnames no longer resolve to their saved bind IPs.
          detail: route se-got-wg-101: sweden-gothenburg.proxy.example.com -> 192.168.10.10
          detail: route at-vie-wg-001: austria-vienna.proxy.example.com -> 192.168.10.99
-         detail: Route at-vie-wg-001 expects austria-vienna.proxy.example.com to resolve to 192.168.10.11, but it currently resolves to 192.168.10.99.
+         detail: Route at-vie-wg-001 expects austria-vienna.proxy.example.com to resolve to 192.168.10.10, but it currently resolves to 192.168.10.99.
          remediation: Publish or update the saved DNS A records so every route hostname resolves to its saved bind IP, then rerun \`mullgate proxy doctor\`.
 
       8. runtime: degraded
@@ -1329,7 +1329,7 @@ describe('mullgate doctor command', () => {
          detail: route-proxy=not present in live compose status
          detail: routing-layer=not present in live compose status
          detail: route se-got-wg-101 publishes sweden-gothenburg.proxy.example.com -> 192.168.10.10 via route-proxy
-         detail: route at-vie-wg-001 publishes austria-vienna.proxy.example.com -> 192.168.10.11 via route-proxy
+         detail: route at-vie-wg-001 publishes austria-vienna.proxy.example.com -> 192.168.10.10 via route-proxy
          remediation: Run \`mullgate proxy start\` after fixing any validation, bind, or last-start issues reported above.
 
       9. last-start: degraded

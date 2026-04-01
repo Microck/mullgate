@@ -338,8 +338,8 @@ function validateRouteProxySyntax(input: {
   }
 
   for (const route of input.routes) {
-    const expectedSocks = `socks -p${input.bind.socksPort} -i${route.routeBindIp} -e${route.routeBindIp}`;
-    const expectedHttp = `proxy -p${input.bind.httpPort} -i${route.routeBindIp} -e${route.routeBindIp}`;
+    const expectedSocks = `socks -p${route.routeSocksPort} -i${route.routeListenHost} -e${route.routeBindIp}`;
+    const expectedHttp = `proxy -p${route.routeHttpPort} -i${route.routeListenHost} -e${route.routeBindIp}`;
     const expectedEntryParent = `parent 1000 socks5+ 127.0.0.1 ${ENTRY_WIREPROXY_SOCKS_PORT}`;
     const expectedExitParent = `parent 1000 socks5+ ${route.exitSocksHostname} ${route.exitSocksPort}`;
 

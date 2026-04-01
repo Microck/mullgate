@@ -33,8 +33,9 @@ Use private-network mode when clients are on a LAN, VPN, or overlay network and 
 
 Typical characteristics:
 
-- each route needs its own explicit bind IP
-- bind IPs must be distinct for multi-route setups
+- all routes share one trusted-network host IP
+- each route gets its own published port on that shared host
+- when Tailscale is available, the setup flow should default to the host's `100.x` address
 - a base domain can be used to produce route-aware hostnames such as `sweden-gothenburg.proxy.example.com`
 
 ## Public mode
@@ -52,15 +53,15 @@ Mullgate supports both:
 
 The same route can be reached through either form, but hostname-based routing only remains truthful when the hostname resolves to the route's assigned bind IP.
 
-## Why distinct bind IPs matter
+## Why bind IPs still matter
 
-The runtime dispatches by destination bind IP. That is the key design constraint behind the exposure model.
+The exposure model is now split:
 
-As a result:
+- `loopback` still derives route-local bind IPs such as `127.0.0.1` and `127.0.0.2`
+- `private-network` reuses one shared host IP and moves route selection to per-route ports
+- `public` still depends on distinct bind IPs per route
 
-- each route must have its own bind IP in non-loopback multi-route setups
-- two hostnames pointing at one bind IP do not represent two distinct routes
-- DNS correctness is part of route correctness
+DNS correctness is still part of route correctness. In private-network mode, multiple hostnames can legitimately point at the same host IP because the ports differ.
 
 ## Inspect current exposure
 
@@ -72,7 +73,7 @@ Use this report to verify:
 
 - mode
 - base domain
-- route-to-bind-IP mapping
+- shared host or route-to-bind-IP mapping
 - generated hostname inventory
 - DNS records to publish
 - whether runtime validation or restart is needed
@@ -87,8 +88,7 @@ Example:
 mullgate proxy access \
   --mode private-network \
   --base-domain proxy.example.com \
-  --route-bind-ip 192.168.10.10 \
-  --route-bind-ip 192.168.10.11
+  --route-bind-ip 100.124.44.113
 ```
 
 Then refresh runtime state:
@@ -108,17 +108,17 @@ mullgate proxy start
 Before you finalize exposure settings, make sure you can answer these questions:
 
 - How many routes are you exposing?
-- Does each route have a distinct bind IP?
+- Is private-network using one trusted host IP, or is public mode using distinct bind IPs?
 - Which hostnames should clients use?
-- Do those hostnames resolve to the intended bind IPs?
+- Do those hostnames resolve to the intended host IPs?
 - Is the environment loopback, private network, or public?
 
 ## Remote-proof checklist
 
 Before claiming hostname-selected routing works remotely, verify all of the following:
 
-- every route has a distinct bind IP
-- every hostname resolves to the intended bind IP
+- private-network routes share the intended trusted host IP, or public routes keep distinct bind IPs
+- every hostname resolves to the intended host IP
 - `mullgate proxy access` matches your DNS plan
 - `mullgate proxy doctor` shows no hostname drift
 - real proxy probes produce the expected route behavior

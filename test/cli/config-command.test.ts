@@ -337,7 +337,7 @@ copy/paste hosts block
       mode label: Private network / Tailscale-first
       recommendation: recommended-remote
       posture summary: Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.
-      remote story: Keep bind IPs private, ensure route hostnames resolve inside the trusted network, and use \`mullgate proxy access\` when local host-file wiring is the easiest path.
+      remote story: Prefer the host Tailscale IP when available, then connect from other trusted-network machines to the published per-route ports on that shared host.
       base domain: proxy.example.com
       allow lan: yes
       runtime status: unvalidated
@@ -345,13 +345,13 @@ copy/paste hosts block
       runtime message: Exposure settings changed; rerun \`mullgate validate\` or \`mullgate start\` to refresh runtime artifacts.
 
       guidance
-      - Private-network mode is the recommended remote posture for Tailscale, LAN, and other trusted overlays. Keep it private by ensuring every bind IP stays reachable only inside that trusted network.
-      - Each route must keep a distinct bind IP so destination-IP routing remains truthful across SOCKS5, HTTP, and HTTPS.
-      - Publish the DNS records below so every route hostname resolves to its matching bind IP.
+      - Private-network mode is the recommended remote posture for Tailscale, LAN, and other trusted overlays. Mullgate publishes every route on one shared private host IP so other trusted-network machines can reach that host directly.
+      - Each private-network route gets a dedicated published port on that shared host. This is the canonical Tailscale-first access model.
+      - Publish the DNS records below so every route hostname resolves to the shared private host IP.
 
       remediation
-      - bind posture: Keep private-network mode on trusted-network bind IPs only. Use one distinct RFC1918 or overlay-network address per route so destination-IP routing stays truthful.
-      - hostname resolution: Make each route hostname resolve to its saved private-network bind IP inside Tailscale/LAN DNS, or use \`mullgate proxy access\` when host-file wiring is the intended local workaround.
+      - bind posture: Keep private-network mode on one trusted-network host IP only. Mullgate binds wildcard listeners at runtime and publishes dedicated per-route ports on that shared host.
+      - hostname resolution: Make each route hostname resolve to the saved shared private-network host IP inside Tailscale/LAN DNS, or use the direct host-IP entrypoints if DNS is unnecessary.
       - restart: After exposure or bind-IP changes, rerun \`mullgate proxy validate\` or \`mullgate proxy start\` so the runtime artifacts and operator guidance match the recommended private-network posture.
 
       routes
@@ -369,12 +369,12 @@ copy/paste hosts block
          alias: austria-vienna
          route id: austria-vienna
          dns: austria-vienna.proxy.example.com A 192.168.10.11
-         socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1080
-         socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.11:1080
-         http hostname: http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8080
-         http direct ip: http://[redacted]:[redacted]@192.168.10.11:8080
-         https hostname: https://[redacted]:[redacted]@austria-vienna.proxy.example.com:8443
-         https direct ip: https://[redacted]:[redacted]@192.168.10.11:8443
+         socks5 hostname: socks5://[redacted]:[redacted]@austria-vienna.proxy.example.com:1081
+         socks5 direct ip: socks5://[redacted]:[redacted]@192.168.10.11:1081
+         http hostname: http://[redacted]:[redacted]@austria-vienna.proxy.example.com:8081
+         http direct ip: http://[redacted]:[redacted]@192.168.10.11:8081
+         https hostname: https://[redacted]:[redacted]@austria-vienna.proxy.example.com:8444
+         https direct ip: https://[redacted]:[redacted]@192.168.10.11:8444
 
       warnings
       - info: Publish one DNS A record per route hostname and point it at the matching bind IP before expecting remote hostname access to work.
@@ -477,7 +477,7 @@ copy/paste hosts block
       mode: 'private-network',
       baseDomain: 'proxy.example.com',
       baseDomainSpecified: true,
-      routeBindIps: ['192.168.10.10', '192.168.10.11'],
+      routeBindIps: ['192.168.10.10'],
     });
 
     expect(result.ok).toBe(true);
@@ -499,7 +499,7 @@ copy/paste hosts block
       })),
     ).toEqual([
       { hostname: 'sweden-gothenburg.proxy.example.com', bindIp: '192.168.10.10' },
-      { hostname: 'austria-vienna.proxy.example.com', bindIp: '192.168.10.11' },
+      { hostname: 'austria-vienna.proxy.example.com', bindIp: '192.168.10.10' },
     ]);
     expect(result.config.runtime.status).toEqual({
       phase: 'unvalidated',
@@ -525,11 +525,11 @@ copy/paste hosts block
       ok: false,
       phase: 'setup-validation',
       source: 'input',
-      code: 'AMBIGUOUS_SHARED_BIND_IP',
+      code: 'BIND_IP_COUNT_MISMATCH',
       message:
-        'Non-loopback multi-route exposure requires distinct bind IPs, but found duplicates: 192.168.10.10.',
+        'Private-network exposure publishes every route on one shared host IP, so exactly one bind IP is required, but received 2.',
       cause:
-        'S03 routing still dispatches by destination bind IP, so multiple remote routes cannot safely share one published IP.',
+        'Pass exactly one --route-bind-ip <ip> for the shared host, or omit it to keep the saved host IP.',
       artifactPath: '/tmp/mullgate-home/config/mullgate/config.json',
     });
   });
@@ -766,7 +766,7 @@ copy/paste hosts block
     expect(`\n${result.outputText}`).toMatchInlineSnapshot(`
       "
       http://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:8080
-      http://alice:multi-route-secret@austria-vienna.proxy.example.com:8080
+      http://alice:multi-route-secret@austria-vienna.proxy.example.com:8081
       "
     `);
     expect(result.outputText).not.toContain('[redacted]');
@@ -792,7 +792,7 @@ copy/paste hosts block
 
       preview
       1. http://alice:multi-route-secret@sweden-gothenburg.proxy.example.com:8080 (alias: sweden-gothenburg, country: se, city: got, relay: se-got-wg-101)
-      2. http://alice:multi-route-secret@austria-vienna.proxy.example.com:8080 (alias: austria-vienna, country: at, city: vie, relay: at-vie-wg-001)"
+      2. http://alice:multi-route-secret@austria-vienna.proxy.example.com:8081 (alias: austria-vienna, country: at, city: vie, relay: at-vie-wg-001)"
     `);
   });
 

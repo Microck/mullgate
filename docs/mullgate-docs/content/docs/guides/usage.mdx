@@ -53,8 +53,8 @@ Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat
 | Purpose | Flag | Environment variable |
 | --- | --- | --- |
 | Device label | `--device-name <name>` | `MULLGATE_DEVICE_NAME` |
-| Bind host / first route bind IP | `--bind-host <host>` | `MULLGATE_BIND_HOST` |
-| Per-route bind IPs | `--route-bind-ip <ip>` (repeatable) | `MULLGATE_ROUTE_BIND_IPS` |
+| Bind host / shared private-network host IP | `--bind-host <host>` | `MULLGATE_BIND_HOST` |
+| Shared private-network host IP or public per-route bind IPs | `--route-bind-ip <ip>` (repeatable) | `MULLGATE_ROUTE_BIND_IPS` |
 | Exposure mode | `--exposure-mode <mode>` | `MULLGATE_EXPOSURE_MODE` |
 | Base domain | `--base-domain <domain>` | `MULLGATE_EXPOSURE_BASE_DOMAIN` |
 | SOCKS5 port | `--socks-port <port>` | `MULLGATE_SOCKS_PORT` |
@@ -70,8 +70,8 @@ Notes:
 - `MULLGATE_LOCATION` is shorthand for route 1.
 - `MULLGATE_LOCATIONS` is the ordered, comma-separated form for multi-route setup.
 - `MULLGATE_ROUTE_BIND_IPS` is also ordered and comma-separated.
-- Non-loopback exposure requires one explicit bind IP per routed location.
-- Multi-route non-loopback exposure requires **distinct** bind IPs.
+- `private-network` uses one shared trusted-network host IP. If Tailscale is available during setup and you do not override it, Mullgate should default to the host's `100.x` address.
+- `public` still requires one explicit bind IP per routed location, and multi-route public exposure still requires **distinct** bind IPs.
 
 ## Setup examples
 
@@ -109,8 +109,8 @@ export MULLGATE_ACCOUNT_NUMBER=123456789012
 export MULLGATE_PROXY_USERNAME=alice
 export MULLGATE_PROXY_PASSWORD='replace-me'
 export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
-export MULLGATE_ROUTE_BIND_IPS=192.168.10.10,192.168.10.11
 export MULLGATE_EXPOSURE_MODE=private-network
+export MULLGATE_BIND_HOST=100.124.44.113
 export MULLGATE_EXPOSURE_BASE_DOMAIN=proxy.example.com
 
 mullgate setup --non-interactive
@@ -120,8 +120,10 @@ mullgate proxy access
 What to expect:
 
 - route hostnames become `sweden-gothenburg.proxy.example.com` and `austria-vienna.proxy.example.com`
+- both hostnames resolve to the same shared private-network host IP
+- route 1 keeps the base ports, route 2 moves to the next ports (`1081`, `8081`, `8444` when HTTPS is enabled)
 - `mullgate proxy access` prints the DNS A records operators must publish
-- each hostname must resolve to its own bind IP before hostname-based routing proof can work remotely
+- each hostname must resolve to that shared host IP before hostname-based routing proof can work remotely
 
 ### Example: direct-IP exposure with no base domain
 
@@ -131,14 +133,13 @@ If you do not set a base domain in `private-network` or `public` mode, Mullgate 
 mullgate proxy access \
   --mode private-network \
   --clear-base-domain \
-  --route-bind-ip 192.168.10.10 \
-  --route-bind-ip 192.168.10.11
+  --route-bind-ip 100.124.44.113
 ```
 
 In that posture:
 
 - there are no DNS records to publish
-- direct bind-IP entrypoints are the intended access path
+- direct host-IP entrypoints are the intended access path
 - `mullgate proxy access` is still useful for local-only hostname testing, but it is no longer required for remote clients
 
 ## Unsupported local config versions
