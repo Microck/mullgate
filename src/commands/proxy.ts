@@ -69,10 +69,7 @@ function registerProxyAccessCommand(target: Command): void {
   target
     .command('access')
     .option('--mode <mode>', 'Set exposure mode to loopback, private-network, or public.')
-    .option(
-      '--access-mode <mode>',
-      'Set access mode to published-routes or inline-selector.',
-    )
+    .option('--access-mode <mode>', 'Set access mode to published-routes or inline-selector.')
     .option('--base-domain <domain>', 'Set the base domain used to derive per-route hostnames.')
     .option(
       '--unsafe-public-empty-password',

@@ -83,18 +83,16 @@ export type ExposureContract = {
   readonly ports: readonly ExposurePort[];
   readonly routes: readonly ExposureRouteContract[];
   readonly dnsRecords: readonly string[];
-  readonly inlineSelector:
-    | null
-    | {
-        readonly sharedHost: string;
-        readonly listenerHost: string;
-        readonly selectorField: 'username';
-        readonly syntax: {
-          readonly guaranteed: string;
-          readonly bestEffort: string;
-        };
-        readonly examples: readonly InlineSelectorExample[];
-      };
+  readonly inlineSelector: null | {
+    readonly sharedHost: string;
+    readonly listenerHost: string;
+    readonly selectorField: 'username';
+    readonly syntax: {
+      readonly guaranteed: string;
+      readonly bestEffort: string;
+    };
+    readonly examples: readonly InlineSelectorExample[];
+  };
   readonly posture: {
     readonly recommendation: 'local-default' | 'recommended-remote' | 'advanced-remote';
     readonly modeLabel: string;
@@ -115,9 +113,7 @@ export type ExposureContract = {
   };
 };
 
-export type AccessValidationResult =
-  | { readonly ok: true }
-  | ExposureValidationFailure;
+export type AccessValidationResult = { readonly ok: true } | ExposureValidationFailure;
 
 export function computePublishedPort(
   exposureMode: ExposureMode,
@@ -127,9 +123,7 @@ export function computePublishedPort(
   return exposureMode === 'private-network' ? basePort + routeIndex : basePort;
 }
 
-export function usesInlineSelectorAccess(
-  config: Pick<MullgateConfig, 'setup'>,
-): boolean {
+export function usesInlineSelectorAccess(config: Pick<MullgateConfig, 'setup'>): boolean {
   return config.setup.access.mode === 'inline-selector';
 }
 

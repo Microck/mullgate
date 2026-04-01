@@ -1174,12 +1174,12 @@ export function updateExposureConfig(
     (nextAccessMode === 'inline-selector'
       ? [config.setup.bind.host]
       : nextMode === 'loopback'
-      ? []
-      : nextMode === 'private-network'
-        ? [config.setup.bind.host]
-        : config.setup.exposure.mode === 'loopback' && input.mode !== undefined
-          ? []
-          : existingBindIps);
+        ? []
+        : nextMode === 'private-network'
+          ? [config.setup.bind.host]
+          : config.setup.exposure.mode === 'loopback' && input.mode !== undefined
+            ? []
+            : existingBindIps);
   const validated = validateExposureSettings({
     routeCount: config.routing.locations.length,
     exposureMode: nextMode,

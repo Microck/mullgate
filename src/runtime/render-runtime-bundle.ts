@@ -394,8 +394,7 @@ function buildRuntimeBundleManifest(
     const httpPort = inlineSelectorEnabled
       ? config.setup.bind.httpPort
       : computePublishedPort(config.setup.exposure.mode, config.setup.bind.httpPort, index);
-    const resolvedHttpsPort =
-      inlineSelectorEnabled && https.enabled ? https.port : httpsPort;
+    const resolvedHttpsPort = inlineSelectorEnabled && https.enabled ? https.port : httpsPort;
 
     return {
       routeId: route.runtime.routeId,
@@ -414,7 +413,9 @@ function buildRuntimeBundleManifest(
         socks5: `${listenerHost}:${socks5Port}`,
         http: `${listenerHost}:${httpPort}`,
         https:
-          https.enabled && resolvedHttpsPort !== null ? `${listenerHost}:${resolvedHttpsPort}` : null,
+          https.enabled && resolvedHttpsPort !== null
+            ? `${listenerHost}:${resolvedHttpsPort}`
+            : null,
       },
       services: {
         routeProxy: {

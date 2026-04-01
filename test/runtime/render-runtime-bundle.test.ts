@@ -598,9 +598,7 @@ describe('renderRuntimeBundle', () => {
     );
     expect(result.httpsSidecarConfig).toContain('frontend https_selector_proxy');
     expect(result.httpsSidecarConfig).toContain('default_backend inline_selector_http_proxy');
-    expect(result.httpsSidecarConfig).toContain(
-      'server inline-selector 127.0.0.1:8080 check',
-    );
+    expect(result.httpsSidecarConfig).toContain('server inline-selector 127.0.0.1:8080 check');
     expect(result.httpsSidecarConfig).not.toContain('backend route-se-got-wg-101');
   });
 

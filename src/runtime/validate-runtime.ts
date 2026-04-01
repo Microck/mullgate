@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { MullgateConfig } from '../config/schema.js';
 import { deriveRuntimeListenerHost } from '../config/exposure-contract.js';
+import type { MullgateConfig } from '../config/schema.js';
 import { createDockerValidationStage } from './docker-validation-stage.js';
 import {
   ENTRY_WIREPROXY_SOCKS_PORT,
@@ -386,7 +386,11 @@ function validateRouteProxySyntax(input: {
         });
       }
 
-      if (!lines.includes(`parent 1000 socks5+ ${selector.exitSocksHostname} ${selector.exitSocksPort}`)) {
+      if (
+        !lines.includes(
+          `parent 1000 socks5+ ${selector.exitSocksHostname} ${selector.exitSocksPort}`,
+        )
+      ) {
         issues.push({
           target: input.configPath,
           message: `Inline-selector config is missing an upstream parent for selector ${selector.selector}.`,

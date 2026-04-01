@@ -1377,7 +1377,13 @@ function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputVa
   const username = values.username?.trim();
   const password = values.password?.trim();
 
-  if (!accountNumber || !bindHost || socksPort === undefined || httpPort === undefined || !username) {
+  if (
+    !accountNumber ||
+    !bindHost ||
+    socksPort === undefined ||
+    httpPort === undefined ||
+    !username
+  ) {
     throw new Error('Setup values are incomplete. Missing one or more required setup inputs.');
   }
 

@@ -176,48 +176,48 @@ export function planRuntimeProxyArtifacts(
   const routes = inlineSelectorEnabled
     ? []
     : options.config.routing.locations.map((route, index) => {
-    const exit = route.mullvad.exit;
+        const exit = route.mullvad.exit;
 
-    if (!exit.relayHostname || !exit.relayFqdn || !exit.socksHostname || !exit.socksPort) {
-      return {
-        ok: false as const,
-        route,
-      };
-    }
+        if (!exit.relayHostname || !exit.relayFqdn || !exit.socksHostname || !exit.socksPort) {
+          return {
+            ok: false as const,
+            route,
+          };
+        }
 
-    return {
-      ok: true as const,
-      value: {
-        routeIndex: index,
-        routeId: route.runtime.routeId,
-        routeAlias: route.alias,
-        routeHostname: route.hostname,
-        routeBindIp: route.bindIp,
-        routeListenHost: deriveRuntimeListenerHost(
-          options.config.setup.exposure.mode,
-          route.bindIp,
-        ),
-        routeSocksPort: computePublishedPort(
-          options.config.setup.exposure.mode,
-          options.config.setup.bind.socksPort,
-          index,
-        ),
-        routeHttpPort: computePublishedPort(
-          options.config.setup.exposure.mode,
-          options.config.setup.bind.httpPort,
-          index,
-        ),
-        httpsBackendName: route.runtime.httpsBackendName,
-        exitRelayHostname: exit.relayHostname,
-        exitRelayFqdn: exit.relayFqdn,
-        exitSocksHostname: exit.socksHostname,
-        exitSocksPort: exit.socksPort,
-        entryParent: {
-          host: '127.0.0.1' as const,
-          port: ENTRY_WIREPROXY_SOCKS_PORT,
-        },
-      } satisfies RenderedRouteProxyRoute,
-    };
+        return {
+          ok: true as const,
+          value: {
+            routeIndex: index,
+            routeId: route.runtime.routeId,
+            routeAlias: route.alias,
+            routeHostname: route.hostname,
+            routeBindIp: route.bindIp,
+            routeListenHost: deriveRuntimeListenerHost(
+              options.config.setup.exposure.mode,
+              route.bindIp,
+            ),
+            routeSocksPort: computePublishedPort(
+              options.config.setup.exposure.mode,
+              options.config.setup.bind.socksPort,
+              index,
+            ),
+            routeHttpPort: computePublishedPort(
+              options.config.setup.exposure.mode,
+              options.config.setup.bind.httpPort,
+              index,
+            ),
+            httpsBackendName: route.runtime.httpsBackendName,
+            exitRelayHostname: exit.relayHostname,
+            exitRelayFqdn: exit.relayFqdn,
+            exitSocksHostname: exit.socksHostname,
+            exitSocksPort: exit.socksPort,
+            entryParent: {
+              host: '127.0.0.1' as const,
+              port: ENTRY_WIREPROXY_SOCKS_PORT,
+            },
+          } satisfies RenderedRouteProxyRoute,
+        };
       });
 
   const missingRoute = routes.find((route) => !route.ok);
@@ -390,7 +390,10 @@ function buildRouteProxyConfig(input: {
 
   if (input.config.setup.access.mode === 'inline-selector') {
     const sharedBindHost = deriveInlineSelectorBindHost(input.config);
-    const listenerHost = deriveRuntimeListenerHost(input.config.setup.exposure.mode, sharedBindHost);
+    const listenerHost = deriveRuntimeListenerHost(
+      input.config.setup.exposure.mode,
+      sharedBindHost,
+    );
     const users = input.inlineSelectors.map(
       (selector) => `${selector.selector}:CL:${input.config.setup.auth.password}`,
     );
@@ -432,7 +435,10 @@ function buildRouteProxyConfig(input: {
     return `${lines.join('\n')}\n`;
   }
 
-  lines.push(`users ${input.config.setup.auth.username}:CL:${input.config.setup.auth.password}`, '');
+  lines.push(
+    `users ${input.config.setup.auth.username}:CL:${input.config.setup.auth.password}`,
+    '',
+  );
 
   for (const route of input.routes) {
     // The shared entry hop must preserve the next-hop Mullvad SOCKS hostname through the tunnel.
@@ -480,7 +486,7 @@ function buildInlineSelectorMappings(input: {
 
       const relay =
         target.kind === 'relay'
-          ? constrainedRelays.find((candidate) => candidate.hostname === target.hostname) ?? null
+          ? (constrainedRelays.find((candidate) => candidate.hostname === target.hostname) ?? null)
           : choosePreferredRelay(
               constrainedRelays.filter((candidate) => relayMatchesTarget(candidate, target)),
             );

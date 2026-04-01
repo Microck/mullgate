@@ -577,7 +577,8 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
 
 function buildBindCheck(config: MullgateConfig): DoctorCheck {
   const routeBindIps =
-    config.setup.exposure.mode === 'private-network' || config.setup.access.mode === 'inline-selector'
+    config.setup.exposure.mode === 'private-network' ||
+    config.setup.access.mode === 'inline-selector'
       ? [config.setup.bind.host]
       : config.routing.locations.map((location) => location.bindIp);
   const details = [
@@ -595,7 +596,10 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
     );
   }
 
-  if (config.setup.exposure.mode === 'private-network' || config.setup.access.mode === 'inline-selector') {
+  if (
+    config.setup.exposure.mode === 'private-network' ||
+    config.setup.access.mode === 'inline-selector'
+  ) {
     for (const location of config.routing.locations) {
       if (location.bindIp !== config.setup.bind.host) {
         issues.push(
@@ -605,7 +609,10 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
     }
   }
 
-  if (config.setup.exposure.mode === 'loopback' && config.setup.access.mode === 'published-routes') {
+  if (
+    config.setup.exposure.mode === 'loopback' &&
+    config.setup.access.mode === 'published-routes'
+  ) {
     for (const [index, location] of config.routing.locations.entries()) {
       const expected = deriveLoopbackBindIp(index);
       if (location.bindIp !== expected) {
