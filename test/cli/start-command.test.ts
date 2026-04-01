@@ -308,10 +308,10 @@ describe('mullgate start command', () => {
     expect(renderedPrimaryWireproxyConfig).not.toContain('Password = proxy-password');
     expect(renderedRouteProxyConfig).toContain('users alice:CL:proxy-password');
     expect(renderedRouteProxyConfig).toContain(
-      '# Route se-got-wg-101 (se-got-wg-101 -> 127.0.0.1)',
+      '# Route se-got-wg-101 (se-got-wg-101 -> 127.0.0.1:1080/8080)',
     );
     expect(renderedRouteProxyConfig).toContain(
-      '# Route at-vie-wg-001 (at-vie-wg-001 -> 127.0.0.2)',
+      '# Route at-vie-wg-001 (at-vie-wg-001 -> 127.0.0.2:1080/8080)',
     );
     expect(renderedCompose).not.toContain('# stale compose artifact');
     expect(renderedCompose).toContain('routing-layer');
