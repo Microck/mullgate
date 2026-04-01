@@ -4,9 +4,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { MullgateConfig } from '../config/schema.js';
+import { deriveRuntimeListenerHost } from '../config/exposure-contract.js';
 import { createDockerValidationStage } from './docker-validation-stage.js';
 import {
   ENTRY_WIREPROXY_SOCKS_PORT,
+  type InlineSelectorMapping,
   type RenderedRouteProxyRoute,
 } from './render-runtime-proxies.js';
 import { validateWireproxyConfig, type WireproxyValidationIssue } from './validate-wireproxy.js';
@@ -60,6 +62,10 @@ export type ValidateRuntimeOptions = {
   readonly routeProxyConfigPath: string;
   readonly routeProxyConfigText?: string;
   readonly routes: readonly RenderedRouteProxyRoute[];
+  readonly inlineSelectors?: readonly InlineSelectorMapping[];
+  readonly accessMode: MullgateConfig['setup']['access']['mode'];
+  readonly exposureMode: MullgateConfig['setup']['exposure']['mode'];
+  readonly bindHost: string;
   readonly bind: Pick<MullgateConfig['setup']['bind'], 'socksPort' | 'httpPort'>;
   readonly checkedAt?: string;
   readonly reportPath?: string;
@@ -91,6 +97,10 @@ export async function validateRuntimeArtifacts(
     configPath: options.routeProxyConfigPath,
     configText: options.routeProxyConfigText,
     routes: options.routes,
+    inlineSelectors: options.inlineSelectors ?? [],
+    accessMode: options.accessMode,
+    exposureMode: options.exposureMode,
+    bindHost: options.bindHost,
     bind: options.bind,
     checkedAt,
     dockerBinary: options.dockerBinary,
@@ -149,6 +159,10 @@ function validateRouteProxyConfig(input: {
   readonly configPath: string;
   readonly configText?: string;
   readonly routes: readonly RenderedRouteProxyRoute[];
+  readonly inlineSelectors: readonly InlineSelectorMapping[];
+  readonly accessMode: MullgateConfig['setup']['access']['mode'];
+  readonly exposureMode: MullgateConfig['setup']['exposure']['mode'];
+  readonly bindHost: string;
   readonly bind: Pick<MullgateConfig['setup']['bind'], 'socksPort' | 'httpPort'>;
   readonly checkedAt: string;
   readonly dockerBinary?: string;
@@ -173,6 +187,10 @@ function validateRouteProxyConfig(input: {
     configText,
     configPath: input.configPath,
     routes: input.routes,
+    inlineSelectors: input.inlineSelectors,
+    accessMode: input.accessMode,
+    exposureMode: input.exposureMode,
+    bindHost: input.bindHost,
     bind: input.bind,
   });
 
@@ -307,6 +325,10 @@ function validateRouteProxySyntax(input: {
   readonly configText: string;
   readonly configPath: string;
   readonly routes: readonly RenderedRouteProxyRoute[];
+  readonly inlineSelectors: readonly InlineSelectorMapping[];
+  readonly accessMode: MullgateConfig['setup']['access']['mode'];
+  readonly exposureMode: MullgateConfig['setup']['exposure']['mode'];
+  readonly bindHost: string;
   readonly bind: Pick<MullgateConfig['setup']['bind'], 'socksPort' | 'httpPort'>;
 }): RuntimeValidationIssue[] {
   const issues: RuntimeValidationIssue[] = [];
@@ -335,6 +357,44 @@ function validateRouteProxySyntax(input: {
       target: input.configPath,
       message: 'Route proxy config must define one authenticated user.',
     });
+  }
+
+  if (input.accessMode === 'inline-selector') {
+    const listenerHost = deriveRuntimeListenerHost(input.exposureMode, input.bindHost);
+    const expectedSocks = `socks -p${input.bind.socksPort} -i${listenerHost} -e${input.bindHost}`;
+    const expectedHttp = `proxy -p${input.bind.httpPort} -i${listenerHost} -e${input.bindHost}`;
+
+    if (!lines.includes(expectedSocks)) {
+      issues.push({
+        target: input.configPath,
+        message: 'Inline-selector config is missing its shared SOCKS5 listener line.',
+      });
+    }
+
+    if (!lines.includes(expectedHttp)) {
+      issues.push({
+        target: input.configPath,
+        message: 'Inline-selector config is missing its shared HTTP listener line.',
+      });
+    }
+
+    for (const selector of input.inlineSelectors) {
+      if (!lines.includes(`allow ${selector.selector}`)) {
+        issues.push({
+          target: input.configPath,
+          message: `Inline-selector config is missing ACLs for selector ${selector.selector}.`,
+        });
+      }
+
+      if (!lines.includes(`parent 1000 socks5+ ${selector.exitSocksHostname} ${selector.exitSocksPort}`)) {
+        issues.push({
+          target: input.configPath,
+          message: `Inline-selector config is missing an upstream parent for selector ${selector.selector}.`,
+        });
+      }
+    }
+
+    return issues;
   }
 
   for (const route of input.routes) {

@@ -400,6 +400,10 @@ function createFixtureConfig(input: { readonly env: NodeJS.ProcessEnv }): Mullga
         username: 'alice',
         password: 'platform-surface-secret',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'loopback',
         allowLan: false,

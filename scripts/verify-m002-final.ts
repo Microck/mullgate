@@ -407,6 +407,10 @@ function createExposureFixtureConfig(): MullgateConfig {
         username: 'alice',
         password: 'redacted-secret',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'private-network',
         allowLan: true,

@@ -95,6 +95,10 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
         username: 'alice',
         password: 'super-secret-password',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'loopback',
         allowLan: false,
@@ -561,6 +565,43 @@ describe('renderRuntimeBundle', () => {
       'SINGLE_ROUTE',
       'RUNTIME_UNVALIDATED',
     ]);
+  });
+
+  it('renders one shared HTTPS frontend when inline-selector mode is enabled', () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const config = createFixtureConfig(env);
+    config.setup.access.mode = 'inline-selector';
+    config.setup.exposure = {
+      mode: 'private-network',
+      allowLan: true,
+      baseDomain: null,
+    };
+    config.setup.bind.host = '100.124.44.113';
+
+    const result = planRuntimeBundle({
+      config,
+      paths,
+      generatedAt: '2026-03-20T19:00:00.000Z',
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.manifest.exposure.accessMode).toBe('inline-selector');
+    expect(result.manifest.publishedEndpoints).toEqual([]);
+    expect(result.manifest.routes.every((route) => route.publishedEndpoints.length === 0)).toBe(
+      true,
+    );
+    expect(result.httpsSidecarConfig).toContain('frontend https_selector_proxy');
+    expect(result.httpsSidecarConfig).toContain('default_backend inline_selector_http_proxy');
+    expect(result.httpsSidecarConfig).toContain(
+      'server inline-selector 127.0.0.1:8080 check',
+    );
+    expect(result.httpsSidecarConfig).not.toContain('backend route-se-got-wg-101');
   });
 
   it('fails when HTTPS is requested without both TLS asset paths', async () => {

@@ -56,6 +56,10 @@ function createFixtureConfig(): MullgateConfig {
         username: 'alice',
         password: 'multi-route-secret',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'loopback',
         allowLan: false,
@@ -470,6 +474,34 @@ copy/paste hosts block
     `);
   });
 
+  it('renders selector-driven access guidance when inline-selector mode is enabled', () => {
+    const config = createFixtureConfig();
+    config.setup.access.mode = 'inline-selector';
+    config.setup.auth.password = '';
+    config.setup.exposure = {
+      mode: 'private-network',
+      allowLan: true,
+      baseDomain: null,
+    };
+    config.setup.bind.host = '100.124.44.113';
+    config.runtime.status = {
+      phase: 'unvalidated',
+      lastCheckedAt: null,
+      message:
+        'Exposure settings changed; rerun `mullgate validate` or `mullgate start` to refresh runtime artifacts.',
+    };
+
+    const report = renderExposureReport(config, '/tmp/mullgate-home/config/mullgate/config.json');
+
+    expect(report).toContain('access mode: inline-selector');
+    expect(report).toContain('shared host: 100.124.44.113');
+    expect(report).toContain('selector field: username');
+    expect(report).toContain('guaranteed syntax: selector:@host:port');
+    expect(report).toContain('best-effort syntax: selector@host:port');
+    expect(report).toContain('guaranteed: socks5://se:[redacted]@100.124.44.113:1080');
+    expect(report).toContain('best effort: socks5://se@100.124.44.113:1080');
+  });
+
   it('updates exposure settings without raw JSON edits and mirrors the first bind IP back to setup.bind.host', () => {
     const config = createFixtureConfig();
 
@@ -510,6 +542,63 @@ copy/paste hosts block
     expect(
       `\n${renderExposureReport(result.config, '/tmp/mullgate-home/config/mullgate/config.json')}`,
     ).toContain('dns: sweden-gothenburg.proxy.example.com A 192.168.10.10');
+  });
+
+  it('rejects public inline-selector exposure with an empty password unless the unsafe override is enabled', () => {
+    const config = createFixtureConfig();
+    config.setup.auth.password = '';
+
+    const result = updateExposureConfig(config, '/tmp/mullgate-home/config/mullgate/config.json', {
+      mode: 'public',
+      accessMode: 'inline-selector',
+      baseDomainSpecified: false,
+      routeBindIps: ['203.0.113.10'],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      phase: 'setup-validation',
+      source: 'input',
+      code: 'UNSAFE_PUBLIC_INLINE_SELECTOR_EMPTY_PASSWORD',
+      message:
+        'Public inline-selector access with an empty password is blocked unless the unsafe override is enabled.',
+      cause:
+        'Set setup.access.allowUnsafePublicEmptyPassword=true or choose a non-empty proxy password before exposing selector-driven listeners on a public host.',
+      artifactPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
+  });
+
+  it('allows public inline-selector exposure with an empty password when the unsafe override is enabled', () => {
+    const config = createFixtureConfig();
+    config.setup.auth.password = '';
+
+    const result = updateExposureConfig(config, '/tmp/mullgate-home/config/mullgate/config.json', {
+      mode: 'public',
+      accessMode: 'inline-selector',
+      allowUnsafePublicEmptyPassword: true,
+      baseDomainSpecified: false,
+      routeBindIps: ['203.0.113.10'],
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.config.setup.access).toEqual({
+      mode: 'inline-selector',
+      allowUnsafePublicEmptyPassword: true,
+    });
+    expect(result.config.setup.bind.host).toBe('203.0.113.10');
+    expect(new Set(result.config.routing.locations.map((location) => location.bindIp))).toEqual(
+      new Set(['203.0.113.10']),
+    );
+    expect(
+      renderExposureReport(result.config, '/tmp/mullgate-home/config/mullgate/config.json'),
+    ).toContain(
+      'warning: Inline-selector access is exposing a public listener with an empty password. This is only appropriate when you intentionally accept selector-only proxy access on the public host.',
+    );
   });
 
   it('rejects ambiguous non-loopback bind IP edits with an explicit routed-exposure failure', () => {
@@ -853,6 +942,28 @@ copy/paste hosts block
     }
 
     expect(result.entries.map((entry) => entry.alias)).toEqual(['sweden-gothenburg']);
+  });
+
+  it('fails proxy export explicitly when inline-selector mode is enabled', () => {
+    const config = createFixtureConfig();
+    config.setup.access.mode = 'inline-selector';
+
+    const result = buildProxyExportPlan({
+      config,
+      protocol: 'socks5',
+      selectors: [],
+      relayCatalog: createFixtureRelayCatalog(),
+      configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      phase: 'export-proxies',
+      source: 'canonical-config',
+      message:
+        'Proxy export currently supports published-routes mode only. Inline-selector access uses one shared listener, so switch back to published-routes or use `mullgate proxy access` for selector examples.',
+      configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
   });
 
   it('renders the curated region group report', () => {

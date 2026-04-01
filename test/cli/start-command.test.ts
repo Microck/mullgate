@@ -73,6 +73,10 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
         username: 'alice',
         password: 'proxy-password',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'loopback',
         allowLan: false,
@@ -334,6 +338,7 @@ describe('mullgate start command', () => {
       source: docker-compose
       attempted at: 2026-03-21T01:00:00.000Z
       routes: 2
+      access mode: published-routes
       config: /tmp/mullgate-home/config/mullgate/config.json
       entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
       route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
@@ -461,6 +466,7 @@ describe('mullgate start command', () => {
       source: docker-compose
       attempted at: 2026-03-21T01:02:00.000Z
       routes: 1
+      access mode: published-routes
       config: /tmp/mullgate-home/config/mullgate/config.json
       entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
       route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg

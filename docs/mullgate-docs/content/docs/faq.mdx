@@ -13,11 +13,32 @@ Not in the usual full-device sense. Mullgate's documented goal is standalone pro
 
 ## How do I choose a route?
 
-Use the route's configured hostname or its direct entrypoint. In `private-network` mode, multiple routes can share one host IP because the ports differ. In `loopback` and `public` mode, hostname truth still depends on the hostname resolving to the route's bind IP.
+Use the saved access mode:
+
+- in `published-routes`, use the route's configured hostname or its direct host-and-port entrypoint
+- in `inline-selector`, use one shared listener and put the selector in the username, for example `socks5://ca:@100.124.44.113:1080`
+
+In `private-network + published-routes`, multiple routes can share one host IP because the ports differ.
 
 ## Why are bind IPs so important?
 
-They still define the published host story, but the runtime is now split by mode. `private-network` uses one shared trusted-network host IP and route-specific ports. `loopback` and `public` still rely on destination bind IPs.
+They still define the published host story, but the runtime is split by exposure and access mode. `private-network + published-routes` uses one shared trusted-network host IP and route-specific ports. `public + published-routes` still relies on distinct bind IPs. `inline-selector` uses one shared host because the username selector chooses the route.
+
+## Should I use `0.0.0.0` for Tailscale or other private-network access?
+
+No. `0.0.0.0` is a bind-any address, not the client target other machines should dial. In `private-network`, use the host's actual trusted-network address, such as its Tailscale `100.x` IP.
+
+## Can I put the country, city, or exact server into the proxy username?
+
+Yes, if you switch to `inline-selector`. The guaranteed form is `scheme://selector:@host:port`.
+
+Examples:
+
+- `socks5://ca:@100.124.44.113:1080`
+- `socks5://ca-tor:@100.124.44.113:1080`
+- `socks5://ca-tor-wg-301:@100.124.44.113:1080`
+
+If you want a generated file of route URLs instead, stay on `published-routes` and use `mullgate proxy export`.
 
 ## What is the easiest way to test Mullgate locally?
 
@@ -55,6 +76,10 @@ Check the output from:
 
 Most hostname issues come down to a missing hosts block, incorrect DNS, or a hostname resolving to the wrong bind IP.
 In `private-network`, "wrong" usually means the hostname does not resolve to the shared host IP that `mullgate proxy access` reported.
+
+## Why does public inline-selector reject my empty password?
+
+That combination exposes one shared public listener and is blocked by default. Either set a non-empty proxy password or opt in explicitly with `--unsafe-public-empty-password`.
 
 ## See also
 

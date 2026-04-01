@@ -146,6 +146,10 @@ function createConfig(
         username: 'alice',
         password: 'super-secret-password',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'loopback',
         allowLan: false,
@@ -643,6 +647,10 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
       routeProxyConfigPath: renderResult.artifactPaths.routeProxyConfigPath,
       routeProxyConfigText: renderResult.routeProxyConfig,
       routes: renderResult.routes,
+      inlineSelectors: renderResult.inlineSelectors,
+      accessMode: config.setup.access.mode,
+      exposureMode: config.setup.exposure.mode,
+      bindHost: config.setup.bind.host,
       bind: {
         socksPort: config.setup.bind.socksPort,
         httpPort: config.setup.bind.httpPort,
@@ -765,6 +773,10 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
         routeProxyConfigPath: renderResult.artifactPaths.routeProxyConfigPath,
         routeProxyConfigText: renderResult.routeProxyConfig,
         routes: renderResult.routes,
+        inlineSelectors: renderResult.inlineSelectors,
+        accessMode: config.setup.access.mode,
+        exposureMode: config.setup.exposure.mode,
+        bindHost: config.setup.bind.host,
         bind: {
           socksPort: config.setup.bind.socksPort,
           httpPort: config.setup.bind.httpPort,

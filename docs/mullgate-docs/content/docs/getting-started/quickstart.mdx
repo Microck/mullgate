@@ -34,7 +34,7 @@ A normal Mullgate workflow looks like this:
 4. inspect or probe relay candidates when you want a better exact exit
 5. start the runtime with `mullgate proxy start`
 6. verify behavior with `mullgate proxy status` and `mullgate proxy doctor`
-7. access routes by hostname or direct bind IP
+7. access routes by hostname/direct host-and-port in `published-routes`, or by inline selector on one shared listener in `inline-selector`
 
 ## Recommended first run
 
@@ -57,6 +57,8 @@ mullgate proxy relay recommend --country Sweden --count 1
 ```
 
 That gives you a guided `proxies.txt` flow with real country and region pick-lists, plus a relay-inspection path when you want to preview a faster exact exit instead of guessing.
+
+If the goal is Tailscale or another trusted private network, the next step after setup is usually `mullgate proxy access --mode private-network`. If the goal is one stable host with country/city selection in the proxy URL, switch to `--access-mode inline-selector`.
 
 See the full examples in [Usage](/docs/guides/usage) and [Setup and Exposure](/docs/guides/setup-and-exposure).
 

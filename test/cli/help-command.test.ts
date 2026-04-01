@@ -237,15 +237,19 @@ describe('mullgate help command contract', () => {
       and DNS guidance.
 
       Options:
-        --mode <mode>           Set exposure mode to loopback, private-network, or
-                                public.
-        --base-domain <domain>  Set the base domain used to derive per-route
-                                hostnames.
-        --clear-base-domain     Remove any configured base domain and fall back to
-                                alias/direct-IP hostnames.
-        --route-bind-ip <ip>    Set an ordered per-route bind IP. Repeat once per
-                                route. (default: [])
-        -h, --help              display help for command"
+        --mode <mode>                   Set exposure mode to loopback,
+                                        private-network, or public.
+        --access-mode <mode>            Set access mode to published-routes or
+                                        inline-selector.
+        --base-domain <domain>          Set the base domain used to derive per-route
+                                        hostnames.
+        --unsafe-public-empty-password  Allow empty passwords when inline-selector is
+                                        exposed on a public host.
+        --clear-base-domain             Remove any configured base domain and fall
+                                        back to alias/direct-IP hostnames.
+        --route-bind-ip <ip>            Set an ordered per-route bind IP. Repeat once
+                                        per route. (default: [])
+        -h, --help                      display help for command"
     `);
     expect(`\n${proxyExportHelp}`).toMatchInlineSnapshot(`
       "

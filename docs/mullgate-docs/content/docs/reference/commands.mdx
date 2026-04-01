@@ -16,8 +16,8 @@ The documentation repeatedly anchors itself to the following CLI help contract:
 | command | key flags | purpose |
 | --- | --- | --- |
 | `mullgate setup` | `--non-interactive`, `--location`, `--exposure-mode` | create or update canonical config and derived runtime artifacts |
-| `mullgate proxy access` | `--mode`, `--base-domain`, `--route-bind-ip` | inspect or update hostnames, bind IPs, DNS guidance, and direct-IP entrypoints |
-| `mullgate proxy export` | `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories |
+| `mullgate proxy access` | `--mode`, `--access-mode`, `--base-domain`, `--route-bind-ip`, `--unsafe-public-empty-password` | inspect or update exposure posture, access mode, host planning, DNS guidance, selector examples, and direct-IP entrypoints |
+| `mullgate proxy export` | `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories in `published-routes` mode |
 | `mullgate proxy relay list` | selector flags such as `--country`, `--owner`, `--provider` | inspect relay candidates that match a policy |
 | `mullgate proxy relay probe` | `--country`, `--count` | latency-probe likely relay candidates |
 | `mullgate proxy relay recommend` | `--country`, `--count`, `--apply` | preview or pin an exact relay choice |
@@ -45,8 +45,8 @@ A practical workflow usually looks like this:
 
 1. `mullgate setup`
 2. `mullgate proxy access`
-3. `mullgate proxy export --regions`
-4. `mullgate proxy export --guided`
+3. if you want a proxy inventory file, `mullgate proxy export --regions`
+4. if you want a proxy inventory file, `mullgate proxy export --guided`
 5. `mullgate proxy relay list`
 6. `mullgate proxy relay probe`
 7. `mullgate proxy relay recommend`
@@ -55,6 +55,8 @@ A practical workflow usually looks like this:
 10. `mullgate proxy start`
 11. `mullgate proxy status`
 12. `mullgate proxy doctor`
+
+If you switch to `inline-selector`, skip `mullgate proxy export` and use `mullgate proxy access` to inspect the shared listener and selector examples.
 
 ## Reference practice
 

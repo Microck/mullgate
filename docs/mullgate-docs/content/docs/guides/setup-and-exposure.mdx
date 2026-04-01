@@ -3,17 +3,25 @@ title: Setup and Exposure
 description: How Mullgate setup, bind IPs, hostnames, and exposure modes fit together.
 ---
 
-This guide extracts the setup and exposure model from the main usage document and presents it as an operator-oriented walkthrough.
+This guide extracts the setup, exposure, and access model from the main usage document and presents it as an operator-oriented walkthrough.
 
 ## Exposure modes
 
-Mullgate describes exposure in terms of how clients reach per-route listeners.
+Mullgate separates:
 
-The main modes referenced in the CLI are:
+- **exposure mode** - where the listeners are reachable
+- **access mode** - how a client selects the route behind that listener
+
+The exposure modes referenced in the CLI are:
 
 - `loopback`
 - `private-network`
 - `public`
+
+The access modes are:
+
+- `published-routes` - default
+- `inline-selector` - opt-in
 
 ## Loopback mode
 
@@ -23,7 +31,8 @@ Typical characteristics:
 
 - route 1 binds to `127.0.0.1`
 - additional routes bind to other loopback addresses such as `127.0.0.2`
-- route aliases act as local hostnames after you install the generated hosts block
+- in `published-routes`, route aliases act as local hostnames after you install the generated hosts block
+- in `inline-selector`, one shared loopback listener is enough because the username selector chooses the route
 
 This is the best starting point for local validation.
 
@@ -34,7 +43,8 @@ Use private-network mode when clients are on a LAN, VPN, or overlay network and 
 Typical characteristics:
 
 - all routes share one trusted-network host IP
-- each route gets its own published port on that shared host
+- in `published-routes`, each route gets its own published port on that shared host
+- in `inline-selector`, clients use one shared listener and put the selector in the proxy username
 - when Tailscale is available, the setup flow should default to the host's `100.x` address
 - a base domain can be used to produce route-aware hostnames such as `sweden-gothenburg.proxy.example.com`
 
@@ -51,17 +61,24 @@ Mullgate supports both:
 - hostname-based entrypoints
 - direct-IP entrypoints
 
-The same route can be reached through either form, but hostname-based routing only remains truthful when the hostname resolves to the route's assigned bind IP.
+In `published-routes`, the same route can be reached through either form, but hostname-based routing only remains truthful when the hostname resolves to the intended host IP and port combination.
 
-## Why bind IPs still matter
+In `inline-selector`, the shared listener stays fixed and the username selector chooses the route. The guaranteed URL form is:
 
-The exposure model is now split:
+```text
+scheme://selector:@host:port
+```
+
+## Why exposure and access both matter
+
+The current rules are:
 
 - `loopback` still derives route-local bind IPs such as `127.0.0.1` and `127.0.0.2`
-- `private-network` reuses one shared host IP and moves route selection to per-route ports
-- `public` still depends on distinct bind IPs per route
+- `private-network + published-routes` reuses one shared host IP and moves route selection to per-route ports
+- `public + published-routes` still depends on distinct bind IPs per route
+- `inline-selector` uses one shared host in any exposure mode because route selection moves to the proxy username
 
-DNS correctness is still part of route correctness. In private-network mode, multiple hostnames can legitimately point at the same host IP because the ports differ.
+DNS correctness is still part of route correctness. In `private-network + published-routes`, multiple hostnames can legitimately point at the same host IP because the ports differ.
 
 ## Inspect current exposure
 
@@ -72,10 +89,12 @@ mullgate proxy access
 Use this report to verify:
 
 - mode
+- access mode
 - base domain
 - shared host or route-to-bind-IP mapping
 - generated hostname inventory
-- DNS records to publish
+- DNS records to publish in `published-routes`
+- selector examples in `inline-selector`
 - whether runtime validation or restart is needed
 
 ## Update exposure safely
@@ -88,6 +107,15 @@ Example:
 mullgate proxy access \
   --mode private-network \
   --base-domain proxy.example.com \
+  --route-bind-ip 100.124.44.113
+```
+
+Or switch that same trusted-network host to selector-driven access:
+
+```bash
+mullgate proxy access \
+  --mode private-network \
+  --access-mode inline-selector \
   --route-bind-ip 100.124.44.113
 ```
 
@@ -108,7 +136,8 @@ mullgate proxy start
 Before you finalize exposure settings, make sure you can answer these questions:
 
 - How many routes are you exposing?
-- Is private-network using one trusted host IP, or is public mode using distinct bind IPs?
+- Is the user selecting routes through published host/port inventory or through inline selectors?
+- Is private-network using one trusted host IP, or is public `published-routes` mode using distinct bind IPs?
 - Which hostnames should clients use?
 - Do those hostnames resolve to the intended host IPs?
 - Is the environment loopback, private network, or public?
@@ -117,7 +146,7 @@ Before you finalize exposure settings, make sure you can answer these questions:
 
 Before claiming hostname-selected routing works remotely, verify all of the following:
 
-- private-network routes share the intended trusted host IP, or public routes keep distinct bind IPs
+- private-network routes share the intended trusted host IP, or public `published-routes` routes keep distinct bind IPs
 - every hostname resolves to the intended host IP
 - `mullgate proxy access` matches your DNS plan
 - `mullgate proxy doctor` shows no hostname drift

@@ -420,6 +420,10 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     routeProxyConfigPath: renderResult.artifactPaths.routeProxyConfigPath,
     routeProxyConfigText: renderResult.routeProxyConfig,
     routes: renderResult.routes,
+    inlineSelectors: renderResult.inlineSelectors,
+    accessMode: initialConfig.setup.access.mode,
+    exposureMode: initialConfig.setup.exposure.mode,
+    bindHost: initialConfig.setup.bind.host,
     bind: {
       socksPort: setupInputs.socksPort,
       httpPort: setupInputs.httpPort,
@@ -985,6 +989,10 @@ function createCanonicalConfig(input: {
         username: input.inputs.username,
         password: input.inputs.password,
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: input.inputs.exposureMode,
         allowLan: input.inputs.exposureMode !== 'loopback',
@@ -1130,8 +1138,6 @@ async function collectSetupInputs(input: {
   const proxyPassword = await password({
     message: 'Proxy password',
     mask: '•',
-    validate: (value) =>
-      (value ?? '').trim().length > 0 ? undefined : 'Proxy password is required.',
   });
 
   if (isCancel(proxyPassword)) {
@@ -1371,14 +1377,7 @@ function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputVa
   const username = values.username?.trim();
   const password = values.password?.trim();
 
-  if (
-    !accountNumber ||
-    !bindHost ||
-    socksPort === undefined ||
-    httpPort === undefined ||
-    !username ||
-    !password
-  ) {
+  if (!accountNumber || !bindHost || socksPort === undefined || httpPort === undefined || !username) {
     throw new Error('Setup values are incomplete. Missing one or more required setup inputs.');
   }
 
@@ -1396,7 +1395,7 @@ function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputVa
     socksPort,
     httpPort,
     username,
-    password,
+    password: password ?? '',
     locations,
     location: locations[0],
     httpsPort: values.httpsPort ?? null,

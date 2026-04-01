@@ -13,8 +13,9 @@ Required non-interactive setup inputs include:
 
 - Mullvad account number
 - proxy username
-- proxy password
 - one or more route locations
+
+The proxy password is optional. If you omit it, Mullgate saves an empty password.
 
 ### Routing inventory
 
@@ -29,11 +30,13 @@ That route inventory is what drives:
 
 ### Exposure configuration
 
-Exposure settings define how routes are reachable.
+Exposure and access settings define how routes are reachable and how clients choose them.
 
 Key inputs include:
 
 - exposure mode
+- access mode
+- `allowUnsafePublicEmptyPassword`
 - base domain
 - bind host
 - per-route bind IPs
@@ -81,8 +84,9 @@ The usage guide documents these variables:
 - `MULLGATE_LOCATION` is shorthand for route 1
 - `MULLGATE_LOCATIONS` is ordered and comma-separated
 - `MULLGATE_ROUTE_BIND_IPS` is ordered and comma-separated
-- non-loopback exposure requires one explicit bind IP per routed location
-- multi-route non-loopback exposure requires distinct bind IPs
+- `private-network` uses one shared trusted-network host IP
+- `public + published-routes` requires one explicit bind IP per routed location, and multi-route public exposure requires distinct bind IPs
+- `inline-selector` uses one shared host because route selection moves to the username
 - CLI commands are the preferred way to mutate configuration state
 
 ## Operational guidance
@@ -92,6 +96,6 @@ Change configuration through Mullgate CLI commands where possible instead of edi
 For operators, the important validation loop is:
 
 1. inspect with `mullgate proxy access`
-2. review hostnames with `mullgate proxy access`
+2. review hostnames or selector examples with `mullgate proxy access`
 3. refresh derived state with `mullgate proxy validate --refresh`
 4. confirm runtime with `mullgate proxy status` and `mullgate proxy doctor`

@@ -62,6 +62,10 @@ function createFixtureConfig(store: ConfigStore): MullgateConfig {
         username: 'alice',
         password: 'multi-route-secret',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'private-network',
         allowLan: true,

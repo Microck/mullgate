@@ -14,7 +14,14 @@ export const bindConfigSchema = z.object({
 
 export const authConfigSchema = z.object({
   username: nonEmptyString,
-  password: nonEmptyString,
+  password: z.string().trim(),
+});
+
+export const accessModeSchema = z.enum(['published-routes', 'inline-selector']);
+
+export const accessConfigSchema = z.object({
+  mode: accessModeSchema.default('published-routes'),
+  allowUnsafePublicEmptyPassword: z.boolean().default(false),
 });
 
 export const exposureModeSchema = z.enum(['loopback', 'private-network', 'public']);
@@ -169,6 +176,10 @@ export const guidedSetupSchema = z.object({
   source: z.literal('guided-setup'),
   bind: bindConfigSchema,
   auth: authConfigSchema,
+  access: accessConfigSchema.default({
+    mode: 'published-routes',
+    allowUnsafePublicEmptyPassword: false,
+  }),
   exposure: exposureConfigSchema,
   location: locationInputSchema,
   https: httpsConfigSchema,
@@ -197,6 +208,7 @@ export const mullgateConfigInputSchema = z.object({
 });
 
 export type ExposureMode = z.infer<typeof exposureModeSchema>;
+export type AccessMode = z.infer<typeof accessModeSchema>;
 export type ExposureConfig = z.infer<typeof exposureConfigSchema>;
 export type RoutedLocationExit = z.infer<typeof routedLocationExitSchema>;
 export type RoutedLocation = z.infer<typeof routedLocationSchema>;

@@ -43,7 +43,6 @@ Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat
 | --- | --- | --- |
 | Mullvad account number | `--account-number <digits>` | `MULLGATE_ACCOUNT_NUMBER` |
 | Proxy username | `--username <name>` | `MULLGATE_PROXY_USERNAME` |
-| Proxy password | `--password <secret>` | `MULLGATE_PROXY_PASSWORD` |
 | One or more routed locations | `--location <alias>` (repeatable) | `MULLGATE_LOCATION` or `MULLGATE_LOCATIONS` |
 
 ### Common optional inputs
@@ -55,6 +54,7 @@ Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat
 | Per-route bind IPs | `--route-bind-ip <ip>` (repeatable) | `MULLGATE_ROUTE_BIND_IPS` |
 | Exposure mode | `--exposure-mode <mode>` | `MULLGATE_EXPOSURE_MODE` |
 | Base domain | `--base-domain <domain>` | `MULLGATE_EXPOSURE_BASE_DOMAIN` |
+| Proxy password | `--password <secret>` | `MULLGATE_PROXY_PASSWORD` |
 | SOCKS5 port | `--socks-port <port>` | `MULLGATE_SOCKS_PORT` |
 | HTTP port | `--http-port <port>` | `MULLGATE_HTTP_PORT` |
 | HTTPS port | `--https-port <port>` | `MULLGATE_HTTPS_PORT` |
@@ -68,8 +68,10 @@ Notes:
 - `MULLGATE_LOCATION` is shorthand for route 1.
 - `MULLGATE_LOCATIONS` is the ordered, comma-separated form for multi-route setup.
 - `MULLGATE_ROUTE_BIND_IPS` is also ordered and comma-separated.
-- Non-loopback exposure requires one explicit bind IP per routed location.
-- Multi-route non-loopback exposure requires **distinct** bind IPs.
+- If you omit `MULLGATE_PROXY_PASSWORD`, setup saves an empty password.
+- `private-network` uses one shared trusted-network host IP. If Tailscale is available during setup and you do not override it, Mullgate should default to the host's `100.x` address.
+- `public` plus the default `published-routes` access mode still requires one explicit bind IP per routed location, and multi-route public exposure still requires **distinct** bind IPs.
+- `inline-selector` uses one shared host IP in every exposure mode because route selection moves into the proxy username.
 
 ## Setup examples
 
@@ -105,8 +107,8 @@ export MULLGATE_ACCOUNT_NUMBER=123456789012
 export MULLGATE_PROXY_USERNAME=alice
 export MULLGATE_PROXY_PASSWORD='replace-me'
 export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
-export MULLGATE_ROUTE_BIND_IPS=192.168.10.10,192.168.10.11
 export MULLGATE_EXPOSURE_MODE=private-network
+export MULLGATE_BIND_HOST=100.124.44.113
 export MULLGATE_EXPOSURE_BASE_DOMAIN=proxy.example.com
 
 mullgate setup --non-interactive
@@ -116,8 +118,10 @@ mullgate proxy access
 What to expect:
 
 - route hostnames become `sweden-gothenburg.proxy.example.com` and `austria-vienna.proxy.example.com`
+- both hostnames resolve to the same shared private-network host IP
+- route 1 keeps the base ports, and later routes move to the next ports (`1081`, `8081`, and `8444` when HTTPS is enabled)
 - `mullgate proxy access` prints the DNS A records operators must publish
-- each hostname must resolve to its own bind IP before hostname-based routing proof can work remotely
+- each hostname must resolve to that shared host IP before hostname-based routing proof can work remotely
 
 ### Example: direct-IP exposure with no base domain
 
@@ -127,15 +131,46 @@ If you do not set a base domain in `private-network` or `public` mode, Mullgate 
 mullgate proxy access \
   --mode private-network \
   --clear-base-domain \
-  --route-bind-ip 192.168.10.10 \
-  --route-bind-ip 192.168.10.11
+  --route-bind-ip 100.124.44.113
 ```
 
 In that posture:
 
 - there are no DNS records to publish
-- direct bind-IP entrypoints are the intended access path
+- direct host-IP entrypoints are the intended access path
 - `mullgate proxy access` is still useful for local-only hostname testing, but it is no longer required for remote clients
+
+### Example: private-network inline-selector access
+
+Use this when trusted-network clients should connect to one shared host and select the Mullvad exit inline in the proxy username:
+
+```bash
+export MULLGATE_ACCOUNT_NUMBER=123456789012
+export MULLGATE_PROXY_USERNAME=alice
+export MULLGATE_PROXY_PASSWORD=''
+export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
+export MULLGATE_EXPOSURE_MODE=private-network
+export MULLGATE_BIND_HOST=100.124.44.113
+
+mullgate setup --non-interactive
+mullgate proxy access --access-mode inline-selector
+```
+
+What to expect:
+
+- the access report changes from per-route entrypoints to one shared host plus selector examples
+- the guaranteed syntax is `scheme://selector:@host:port`
+- the shorter `scheme://selector@host:port` form is best-effort only
+- selectors can refer to countries, country-city pairs, or exact relay hostnames such as `se`, `se-got`, or `se-got-wg-101`
+- `mullgate proxy export` does not emit route URLs in `inline-selector` mode
+
+Example client URLs:
+
+```text
+socks5://se:@100.124.44.113:1080
+socks5://se-got:@100.124.44.113:1080
+socks5://se-got-wg-101:@100.124.44.113:1080
+```
 
 ## Unsupported local config versions
 
@@ -260,7 +295,7 @@ curl \
 
 If HTTPS proxy support is configured with a cert, key, and HTTPS port, the same route inventory appears in `exposure`, `start`, `status`, and `runtime-manifest.json`.
 
-## Editing exposure after setup
+## Editing access and exposure after setup
 
 Use `mullgate proxy access` instead of editing JSON by hand.
 
@@ -273,10 +308,12 @@ mullgate proxy access
 The report includes:
 
 - mode (`loopback`, `private-network`, or `public`)
+- access mode (`published-routes` or `inline-selector`)
 - base domain and whether LAN access is expected
-- per-route hostname and bind IP inventory
+- the shared host or per-route hostname and bind IP inventory
 - DNS guidance when a base domain is set
-- hostname and direct-IP listener URLs with full authenticated values
+- hostname and direct-IP listener URLs with full authenticated values in `published-routes`
+- selector syntax and selector examples in `inline-selector`
 - whether the current runtime state needs a restart/refresh
 
 ### Update the posture
@@ -287,8 +324,7 @@ Example: switch from loopback to private-network hostnames:
 mullgate proxy access \
   --mode private-network \
   --base-domain proxy.example.com \
-  --route-bind-ip 192.168.10.10 \
-  --route-bind-ip 192.168.10.11
+  --route-bind-ip 100.124.44.113
 ```
 
 Example: switch to direct-IP public exposure:
@@ -300,6 +336,23 @@ mullgate proxy access \
   --route-bind-ip 203.0.113.10 \
   --route-bind-ip 203.0.113.11
 ```
+
+Example: switch the same private-network host to selector-driven access:
+
+```bash
+mullgate proxy access \
+  --mode private-network \
+  --access-mode inline-selector \
+  --route-bind-ip 100.124.44.113
+```
+
+If you intentionally expose `inline-selector` on a public host with an empty password, add:
+
+```bash
+--unsafe-public-empty-password
+```
+
+Without that explicit override, Mullgate blocks `public + inline-selector + empty password`.
 
 After an exposure edit, Mullgate marks the runtime state as `unvalidated`. Do one of these before trusting the saved/runtime surfaces again:
 

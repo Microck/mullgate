@@ -85,6 +85,10 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
         username: 'alice',
         password: 'proxy-password',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'loopback',
         allowLan: false,
@@ -536,6 +540,7 @@ describe('mullgate doctor command', () => {
       5. exposure-contract: pass
          summary: Saved exposure contract is internally coherent.
          detail: mode=loopback
+         detail: access-mode=published-routes
          detail: mode-label=Loopback / local-only
          detail: recommendation=local-default
          detail: posture-summary=Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
@@ -740,6 +745,7 @@ describe('mullgate doctor command', () => {
       5. exposure-contract: pass
          summary: Saved exposure contract is internally coherent.
          detail: mode=loopback
+         detail: access-mode=published-routes
          detail: mode-label=Loopback / local-only
          detail: recommendation=local-default
          detail: posture-summary=Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
@@ -941,6 +947,7 @@ describe('mullgate doctor command', () => {
       5. exposure-contract: degraded
          summary: Saved exposure contract includes warning-level posture guidance that operators should resolve or consciously accept.
          detail: mode=loopback
+         detail: access-mode=published-routes
          detail: mode-label=Loopback / local-only
          detail: recommendation=local-default
          detail: posture-summary=Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
@@ -1128,6 +1135,7 @@ describe('mullgate doctor command', () => {
       5. exposure-contract: pass
          summary: Saved exposure contract is internally coherent.
          detail: mode=loopback
+         detail: access-mode=published-routes
          detail: mode-label=Loopback / local-only
          detail: recommendation=local-default
          detail: posture-summary=Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.
@@ -1291,6 +1299,7 @@ describe('mullgate doctor command', () => {
       5. exposure-contract: pass
          summary: Saved exposure contract is internally coherent.
          detail: mode=private-network
+         detail: access-mode=published-routes
          detail: mode-label=Private network / Tailscale-first
          detail: recommendation=recommended-remote
          detail: posture-summary=Recommended remote posture. Use this for Tailscale, LAN, or other trusted private overlays before considering public exposure.
@@ -1488,6 +1497,7 @@ describe('mullgate doctor command', () => {
       5. exposure-contract: pass
          summary: Saved exposure contract is internally coherent.
          detail: mode=loopback
+         detail: access-mode=published-routes
          detail: mode-label=Loopback / local-only
          detail: recommendation=local-default
          detail: posture-summary=Recommended default for same-machine use. Remote clients are intentionally out of scope in this posture.

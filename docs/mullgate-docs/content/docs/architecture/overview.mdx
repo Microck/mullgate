@@ -3,7 +3,7 @@ title: Architecture Overview
 description: High-level design goals, traffic flow, and trust boundaries for Mullgate.
 ---
 
-Mullgate is a gateway-oriented proxy system. It presents local route-specific proxy entrypoints while keeping the operator in control of how traffic is exposed, validated, and observed.
+Mullgate is a gateway-oriented proxy system. It presents route-specific or selector-driven proxy entrypoints while keeping the operator in control of how traffic is exposed, validated, and observed.
 
 ## Design goals
 
@@ -38,11 +38,11 @@ Destination / observed exit
 
 That flow matters because Mullgate is not trying to hide routing. It is trying to make routing legible.
 
-## Why bind IPs matter
+## Why exposure and access semantics matter
 
-A major architectural point in Mullgate is that route selection is tied to destination bind IPs. That is what allows hostname-selected behavior to stay consistent across multiple proxy protocols, including cases where protocol-level hostname hints are not reliable enough for routing decisions.
+A major architectural point in Mullgate is that route selection follows the configured access mode. In `published-routes`, route selection is tied to destination bind IPs or published ports. In `inline-selector`, the selector in the proxy username chooses the backend.
 
-In practice, that means the DNS or `/etc/hosts` mapping is part of the route contract.
+In practice, that means the DNS or `/etc/hosts` mapping is part of the route contract in `published-routes`, while selector syntax is part of the route contract in `inline-selector`.
 
 ## Operational surfaces
 

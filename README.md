@@ -77,8 +77,8 @@ flowchart TB
     end
 
     subgraph runtime[Linux-first live runtime]
-        listeners[route-specific SOCKS5, HTTP, and HTTPS listeners]
-        router[routing by shared-host ports or destination bind IP]
+        listeners[route-specific or shared-selector SOCKS5, HTTP, and HTTPS listeners]
+        router[routing by shared-host ports, destination bind IP, or selector username]
         backends[one rendered backend per configured route]
         docker[Docker runtime bundle]
     end
@@ -209,7 +209,7 @@ mullgate proxy doctor
 
 ![setup demo](images/demos/setup-guided.gif)
 
-In loopback mode, the direct bind-IP entrypoints reported by `mullgate proxy status` and `mullgate proxy access` are the canonical local access path. `mullgate proxy access` now combines the old exposure and hosts views into one access report.
+In loopback mode, the direct bind-IP entrypoints reported by `mullgate proxy status` and `mullgate proxy access` are the canonical local access path. `mullgate proxy access` now combines the old exposure and hosts views into one access report, and it is also where you switch between the default `published-routes` model and the opt-in `inline-selector` model.
 
 If an installed `mullgate` command reports an unsupported config version, treat that as stale local state. Back up or remove the config/runtime paths it prints, then rerun `mullgate setup` and `mullgate proxy start` instead of trying to reuse the old runtime in place.
 
@@ -230,8 +230,8 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 | command | key flags | purpose |
 | --- | --- | --- |
 | `mullgate setup` | `--non-interactive`, `--location`, `--exposure-mode` | create or update canonical config and derived runtime artifacts |
-| `mullgate proxy access` | `--mode`, `--base-domain`, `--route-bind-ip` | inspect or update hostnames, the shared private-network host or public bind IPs, DNS guidance, and direct-IP entrypoints |
-| `mullgate proxy export` | `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories |
+| `mullgate proxy access` | `--mode`, `--access-mode`, `--base-domain`, `--route-bind-ip` | inspect or update exposure posture, access mode, shared-host planning, DNS guidance, selector examples, and direct-IP entrypoints |
+| `mullgate proxy export` | `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories for `published-routes` mode |
 | `mullgate proxy relay list` | selector flags such as `--country`, `--owner`, `--provider` | inspect relay candidates that match a policy |
 | `mullgate proxy relay probe` | `--country`, `--count` | latency-probe likely relay candidates |
 | `mullgate proxy relay recommend` | `--country`, `--count`, `--apply` | preview or pin an exact relay choice |
@@ -270,6 +270,25 @@ mullgate setup --non-interactive
 mullgate proxy access
 ```
 
+switch that same trusted-network host to selector-driven access when you want one shared listener and route selection in the proxy username:
+
+```bash
+mullgate proxy access \
+  --mode private-network \
+  --access-mode inline-selector \
+  --route-bind-ip 100.124.44.113
+```
+
+with `inline-selector`, the guaranteed URL shape is `scheme://selector:@host:port`. for example:
+
+```text
+socks5://se:@100.124.44.113:1080
+socks5://se-got:@100.124.44.113:1080
+socks5://se-got-wg-101:@100.124.44.113:1080
+```
+
+the shorter `scheme://selector@host:port` form is best-effort only because some clients do not normalize a missing password consistently. if you expose `inline-selector` on a public host with an empty password, Mullgate blocks that by default until you opt in with `--unsafe-public-empty-password`.
+
 start the runtime and inspect its current posture:
 
 ```bash
@@ -295,6 +314,8 @@ mullgate proxy export --guided
 mullgate proxy export --country se --city got --count 1 --region europe --provider m247 --owner mullvad --run-mode ram --min-port-speed 9000 --count 2 --output proxies.txt
 mullgate proxy export --dry-run --protocol http --country us --server us-nyc-wg-001 --owner rented
 ```
+
+`mullgate proxy export` currently supports `published-routes` mode only. if you switch to `inline-selector`, use `mullgate proxy access` to inspect the shared listener and selector examples instead of expecting per-route export output.
 
 inspect candidate relays, preview the fastest exact match, then verify a configured exit:
 

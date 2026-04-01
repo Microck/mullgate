@@ -530,6 +530,7 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
   const allowLanMismatch = config.setup.exposure.allowLan !== expectedAllowLan;
   const details = [
     `mode=${exposure.mode}`,
+    `access-mode=${exposure.accessMode}`,
     `mode-label=${exposure.posture.modeLabel}`,
     `recommendation=${exposure.posture.recommendation}`,
     `posture-summary=${exposure.posture.summary}`,
@@ -576,7 +577,7 @@ function buildExposureCheck(config: MullgateConfig, exposure: ExposureContract):
 
 function buildBindCheck(config: MullgateConfig): DoctorCheck {
   const routeBindIps =
-    config.setup.exposure.mode === 'private-network'
+    config.setup.exposure.mode === 'private-network' || config.setup.access.mode === 'inline-selector'
       ? [config.setup.bind.host]
       : config.routing.locations.map((location) => location.bindIp);
   const details = [
@@ -594,17 +595,17 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
     );
   }
 
-  if (config.setup.exposure.mode === 'private-network') {
+  if (config.setup.exposure.mode === 'private-network' || config.setup.access.mode === 'inline-selector') {
     for (const location of config.routing.locations) {
       if (location.bindIp !== config.setup.bind.host) {
         issues.push(
-          `Route ${location.runtime.routeId} should reuse the shared private-network host ${config.setup.bind.host}, but saved config has ${location.bindIp}.`,
+          `Route ${location.runtime.routeId} should reuse the shared listener host ${config.setup.bind.host}, but saved config has ${location.bindIp}.`,
         );
       }
     }
   }
 
-  if (config.setup.exposure.mode === 'loopback') {
+  if (config.setup.exposure.mode === 'loopback' && config.setup.access.mode === 'published-routes') {
     for (const [index, location] of config.routing.locations.entries()) {
       const expected = deriveLoopbackBindIp(index);
       if (location.bindIp !== expected) {
@@ -617,6 +618,7 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
     const validation = validateExposureSettings({
       routeCount: config.routing.locations.length,
       exposureMode: config.setup.exposure.mode,
+      accessMode: config.setup.access.mode,
       exposureBaseDomain: config.setup.exposure.baseDomain,
       routeBindIps,
       artifactPath: config.runtime.sourceConfigPath,

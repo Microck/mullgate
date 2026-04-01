@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- README, usage guides, docs-site pages, and command/config references now document the `inline-selector` access mode, the guaranteed `selector:@host:port` syntax, the public empty-password safety override, and the current `published-routes`-only export limitation
+
 ### Fixed
 
 ## [1.1.0] - 2026-04-01
