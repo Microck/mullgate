@@ -6,9 +6,7 @@ import type { ExposureMode } from '../config/schema.js';
 export const LOOPBACK_BIND_HOST = '127.0.0.1';
 export const PRIVATE_NETWORK_FALLBACK_BIND_HOST = '0.0.0.0';
 
-export function detectTailscaleIpv4(
-  spawn: typeof spawnSync = spawnSync,
-): string | null {
+export function detectTailscaleIpv4(spawn: typeof spawnSync = spawnSync): string | null {
   const result = spawn('tailscale', ['ip', '-4'], {
     encoding: 'utf8',
     shell: process.platform === 'win32',

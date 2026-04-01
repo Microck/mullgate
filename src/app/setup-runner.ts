@@ -1167,8 +1167,7 @@ async function collectSetupInputs(input: {
 
   const selectedExposureMode = parseExposureMode(exposureModeInput.trim());
   const bindHost = await text({
-    message:
-      selectedExposureMode === 'private-network' ? 'Private-network host IP' : 'Bind host',
+    message: selectedExposureMode === 'private-network' ? 'Private-network host IP' : 'Bind host',
     initialValue: deriveInteractiveBindHostDefault({
       selectedExposureMode,
       initialValues: input.initialValues,

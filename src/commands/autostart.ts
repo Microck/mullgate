@@ -450,10 +450,7 @@ async function runLoginctlCommand(args: readonly string[]): Promise<SystemctlRes
   return runCommand('loginctl', args);
 }
 
-async function runCommand(
-  command: string,
-  args: readonly string[],
-): Promise<SystemctlResult> {
+async function runCommand(command: string, args: readonly string[]): Promise<SystemctlResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, [...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -483,7 +480,9 @@ async function runCommand(
 async function ensureUserLinger(input: {
   readonly support: AutostartSupport;
   readonly runLoginctl: LoginctlRunner;
-}): Promise<{ readonly ok: true; readonly state: 'enabled' | 'already-enabled' } | AutostartFailure> {
+}): Promise<
+  { readonly ok: true; readonly state: 'enabled' | 'already-enabled' } | AutostartFailure
+> {
   if (!input.support.loginctlAvailable) {
     return renderAutostartFailure({
       action: 'enable',
@@ -491,8 +490,7 @@ async function ensureUserLinger(input: {
       binaryPath: input.support.binaryPath,
       message:
         'loginctl was not found on PATH, so Mullgate cannot guarantee reboot-time startup for the systemd user service.',
-      cause:
-        `Install loginctl support or enable linger manually for ${input.support.userName} before retrying \`mullgate proxy autostart enable\`.`,
+      cause: `Install loginctl support or enable linger manually for ${input.support.userName} before retrying \`mullgate proxy autostart enable\`.`,
     });
   }
 

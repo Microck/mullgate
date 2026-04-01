@@ -639,8 +639,8 @@ function buildBindCheck(config: MullgateConfig): DoctorCheck {
       details: [...details, ...issues],
       remediation:
         config.setup.exposure.mode === 'loopback'
-        ? 'Rerun `mullgate proxy access --mode loopback` so each route gets the expected loopback bind IPs, then revalidate the runtime artifacts.'
-        : 'Use `mullgate proxy access` to correct the route bind IPs for the current exposure mode, then rerun `mullgate proxy validate` or `mullgate proxy start`.',
+          ? 'Rerun `mullgate proxy access --mode loopback` so each route gets the expected loopback bind IPs, then revalidate the runtime artifacts.'
+          : 'Use `mullgate proxy access` to correct the route bind IPs for the current exposure mode, then rerun `mullgate proxy validate` or `mullgate proxy start`.',
     };
   }
 

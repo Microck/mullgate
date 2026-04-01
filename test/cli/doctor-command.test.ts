@@ -1194,7 +1194,7 @@ describe('mullgate doctor command', () => {
           },
         },
         routing: {
-          locations: config.routing.locations.map((location, index) => ({
+          locations: config.routing.locations.map((location, _index) => ({
             ...location,
             bindIp: '192.168.10.10',
             hostname: `${location.alias}.proxy.example.com`,

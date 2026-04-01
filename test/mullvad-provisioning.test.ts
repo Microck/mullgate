@@ -1151,7 +1151,8 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
       exitCode: 1,
       paths: store.paths,
       code: 'UNSAFE_PRIVATE_BIND_IP',
-      message: 'Private-network exposure requires a trusted-network IPv4 host, but received 127.0.0.1.',
+      message:
+        'Private-network exposure requires a trusted-network IPv4 host, but received 127.0.0.1.',
       cause:
         'Use an RFC1918 address, a Tailscale 100.x address, or 0.0.0.0 as the wildcard fallback when Tailscale is unavailable.',
       artifactPath: store.paths.configFile,

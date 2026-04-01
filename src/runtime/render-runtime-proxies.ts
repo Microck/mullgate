@@ -1,12 +1,8 @@
 import { chmod, type FileHandle, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
-
+import { computePublishedPort, deriveRuntimeListenerHost } from '../config/exposure-contract.js';
 import type { MullgatePaths } from '../config/paths.js';
 import type { MullgateConfig, RoutedLocation } from '../config/schema.js';
-import {
-  computePublishedPort,
-  deriveRuntimeListenerHost,
-} from '../config/exposure-contract.js';
 import {
   createLocationAliasCatalog,
   type LocationAliasTarget,
@@ -155,7 +151,10 @@ export function planRuntimeProxyArtifacts(
         routeAlias: route.alias,
         routeHostname: route.hostname,
         routeBindIp: route.bindIp,
-        routeListenHost: deriveRuntimeListenerHost(options.config.setup.exposure.mode, route.bindIp),
+        routeListenHost: deriveRuntimeListenerHost(
+          options.config.setup.exposure.mode,
+          route.bindIp,
+        ),
         routeSocksPort: computePublishedPort(
           options.config.setup.exposure.mode,
           options.config.setup.bind.socksPort,

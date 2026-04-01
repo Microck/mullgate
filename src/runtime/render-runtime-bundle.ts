@@ -376,8 +376,16 @@ function buildRuntimeBundleManifest(
     const routeEndpoints = publishedEndpoints.filter(
       (endpoint) => endpoint.routeId === route.runtime.routeId,
     );
-    const socks5Port = computePublishedPort(config.setup.exposure.mode, config.setup.bind.socksPort, index);
-    const httpPort = computePublishedPort(config.setup.exposure.mode, config.setup.bind.httpPort, index);
+    const socks5Port = computePublishedPort(
+      config.setup.exposure.mode,
+      config.setup.bind.socksPort,
+      index,
+    );
+    const httpPort = computePublishedPort(
+      config.setup.exposure.mode,
+      config.setup.bind.httpPort,
+      index,
+    );
     const httpsPort = https.enabled
       ? computePublishedPort(config.setup.exposure.mode, https.port, index)
       : null;
@@ -618,8 +626,14 @@ function buildRouteSelectionRules(routes: readonly RoutedLocation[]): string[] {
 }
 
 function resolveHttpBackendPort(config: MullgateConfig, routeId: string): number {
-  const routeIndex = config.routing.locations.findIndex((route) => route.runtime.routeId === routeId);
-  return computePublishedPort(config.setup.exposure.mode, config.setup.bind.httpPort, routeIndex < 0 ? 0 : routeIndex);
+  const routeIndex = config.routing.locations.findIndex(
+    (route) => route.runtime.routeId === routeId,
+  );
+  return computePublishedPort(
+    config.setup.exposure.mode,
+    config.setup.bind.httpPort,
+    routeIndex < 0 ? 0 : routeIndex,
+  );
 }
 
 async function ensureDirectory(directoryPath: string): Promise<void> {
