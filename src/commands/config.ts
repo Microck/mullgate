@@ -30,10 +30,11 @@ import {
   deriveRuntimeListenerHost,
   type ExposureValidationFailure,
   normalizeExposureBaseDomain,
+  validateAccessSettings,
   validateExposureSettings,
 } from '../config/exposure-contract.js';
 import { formatRedactedConfig } from '../config/redact.js';
-import type { ExposureMode, MullgateConfig } from '../config/schema.js';
+import type { AccessMode, ExposureMode, MullgateConfig } from '../config/schema.js';
 import { ConfigStore, type LoadConfigResult, normalizeMullgateConfig } from '../config/store.js';
 import { createLocationAliasCatalog, normalizeLocationToken } from '../domain/location-aliases.js';
 import {
@@ -50,6 +51,7 @@ import { buildPlatformSupportContract } from '../platform/support-contract.js';
 import { requireArrayValue, requireDefined } from '../required.js';
 import {
   ENTRY_WIREPROXY_SOCKS_PORT,
+  type InlineSelectorMapping,
   renderRuntimeProxyArtifacts,
 } from '../runtime/render-runtime-proxies.js';
 import { validateRuntimeArtifacts } from '../runtime/validate-runtime.js';
@@ -61,7 +63,9 @@ const EDITABLE_CONFIG_FIELDS = new Map<string, EditableFieldSpec>([
   ['setup.bind.httpPort', { parse: parsePort }],
   ['setup.bind.httpsPort', { parse: parseNullablePort }],
   ['setup.auth.username', { parse: parseRequiredString }],
-  ['setup.auth.password', { parse: parseRequiredString, secret: true }],
+  ['setup.auth.password', { parse: parseMaybeEmptyString, secret: true }],
+  ['setup.access.mode', { parse: parseAccessMode }],
+  ['setup.access.allowUnsafePublicEmptyPassword', { parse: parseBoolean }],
   ['setup.location.requested', { parse: parseRequiredString }],
   ['setup.location.country', { parse: parseNullableString }],
   ['setup.location.city', { parse: parseNullableString }],
@@ -112,6 +116,8 @@ type ConfigValidationResult = ConfigValidationSuccess | ConfigValidationFailure;
 
 type ExposureUpdateInput = {
   readonly mode?: ExposureMode;
+  readonly accessMode?: AccessMode;
+  readonly allowUnsafePublicEmptyPassword?: boolean;
   readonly baseDomain?: string | null;
   readonly baseDomainSpecified: boolean;
   readonly routeBindIps?: readonly string[];
@@ -128,6 +134,8 @@ type ExposureUpdateResult = ExposureUpdateSuccess | ExposureUpdateFailure;
 
 export type ExposureCommandOptions = {
   readonly mode?: string;
+  readonly accessMode?: string;
+  readonly unsafePublicEmptyPassword?: boolean;
   readonly baseDomain?: string;
   readonly clearBaseDomain?: boolean;
   readonly routeBindIp?: string[];
@@ -1058,6 +1066,48 @@ export function renderHostsReport(config: MullgateConfig, configPath: string): s
 export function renderExposureReport(config: MullgateConfig, configPath: string): string {
   const exposure = buildExposureContract(config);
 
+  if (exposure.accessMode === 'inline-selector' && exposure.inlineSelector) {
+    return [
+      'Mullgate exposure report',
+      'phase: inspect-config',
+      'source: canonical-config',
+      `config: ${configPath}`,
+      `mode: ${exposure.mode}`,
+      `access mode: ${exposure.accessMode}`,
+      `mode label: ${exposure.posture.modeLabel}`,
+      `recommendation: ${exposure.posture.recommendation}`,
+      `posture summary: ${exposure.posture.summary}`,
+      `remote story: ${exposure.posture.remoteStory}`,
+      `base domain: ${exposure.baseDomain ?? 'n/a'}`,
+      `allow lan: ${exposure.allowLan ? 'yes' : 'no'}`,
+      `shared host: ${exposure.inlineSelector.sharedHost}`,
+      `selector field: ${exposure.inlineSelector.selectorField}`,
+      `guaranteed syntax: ${exposure.inlineSelector.syntax.guaranteed}`,
+      `best-effort syntax: ${exposure.inlineSelector.syntax.bestEffort}`,
+      `runtime status: ${exposure.runtimeStatus.phase}`,
+      `restart needed: ${exposure.runtimeStatus.restartRequired ? 'yes' : 'no'}`,
+      ...(exposure.runtimeStatus.message
+        ? [`runtime message: ${exposure.runtimeStatus.message}`]
+        : []),
+      '',
+      'guidance',
+      ...exposure.guidance.map((line) => `- ${line}`),
+      '',
+      'selector examples',
+      ...exposure.inlineSelector.examples.flatMap((example, index) => [
+        `${index + 1}. ${example.targetLabel}`,
+        `   selector: ${example.selector}`,
+        `   guaranteed: ${redactInlineSelectorUrl(example.guaranteedUrl)}`,
+        `   best effort: ${example.bestEffortUrl}`,
+      ]),
+      '',
+      'warnings',
+      ...(exposure.warnings.length > 0
+        ? exposure.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`)
+        : ['- none']),
+    ].join('\n');
+  }
+
   return [
     'Mullgate exposure report',
     'phase: inspect-config',
@@ -1112,22 +1162,28 @@ export function updateExposureConfig(
   input: ExposureUpdateInput,
 ): ExposureUpdateResult {
   const nextMode = input.mode ?? config.setup.exposure.mode;
+  const nextAccessMode = input.accessMode ?? config.setup.access.mode;
+  const nextAllowUnsafePublicEmptyPassword =
+    input.allowUnsafePublicEmptyPassword ?? config.setup.access.allowUnsafePublicEmptyPassword;
   const nextBaseDomain = input.baseDomainSpecified
     ? (input.baseDomain ?? null)
     : config.setup.exposure.baseDomain;
   const existingBindIps = config.routing.locations.map((location) => location.bindIp);
   const routeBindIps =
     input.routeBindIps ??
-    (nextMode === 'loopback'
-      ? []
-      : nextMode === 'private-network'
-        ? [config.setup.bind.host]
-        : config.setup.exposure.mode === 'loopback' && input.mode !== undefined
-          ? []
-          : existingBindIps);
+    (nextAccessMode === 'inline-selector'
+      ? [config.setup.bind.host]
+      : nextMode === 'loopback'
+        ? []
+        : nextMode === 'private-network'
+          ? [config.setup.bind.host]
+          : config.setup.exposure.mode === 'loopback' && input.mode !== undefined
+            ? []
+            : existingBindIps);
   const validated = validateExposureSettings({
     routeCount: config.routing.locations.length,
     exposureMode: nextMode,
+    accessMode: nextAccessMode,
     exposureBaseDomain: normalizeExposureBaseDomain(nextBaseDomain),
     routeBindIps,
     artifactPath,
@@ -1136,6 +1192,18 @@ export function updateExposureConfig(
 
   if (!validated.ok) {
     return validated;
+  }
+
+  const accessValidation = validateAccessSettings({
+    exposureMode: validated.mode,
+    accessMode: nextAccessMode,
+    password: config.setup.auth.password,
+    allowUnsafePublicEmptyPassword: nextAllowUnsafePublicEmptyPassword,
+    artifactPath,
+  });
+
+  if (!accessValidation.ok) {
+    return accessValidation;
   }
 
   const updatedRoutingLocations = config.routing.locations.map((location, index) => ({
@@ -1163,6 +1231,10 @@ export function updateExposureConfig(
       bind: {
         ...config.setup.bind,
         host: validated.bindHost,
+      },
+      access: {
+        mode: nextAccessMode,
+        allowUnsafePublicEmptyPassword: nextAllowUnsafePublicEmptyPassword,
       },
       exposure: {
         mode: validated.mode,
@@ -1885,6 +1957,17 @@ export function buildProxyExportPlan(input: {
   readonly relayCatalog: MullvadRelayCatalog;
   readonly configPath: string;
 }): ProxyExportPlanResult {
+  if (input.config.setup.access.mode === 'inline-selector') {
+    return {
+      ok: false,
+      phase: 'export-proxies',
+      source: 'canonical-config',
+      message:
+        'Proxy export currently supports published-routes mode only. Inline-selector access uses one shared listener, so switch back to published-routes or use `mullgate proxy access` for selector examples.',
+      configPath: input.configPath,
+    };
+  }
+
   for (const selector of input.selectors) {
     if (selector.kind === 'region' && !resolveRegionCountryCodes(selector.value)) {
       return {
@@ -3188,6 +3271,10 @@ export async function ensureProxyExportRoutes(input: {
     routeProxyConfigPath: renderResult.artifactPaths.routeProxyConfigPath,
     routeProxyConfigText: renderResult.routeProxyConfig,
     routes: renderResult.routes,
+    inlineSelectors: renderResult.inlineSelectors,
+    accessMode: pendingConfig.setup.access.mode,
+    exposureMode: pendingConfig.setup.exposure.mode,
+    bindHost: pendingConfig.setup.bind.host,
     bind: {
       socksPort: pendingConfig.setup.bind.socksPort,
       httpPort: pendingConfig.setup.bind.httpPort,
@@ -3438,10 +3525,18 @@ function deriveAddedRouteBindIps(input: {
     };
   }
 
+  if (input.config.setup.access.mode === 'inline-selector') {
+    return {
+      ok: true,
+      routeBindIps: Array.from({ length: input.count }, () => input.config.setup.bind.host),
+    };
+  }
+
   if (input.config.setup.exposure.mode === 'loopback') {
     const exposure = validateExposureSettings({
       routeCount: input.config.routing.locations.length + input.count,
       exposureMode: 'loopback',
+      accessMode: input.config.setup.access.mode,
       exposureBaseDomain: input.config.setup.exposure.baseDomain,
       routeBindIps: [],
       artifactPath: input.configPath,
@@ -3482,6 +3577,7 @@ function deriveAddedRouteBindIps(input: {
   const validated = validateExposureSettings({
     routeCount: input.config.routing.locations.length + input.count,
     exposureMode: input.config.setup.exposure.mode,
+    accessMode: input.config.setup.access.mode,
     exposureBaseDomain: input.config.setup.exposure.baseDomain,
     routeBindIps: [
       ...input.config.routing.locations.map((location) => location.bindIp),
@@ -4165,6 +4261,7 @@ async function validateSavedConfig(input: {
   ]).then(([entryExists, routeProxyExists]) => entryExists && routeProxyExists);
   const shouldRefresh =
     input.refresh ||
+    loadResult.config.setup.access.mode === 'inline-selector' ||
     loadResult.config.runtime.status.phase === 'unvalidated' ||
     !hasExistingRuntimeArtifacts;
 
@@ -4172,6 +4269,7 @@ async function validateSavedConfig(input: {
   let entryWireproxyConfigText: string | undefined;
   let routeProxyConfigPath = input.store.paths.routeProxyConfigFile;
   let routeProxyConfigText: string | undefined;
+  let inlineSelectors: readonly InlineSelectorMapping[] = [];
   let refreshedArtifacts = false;
 
   if (shouldRefresh) {
@@ -4225,6 +4323,7 @@ async function validateSavedConfig(input: {
     entryWireproxyConfigText = renderResult.entryWireproxyConfig;
     routeProxyConfigPath = renderResult.artifactPaths.routeProxyConfigPath;
     routeProxyConfigText = renderResult.routeProxyConfig;
+    inlineSelectors = renderResult.inlineSelectors;
     refreshedArtifacts = true;
   } else {
     [entryWireproxyConfigText, routeProxyConfigText] = await Promise.all([
@@ -4239,6 +4338,10 @@ async function validateSavedConfig(input: {
     routeProxyConfigPath,
     routeProxyConfigText,
     routes: buildRuntimeValidationRoutes(loadResult.config),
+    inlineSelectors,
+    accessMode: loadResult.config.setup.access.mode,
+    exposureMode: loadResult.config.setup.exposure.mode,
+    bindHost: loadResult.config.setup.bind.host,
     bind: {
       socksPort: loadResult.config.setup.bind.socksPort,
       httpPort: loadResult.config.setup.bind.httpPort,
@@ -4581,6 +4684,10 @@ export function createAuthenticatedEndpointUrl(
   return `${protocol}://${encodeURIComponent(config.setup.auth.username)}:${encodeURIComponent(config.setup.auth.password)}@${authorityAndPath}`;
 }
 
+function redactInlineSelectorUrl(url: string): string {
+  return url.replace(/:\/\/([^:@]+):@/, '://$1:[redacted]@');
+}
+
 function buildProxyExportFilename(input: {
   readonly protocol: ProxyExportProtocol;
   readonly selectors: readonly ProxyExportSelector[];
@@ -4753,6 +4860,10 @@ function parseRequiredString(raw: string): string {
   return value;
 }
 
+function parseMaybeEmptyString(raw: string): string {
+  return raw.trim();
+}
+
 function parseNullableString(raw: string, options: { json: boolean }): string | null {
   if (options.json) {
     const parsed = JSON.parse(raw) as unknown;
@@ -4826,6 +4937,16 @@ function parseBoolean(raw: string, options: { json: boolean }): boolean {
   }
 
   throw new Error('Boolean values must be true or false.');
+}
+
+function parseAccessMode(raw: string): AccessMode {
+  const value = raw.trim();
+
+  if (value === 'published-routes' || value === 'inline-selector') {
+    return value;
+  }
+
+  throw new Error('Access mode must be published-routes or inline-selector.');
 }
 
 function parseStringArray(raw: string, options: { json: boolean }): string[] {

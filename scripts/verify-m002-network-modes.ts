@@ -386,6 +386,10 @@ function createBaseFixtureConfig(input: { readonly env: NodeJS.ProcessEnv }): Mu
         username: 'alice',
         password: 'multi-route-secret',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'loopback',
         allowLan: false,

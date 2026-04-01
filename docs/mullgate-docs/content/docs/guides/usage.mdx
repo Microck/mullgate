@@ -45,7 +45,6 @@ Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat
 | --- | --- | --- |
 | Mullvad account number | `--account-number <digits>` | `MULLGATE_ACCOUNT_NUMBER` |
 | Proxy username | `--username <name>` | `MULLGATE_PROXY_USERNAME` |
-| Proxy password | `--password <secret>` | `MULLGATE_PROXY_PASSWORD` |
 | One or more routed locations | `--location <alias>` (repeatable) | `MULLGATE_LOCATION` or `MULLGATE_LOCATIONS` |
 
 ### Common optional inputs
@@ -57,6 +56,7 @@ Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat
 | Shared private-network host IP or public per-route bind IPs | `--route-bind-ip <ip>` (repeatable) | `MULLGATE_ROUTE_BIND_IPS` |
 | Exposure mode | `--exposure-mode <mode>` | `MULLGATE_EXPOSURE_MODE` |
 | Base domain | `--base-domain <domain>` | `MULLGATE_EXPOSURE_BASE_DOMAIN` |
+| Proxy password | `--password <secret>` | `MULLGATE_PROXY_PASSWORD` |
 | SOCKS5 port | `--socks-port <port>` | `MULLGATE_SOCKS_PORT` |
 | HTTP port | `--http-port <port>` | `MULLGATE_HTTP_PORT` |
 | HTTPS port | `--https-port <port>` | `MULLGATE_HTTPS_PORT` |
@@ -70,8 +70,10 @@ Notes:
 - `MULLGATE_LOCATION` is shorthand for route 1.
 - `MULLGATE_LOCATIONS` is the ordered, comma-separated form for multi-route setup.
 - `MULLGATE_ROUTE_BIND_IPS` is also ordered and comma-separated.
+- If you omit `MULLGATE_PROXY_PASSWORD`, setup saves an empty password.
 - `private-network` uses one shared trusted-network host IP. If Tailscale is available during setup and you do not override it, Mullgate should default to the host's `100.x` address.
-- `public` still requires one explicit bind IP per routed location, and multi-route public exposure still requires **distinct** bind IPs.
+- `public` plus the default `published-routes` access mode still requires one explicit bind IP per routed location, and multi-route public exposure still requires **distinct** bind IPs.
+- `inline-selector` uses one shared host IP in every exposure mode because route selection moves to the proxy username.
 
 ## Setup examples
 
@@ -142,6 +144,31 @@ In that posture:
 - direct host-IP entrypoints are the intended access path
 - `mullgate proxy access` is still useful for local-only hostname testing, but it is no longer required for remote clients
 
+### Example: private-network inline-selector access
+
+Use this when trusted-network clients should connect to one shared host and select the Mullvad exit inline in the proxy username:
+
+```bash
+export MULLGATE_ACCOUNT_NUMBER=123456789012
+export MULLGATE_PROXY_USERNAME=alice
+export MULLGATE_PROXY_PASSWORD=''
+export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
+export MULLGATE_EXPOSURE_MODE=private-network
+export MULLGATE_BIND_HOST=100.124.44.113
+
+mullgate setup --non-interactive
+mullgate proxy access --access-mode inline-selector
+```
+
+What to expect:
+
+- one shared SOCKS5 listener and one shared HTTP listener on the trusted-network host
+- selector examples such as `socks5://se:@100.124.44.113:1080` and `socks5://se-got:@100.124.44.113:1080`
+- exact relay selectors when the user wants a specific server, for example `socks5://se-got-wg-101:@100.124.44.113:1080`
+- `mullgate proxy export` does not emit route URLs in `inline-selector` mode
+
+Use the guaranteed `scheme://selector:@host:port` form. The shorter `scheme://selector@host:port` form is best-effort only because some clients treat a missing password inconsistently.
+
 ## Unsupported local config versions
 
 The current CLI only operates on the current v2 config/runtime shape.
@@ -158,6 +185,8 @@ Do not expect the current CLI to keep operating on an older runtime bundle in pl
 ## Exporting proxy lists for clients
 
 Use `mullgate proxy export` when you want a ready-to-paste inventory of authenticated route URLs instead of assembling client config by hand.
+
+`mullgate proxy export` currently supports `published-routes` mode only. If the saved access mode is `inline-selector`, use `mullgate proxy access` to inspect the shared listener and selector examples instead.
 
 ### Discover the curated region groups
 
@@ -268,10 +297,10 @@ Use it when:
 
 ## Hostname and direct-IP access
 
-Mullgate exposes the same per-route listeners in two parallel forms:
+Mullgate exposes proxy entrypoints in two access models:
 
-- **hostname entrypoints** — route-aware names such as `sweden-gothenburg`, `austria-vienna`, or `sweden-gothenburg.proxy.example.com`
-- **direct-IP entrypoints** — the bind IP for each route, such as `127.0.0.1`, `127.0.0.2`, or `192.168.10.10`
+- **published-routes** — route-aware hostnames or per-route ports such as `sweden-gothenburg.proxy.example.com:1080` or `100.124.44.113:1081`
+- **inline-selector** — one shared listener per protocol, with the selector in the username such as `socks5://se:@100.124.44.113:1080`
 
 ### When hostname access works
 
@@ -287,12 +316,14 @@ In loopback mode without a base domain, those hostname mappings are optional. Di
 
 ### Why the mapping matters for multi-route proof
 
-Mullgate's routing layer dispatches by **destination bind IP**, not by a late application-level hint. That means:
+Mullgate's routing layer uses the access mode you chose:
 
-- every remote route needs its own bind IP
-- hostname proof only works when name resolution lands on the correct IP first
-- if two hostnames resolve to the same bind IP, they collapse to the same route
-- in DNS-backed or non-loopback hostname setups, `mullgate proxy doctor` reports hostname drift and points you back to `mullgate proxy access`
+- in `published-routes + loopback`, route selection still happens by destination bind IP
+- in `published-routes + private-network`, routes can share one host IP because each route gets its own published port
+- in `published-routes + public`, each route still needs its own bind IP
+- in `inline-selector`, routes share one listener and the username selector chooses the backend
+
+Hostname proof still depends on correct name resolution. If the configured hostname points at the wrong host IP, `mullgate proxy doctor` reports hostname drift and points you back to `mullgate proxy access`.
 
 ### Example `curl` forms
 
@@ -316,7 +347,7 @@ curl \
 
 If HTTPS proxy support is configured with a cert, key, and HTTPS port, the same route inventory appears in `mullgate proxy access`, `start`, `status`, and `runtime-manifest.json`.
 
-## Editing exposure after setup
+## Editing access and exposure after setup
 
 Use `mullgate proxy access` instead of editing JSON by hand.
 
@@ -329,10 +360,12 @@ mullgate proxy access
 The report includes:
 
 - mode (`loopback`, `private-network`, or `public`)
+- access mode (`published-routes` or `inline-selector`)
 - base domain and whether LAN access is expected
-- per-route hostname and bind IP inventory
+- the shared host or per-route hostname and bind IP inventory
 - DNS guidance when a base domain is set
-- hostname and direct-IP listener URLs with full credentials, ready to copy
+- hostname and direct-IP listener URLs with full credentials in `published-routes`
+- selector syntax and selector examples in `inline-selector`
 - whether the current runtime state needs a restart or refresh
 
 ### Update the posture
@@ -343,8 +376,7 @@ Example: switch from loopback to private-network hostnames:
 mullgate proxy access \
   --mode private-network \
   --base-domain proxy.example.com \
-  --route-bind-ip 192.168.10.10 \
-  --route-bind-ip 192.168.10.11
+  --route-bind-ip 100.124.44.113
 ```
 
 Example: switch to direct-IP public exposure:
@@ -356,6 +388,23 @@ mullgate proxy access \
   --route-bind-ip 203.0.113.10 \
   --route-bind-ip 203.0.113.11
 ```
+
+Example: switch the same private-network host to selector-driven access:
+
+```bash
+mullgate proxy access \
+  --mode private-network \
+  --access-mode inline-selector \
+  --route-bind-ip 100.124.44.113
+```
+
+If you intentionally expose `inline-selector` on a public host with an empty password, add:
+
+```bash
+--unsafe-public-empty-password
+```
+
+Without that explicit override, Mullgate blocks `public + inline-selector + empty password`.
 
 After an exposure edit, Mullgate marks the runtime state as `unvalidated`. Do one of these before trusting the saved and runtime surfaces again:
 

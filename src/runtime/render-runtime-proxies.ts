@@ -1,6 +1,12 @@
 import { chmod, type FileHandle, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { computePublishedPort, deriveRuntimeListenerHost } from '../config/exposure-contract.js';
+import {
+  computePublishedPort,
+  deriveInlineSelectorBindHost,
+  deriveRuntimeListenerHost,
+  usesInlineSelectorAccess,
+  validateAccessSettings,
+} from '../config/exposure-contract.js';
 import type { MullgatePaths } from '../config/paths.js';
 import type { MullgateConfig, RoutedLocation } from '../config/schema.js';
 import {
@@ -49,16 +55,26 @@ export type RenderedRuntimeProxyArtifacts = {
   readonly relayCachePath: string;
 };
 
+export type InlineSelectorMapping = {
+  readonly selector: string;
+  readonly target: LocationAliasTarget;
+  readonly exitRelayHostname: string;
+  readonly exitSocksHostname: string;
+  readonly exitSocksPort: number;
+};
+
 export type RenderRuntimeProxySuccess = {
   readonly ok: true;
   readonly phase: 'artifact-render';
   readonly source: 'canonical-config';
   readonly checkedAt: string;
+  readonly accessMode: MullgateConfig['setup']['access']['mode'];
   readonly entryRelay: MullvadRelay;
   readonly entryTarget: LocationAliasTarget | null;
   readonly entryWireproxyConfig: string;
   readonly routeProxyConfig: string;
   readonly routes: readonly RenderedRouteProxyRoute[];
+  readonly inlineSelectors: readonly InlineSelectorMapping[];
   readonly artifactPaths: RenderedRuntimeProxyArtifacts;
 };
 
@@ -71,6 +87,7 @@ export type RenderRuntimeProxyFailure = {
     | 'MISSING_WIREGUARD'
     | 'NO_MATCHING_ENTRY_RELAY'
     | 'MISSING_ROUTE_EXIT'
+    | 'INVALID_ACCESS_CONTRACT'
     | 'WRITE_FAILED';
   readonly message: string;
   readonly cause?: string;
@@ -95,6 +112,7 @@ export function planRuntimeProxyArtifacts(
   options: RenderRuntimeProxyOptions,
 ): RenderRuntimeProxyResult {
   const checkedAt = options.generatedAt ?? new Date().toISOString();
+  const inlineSelectorEnabled = usesInlineSelectorAccess(options.config);
 
   if (
     !options.config.mullvad.wireguard.publicKey ||
@@ -111,6 +129,28 @@ export function planRuntimeProxyArtifacts(
         'Cannot render runtime proxy artifacts before the shared Mullvad WireGuard device is fully provisioned.',
       artifactPath: options.paths.configFile,
       serviceName: ENTRY_TUNNEL_SERVICE,
+    };
+  }
+
+  const accessValidation = validateAccessSettings({
+    exposureMode: options.config.setup.exposure.mode,
+    accessMode: options.config.setup.access.mode,
+    password: options.config.setup.auth.password,
+    allowUnsafePublicEmptyPassword: options.config.setup.access.allowUnsafePublicEmptyPassword,
+    artifactPath: options.paths.configFile,
+  });
+
+  if (!accessValidation.ok) {
+    return {
+      ok: false,
+      phase: 'artifact-render',
+      source: 'user-input',
+      checkedAt,
+      code: 'INVALID_ACCESS_CONTRACT',
+      message: accessValidation.message,
+      ...(accessValidation.cause ? { cause: accessValidation.cause } : {}),
+      artifactPath: accessValidation.artifactPath,
+      serviceName: ROUTE_PROXY_SERVICE,
     };
   }
 
@@ -133,50 +173,52 @@ export function planRuntimeProxyArtifacts(
     };
   }
 
-  const routes = options.config.routing.locations.map((route, index) => {
-    const exit = route.mullvad.exit;
+  const routes = inlineSelectorEnabled
+    ? []
+    : options.config.routing.locations.map((route, index) => {
+        const exit = route.mullvad.exit;
 
-    if (!exit.relayHostname || !exit.relayFqdn || !exit.socksHostname || !exit.socksPort) {
-      return {
-        ok: false as const,
-        route,
-      };
-    }
+        if (!exit.relayHostname || !exit.relayFqdn || !exit.socksHostname || !exit.socksPort) {
+          return {
+            ok: false as const,
+            route,
+          };
+        }
 
-    return {
-      ok: true as const,
-      value: {
-        routeIndex: index,
-        routeId: route.runtime.routeId,
-        routeAlias: route.alias,
-        routeHostname: route.hostname,
-        routeBindIp: route.bindIp,
-        routeListenHost: deriveRuntimeListenerHost(
-          options.config.setup.exposure.mode,
-          route.bindIp,
-        ),
-        routeSocksPort: computePublishedPort(
-          options.config.setup.exposure.mode,
-          options.config.setup.bind.socksPort,
-          index,
-        ),
-        routeHttpPort: computePublishedPort(
-          options.config.setup.exposure.mode,
-          options.config.setup.bind.httpPort,
-          index,
-        ),
-        httpsBackendName: route.runtime.httpsBackendName,
-        exitRelayHostname: exit.relayHostname,
-        exitRelayFqdn: exit.relayFqdn,
-        exitSocksHostname: exit.socksHostname,
-        exitSocksPort: exit.socksPort,
-        entryParent: {
-          host: '127.0.0.1' as const,
-          port: ENTRY_WIREPROXY_SOCKS_PORT,
-        },
-      } satisfies RenderedRouteProxyRoute,
-    };
-  });
+        return {
+          ok: true as const,
+          value: {
+            routeIndex: index,
+            routeId: route.runtime.routeId,
+            routeAlias: route.alias,
+            routeHostname: route.hostname,
+            routeBindIp: route.bindIp,
+            routeListenHost: deriveRuntimeListenerHost(
+              options.config.setup.exposure.mode,
+              route.bindIp,
+            ),
+            routeSocksPort: computePublishedPort(
+              options.config.setup.exposure.mode,
+              options.config.setup.bind.socksPort,
+              index,
+            ),
+            routeHttpPort: computePublishedPort(
+              options.config.setup.exposure.mode,
+              options.config.setup.bind.httpPort,
+              index,
+            ),
+            httpsBackendName: route.runtime.httpsBackendName,
+            exitRelayHostname: exit.relayHostname,
+            exitRelayFqdn: exit.relayFqdn,
+            exitSocksHostname: exit.socksHostname,
+            exitSocksPort: exit.socksPort,
+            entryParent: {
+              host: '127.0.0.1' as const,
+              port: ENTRY_WIREPROXY_SOCKS_PORT,
+            },
+          } satisfies RenderedRouteProxyRoute,
+        };
+      });
 
   const missingRoute = routes.find((route) => !route.ok);
 
@@ -197,12 +239,33 @@ export function planRuntimeProxyArtifacts(
   const renderedRoutes = routes
     .filter((route): route is Extract<(typeof routes)[number], { ok: true }> => route.ok)
     .map((route) => route.value);
+  const inlineSelectors = inlineSelectorEnabled
+    ? buildInlineSelectorMappings({
+        config: options.config,
+        relayCatalog: options.relayCatalog,
+      })
+    : [];
+
+  if (inlineSelectorEnabled && inlineSelectors.length === 0) {
+    return {
+      ok: false,
+      phase: 'artifact-render',
+      source: 'relay-catalog',
+      checkedAt,
+      code: 'NO_MATCHING_ENTRY_RELAY',
+      message:
+        'No selectors could be resolved from the cached Mullvad relay catalog for inline-selector access.',
+      artifactPath: options.paths.provisioningCacheFile,
+      serviceName: ROUTE_PROXY_SERVICE,
+    };
+  }
 
   return {
     ok: true,
     phase: 'artifact-render',
     source: 'canonical-config',
     checkedAt,
+    accessMode: options.config.setup.access.mode,
     entryRelay: entryRelayResult.value.relay,
     entryTarget: entryRelayResult.value.target,
     entryWireproxyConfig: buildEntryWireproxyConfig({
@@ -213,9 +276,11 @@ export function planRuntimeProxyArtifacts(
     routeProxyConfig: buildRouteProxyConfig({
       config: options.config,
       routes: renderedRoutes,
+      inlineSelectors,
       generatedAt: checkedAt,
     }),
     routes: renderedRoutes,
+    inlineSelectors,
     artifactPaths: {
       entryWireproxyConfigPath: options.paths.entryWireproxyConfigFile,
       routeProxyConfigPath: options.paths.routeProxyConfigFile,
@@ -309,17 +374,71 @@ function buildEntryWireproxyConfig(input: {
 function buildRouteProxyConfig(input: {
   readonly config: MullgateConfig;
   readonly routes: readonly RenderedRouteProxyRoute[];
+  readonly inlineSelectors: readonly InlineSelectorMapping[];
   readonly generatedAt: string;
 }): string {
   const lines = [
     '# Generated by Mullgate. Derived artifact; edit canonical config instead.',
     `# Generated at ${input.generatedAt}`,
-    '# One shared 3proxy process publishes every per-route SOCKS5/HTTP listener.',
+    input.config.setup.access.mode === 'inline-selector'
+      ? '# One shared 3proxy process publishes selector-driven SOCKS5/HTTP listeners.'
+      : '# One shared 3proxy process publishes every per-route SOCKS5/HTTP listener.',
     'fakeresolve',
     'auth strong',
-    `users ${input.config.setup.auth.username}:CL:${input.config.setup.auth.password}`,
     '',
   ];
+
+  if (input.config.setup.access.mode === 'inline-selector') {
+    const sharedBindHost = deriveInlineSelectorBindHost(input.config);
+    const listenerHost = deriveRuntimeListenerHost(
+      input.config.setup.exposure.mode,
+      sharedBindHost,
+    );
+    const users = input.inlineSelectors.map(
+      (selector) => `${selector.selector}:CL:${input.config.setup.auth.password}`,
+    );
+
+    if (users.length > 0) {
+      lines.push(`users ${users.join(' ')}`, '');
+    }
+
+    for (const selector of input.inlineSelectors) {
+      lines.push(
+        `# Selector ${selector.selector} -> ${selector.exitRelayHostname}`,
+        `allow ${selector.selector}`,
+        `parent 1000 socks5+ 127.0.0.1 ${ENTRY_WIREPROXY_SOCKS_PORT}`,
+        `parent 1000 socks5+ ${selector.exitSocksHostname} ${selector.exitSocksPort}`,
+      );
+    }
+
+    lines.push(
+      `socks -p${input.config.setup.bind.socksPort} -i${listenerHost} -e${sharedBindHost}`,
+      'flush',
+      '',
+    );
+
+    for (const selector of input.inlineSelectors) {
+      lines.push(
+        `# HTTP selector ${selector.selector} -> ${selector.exitRelayHostname}`,
+        `allow ${selector.selector}`,
+        `parent 1000 socks5+ 127.0.0.1 ${ENTRY_WIREPROXY_SOCKS_PORT}`,
+        `parent 1000 socks5+ ${selector.exitSocksHostname} ${selector.exitSocksPort}`,
+      );
+    }
+
+    lines.push(
+      `proxy -p${input.config.setup.bind.httpPort} -i${listenerHost} -e${sharedBindHost}`,
+      'flush',
+      '',
+    );
+
+    return `${lines.join('\n')}\n`;
+  }
+
+  lines.push(
+    `users ${input.config.setup.auth.username}:CL:${input.config.setup.auth.password}`,
+    '',
+  );
 
   for (const route of input.routes) {
     // The shared entry hop must preserve the next-hop Mullvad SOCKS hostname through the tunnel.
@@ -340,6 +459,53 @@ function buildRouteProxyConfig(input: {
   }
 
   return `${lines.join('\n')}\n`;
+}
+
+function buildInlineSelectorMappings(input: {
+  readonly config: MullgateConfig;
+  readonly relayCatalog: MullvadRelayCatalog;
+}): InlineSelectorMapping[] {
+  const constrainedRelays = applyProviderConstraints(
+    input.relayCatalog.relays,
+    input.config.mullvad.relayConstraints.providers,
+  );
+  const catalogResult = createLocationAliasCatalog(constrainedRelays);
+
+  if (!catalogResult.ok) {
+    return [];
+  }
+
+  return Object.entries(catalogResult.value.index)
+    .filter(([, targets]) => targets.length === 1)
+    .flatMap(([selector, targets]) => {
+      const target = targets[0];
+
+      if (!target) {
+        return [];
+      }
+
+      const relay =
+        target.kind === 'relay'
+          ? (constrainedRelays.find((candidate) => candidate.hostname === target.hostname) ?? null)
+          : choosePreferredRelay(
+              constrainedRelays.filter((candidate) => relayMatchesTarget(candidate, target)),
+            );
+
+      if (!relay) {
+        return [];
+      }
+
+      return [
+        {
+          selector,
+          target,
+          exitRelayHostname: relay.hostname,
+          exitSocksHostname: `${relay.hostname}-socks.relays.mullvad.net`,
+          exitSocksPort: 1080,
+        } satisfies InlineSelectorMapping,
+      ];
+    })
+    .sort((left, right) => left.selector.localeCompare(right.selector));
 }
 
 function resolveEntryRelay(input: {

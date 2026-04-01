@@ -822,6 +822,10 @@ function createBaseFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
         username: 'alice',
         password: 'multi-route-secret',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'loopback',
         allowLan: false,

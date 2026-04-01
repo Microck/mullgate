@@ -2,7 +2,7 @@ import { isIP } from 'node:net';
 
 import { requireDefined } from '../required.js';
 import { REDACTED } from './redact.js';
-import type { ExposureMode, MullgateConfig } from './schema.js';
+import type { AccessMode, ExposureMode, MullgateConfig } from './schema.js';
 
 const HTTPS_DEFAULT_PORT = 8443;
 const PRIVATE_NETWORK_LISTEN_HOST = '0.0.0.0';
@@ -55,24 +55,44 @@ export type ExposureRouteContract = {
   readonly endpoints: readonly ExposureEndpoint[];
 };
 
+export type InlineSelectorExample = {
+  readonly selector: string;
+  readonly targetLabel: string;
+  readonly endpoints: readonly ExposureEndpoint[];
+  readonly guaranteedUrl: string;
+  readonly bestEffortUrl: string;
+};
+
 export type ExposureWarning = {
   readonly code:
     | 'LOOPBACK_ONLY'
     | 'DNS_REQUIRED'
     | 'PUBLIC_EXPOSURE'
     | 'SINGLE_ROUTE'
-    | 'RUNTIME_UNVALIDATED';
+    | 'RUNTIME_UNVALIDATED'
+    | 'INLINE_SELECTOR_PUBLIC_EMPTY_PASSWORD';
   readonly severity: 'info' | 'warning';
   readonly message: string;
 };
 
 export type ExposureContract = {
   readonly mode: ExposureMode;
+  readonly accessMode: AccessMode;
   readonly allowLan: boolean;
   readonly baseDomain: string | null;
   readonly ports: readonly ExposurePort[];
   readonly routes: readonly ExposureRouteContract[];
   readonly dnsRecords: readonly string[];
+  readonly inlineSelector: null | {
+    readonly sharedHost: string;
+    readonly listenerHost: string;
+    readonly selectorField: 'username';
+    readonly syntax: {
+      readonly guaranteed: string;
+      readonly bestEffort: string;
+    };
+    readonly examples: readonly InlineSelectorExample[];
+  };
   readonly posture: {
     readonly recommendation: 'local-default' | 'recommended-remote' | 'advanced-remote';
     readonly modeLabel: string;
@@ -93,12 +113,51 @@ export type ExposureContract = {
   };
 };
 
+export type AccessValidationResult = { readonly ok: true } | ExposureValidationFailure;
+
 export function computePublishedPort(
   exposureMode: ExposureMode,
   basePort: number,
   routeIndex: number,
 ): number {
   return exposureMode === 'private-network' ? basePort + routeIndex : basePort;
+}
+
+export function usesInlineSelectorAccess(config: Pick<MullgateConfig, 'setup'>): boolean {
+  return config.setup.access.mode === 'inline-selector';
+}
+
+export function deriveInlineSelectorBindHost(config: Pick<MullgateConfig, 'setup'>): string {
+  return config.setup.bind.host;
+}
+
+export function validateAccessSettings(input: {
+  readonly exposureMode: ExposureMode;
+  readonly accessMode: AccessMode;
+  readonly password: string;
+  readonly allowUnsafePublicEmptyPassword: boolean;
+  readonly artifactPath: string;
+}): AccessValidationResult {
+  if (
+    input.exposureMode === 'public' &&
+    input.accessMode === 'inline-selector' &&
+    input.password.length === 0 &&
+    !input.allowUnsafePublicEmptyPassword
+  ) {
+    return {
+      ok: false,
+      phase: 'setup-validation',
+      source: 'input',
+      code: 'UNSAFE_PUBLIC_INLINE_SELECTOR_EMPTY_PASSWORD',
+      message:
+        'Public inline-selector access with an empty password is blocked unless the unsafe override is enabled.',
+      cause:
+        'Set setup.access.allowUnsafePublicEmptyPassword=true or choose a non-empty proxy password before exposing selector-driven listeners on a public host.',
+      artifactPath: input.artifactPath,
+    };
+  }
+
+  return { ok: true };
 }
 
 export function deriveRuntimeListenerHost(exposureMode: ExposureMode, bindIp: string): string {
@@ -111,20 +170,23 @@ export function deriveRuntimeBackendHost(exposureMode: ExposureMode, bindIp: str
 
 export function buildExposureContract(config: MullgateConfig): ExposureContract {
   const ports = collectExposurePorts(config);
-  const routes = config.routing.locations.map((route, index) => ({
-    index,
-    alias: route.alias,
-    routeId: route.runtime.routeId,
-    hostname: route.hostname,
-    bindIp: route.bindIp,
-    dnsRecord: config.setup.exposure.baseDomain ? `${route.hostname} A ${route.bindIp}` : null,
-    endpoints: ports.map((entry) =>
-      createExposureEndpoint(route.hostname, route.bindIp, {
-        ...entry,
-        port: computePublishedPort(config.setup.exposure.mode, entry.port, index),
-      }),
-    ),
-  }));
+  const inlineSelectorEnabled = usesInlineSelectorAccess(config);
+  const routes = inlineSelectorEnabled
+    ? []
+    : config.routing.locations.map((route, index) => ({
+        index,
+        alias: route.alias,
+        routeId: route.runtime.routeId,
+        hostname: route.hostname,
+        bindIp: route.bindIp,
+        dnsRecord: config.setup.exposure.baseDomain ? `${route.hostname} A ${route.bindIp}` : null,
+        endpoints: ports.map((entry) =>
+          createExposureEndpoint(route.hostname, route.bindIp, {
+            ...entry,
+            port: computePublishedPort(config.setup.exposure.mode, entry.port, index),
+          }),
+        ),
+      }));
   const dnsRecords = routes.flatMap((route) => (route.dnsRecord ? [route.dnsRecord] : []));
   const warnings: ExposureWarning[] = [];
 
@@ -174,13 +236,30 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
     });
   }
 
+  if (
+    config.setup.exposure.mode === 'public' &&
+    inlineSelectorEnabled &&
+    config.setup.auth.password.length === 0
+  ) {
+    warnings.push({
+      code: 'INLINE_SELECTOR_PUBLIC_EMPTY_PASSWORD',
+      severity: 'warning',
+      message:
+        'Inline-selector access is exposing a public listener with an empty password. This is only appropriate when you intentionally accept selector-only proxy access on the public host.',
+    });
+  }
+
+  const inlineSelector = inlineSelectorEnabled ? buildInlineSelectorContract(config, ports) : null;
+
   return {
     mode: config.setup.exposure.mode,
+    accessMode: config.setup.access.mode,
     allowLan: config.setup.exposure.allowLan,
     baseDomain: config.setup.exposure.baseDomain,
     ports,
     routes,
     dnsRecords,
+    inlineSelector,
     posture: buildExposurePosture(config),
     guidance: buildExposureGuidance(config, dnsRecords),
     remediation: buildExposureRemediation(config),
@@ -196,12 +275,14 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
 export function validateExposureSettings(input: {
   readonly routeCount: number;
   readonly exposureMode: ExposureMode;
+  readonly accessMode?: AccessMode;
   readonly exposureBaseDomain: string | null | undefined;
   readonly routeBindIps: readonly string[];
   readonly artifactPath: string;
   readonly caller?: 'setup' | 'config-exposure';
 }): ExposureValidationResult {
   const baseDomain = normalizeExposureBaseDomain(input.exposureBaseDomain);
+  const accessMode = input.accessMode ?? 'published-routes';
 
   if (baseDomain && !isValidBaseDomain(baseDomain)) {
     return {
@@ -214,7 +295,7 @@ export function validateExposureSettings(input: {
     };
   }
 
-  if (input.exposureMode === 'loopback') {
+  if (input.exposureMode === 'loopback' && accessMode === 'published-routes') {
     const routeBindIps = Array.from({ length: input.routeCount }, (_, index) =>
       deriveLoopbackBindIp(index),
     ) as [string, ...string[]];
@@ -228,18 +309,23 @@ export function validateExposureSettings(input: {
     };
   }
 
-  if (input.exposureMode === 'private-network') {
+  if (input.exposureMode === 'private-network' || accessMode === 'inline-selector') {
     if (input.routeBindIps.length !== 1) {
       return {
         ok: false,
         phase: 'setup-validation',
         source: 'input',
         code: 'BIND_IP_COUNT_MISMATCH',
-        message: `Private-network exposure publishes every route on one shared host IP, so exactly one bind IP is required, but received ${input.routeBindIps.length}.`,
+        message:
+          accessMode === 'inline-selector'
+            ? `Inline-selector access publishes one shared listener host, so exactly one bind IP is required, but received ${input.routeBindIps.length}.`
+            : `Private-network exposure publishes every route on one shared host IP, so exactly one bind IP is required, but received ${input.routeBindIps.length}.`,
         cause:
           input.caller === 'config-exposure'
             ? 'Pass exactly one --route-bind-ip <ip> for the shared host, or omit it to keep the saved host IP.'
-            : 'Pass one bind IP or set MULLGATE_ROUTE_BIND_IPS / --bind-host to the trusted-network host IP that remote clients should reach.',
+            : accessMode === 'inline-selector'
+              ? 'Pass one bind IP or set MULLGATE_ROUTE_BIND_IPS / --bind-host to the shared host that clients should reach for selector-driven access.'
+              : 'Pass one bind IP or set MULLGATE_ROUTE_BIND_IPS / --bind-host to the trusted-network host IP that remote clients should reach.',
         artifactPath: input.artifactPath,
       };
     }
@@ -255,20 +341,44 @@ export function validateExposureSettings(input: {
         phase: 'setup-validation',
         source: 'input',
         code: 'INVALID_BIND_IP',
-        message: `Private-network exposure requires one valid IPv4 host, but received ${bindHost}.`,
+        message:
+          accessMode === 'inline-selector'
+            ? `Inline-selector access requires one valid IPv4 host, but received ${bindHost}.`
+            : `Private-network exposure requires one valid IPv4 host, but received ${bindHost}.`,
         artifactPath: input.artifactPath,
       };
     }
 
-    if (!isPrivateNetworkHostIpv4(bindHost)) {
+    const invalidSharedHost =
+      input.exposureMode === 'loopback'
+        ? !isLoopbackIpv4(bindHost)
+        : input.exposureMode === 'public'
+          ? !isPublicExposureIpv4(bindHost)
+          : !isPrivateNetworkHostIpv4(bindHost);
+
+    if (invalidSharedHost) {
       return {
         ok: false,
         phase: 'setup-validation',
         source: 'input',
-        code: 'UNSAFE_PRIVATE_BIND_IP',
-        message: `Private-network exposure requires a trusted-network IPv4 host, but received ${bindHost}.`,
+        code:
+          input.exposureMode === 'public'
+            ? 'UNSAFE_PUBLIC_BIND_IP'
+            : input.exposureMode === 'loopback'
+              ? 'UNSAFE_LOOPBACK_BIND_IP'
+              : 'UNSAFE_PRIVATE_BIND_IP',
+        message:
+          input.exposureMode === 'public'
+            ? `Public inline-selector exposure requires a publicly routable IPv4 host, but received ${bindHost}.`
+            : input.exposureMode === 'loopback'
+              ? `Loopback inline-selector exposure requires a loopback IPv4 host, but received ${bindHost}.`
+              : `Private-network exposure requires a trusted-network IPv4 host, but received ${bindHost}.`,
         cause:
-          'Use an RFC1918 address, a Tailscale 100.x address, or 0.0.0.0 as the wildcard fallback when Tailscale is unavailable.',
+          input.exposureMode === 'public'
+            ? 'Choose one real public IPv4 address for the shared selector listener or switch to private-network / loopback exposure.'
+            : input.exposureMode === 'loopback'
+              ? 'Use a 127.x.y.z loopback host for same-machine selector access.'
+              : 'Use an RFC1918 address, a Tailscale 100.x address, or 0.0.0.0 as the wildcard fallback when Tailscale is unavailable.',
         artifactPath: input.artifactPath,
       };
     }
@@ -418,7 +528,90 @@ function createExposureEndpoint(
   };
 }
 
+function buildInlineSelectorContract(
+  config: MullgateConfig,
+  ports: readonly ExposurePort[],
+): NonNullable<ExposureContract['inlineSelector']> {
+  const sharedHost = deriveInlineSelectorBindHost(config);
+  const listenerHost = deriveRuntimeListenerHost(config.setup.exposure.mode, sharedHost);
+  const examples = createInlineSelectorExamples(config, ports, sharedHost);
+
+  return {
+    sharedHost,
+    listenerHost,
+    selectorField: 'username',
+    syntax: {
+      guaranteed: 'selector:@host:port',
+      bestEffort: 'selector@host:port',
+    },
+    examples,
+  };
+}
+
+function createInlineSelectorExamples(
+  config: MullgateConfig,
+  ports: readonly ExposurePort[],
+  sharedHost: string,
+): readonly InlineSelectorExample[] {
+  const resolveCountrySelector = (route: MullgateConfig['routing']['locations'][number]) =>
+    route.relayPreference.country ?? route.mullvad.exit.countryCode;
+  const resolveCitySelector = (route: MullgateConfig['routing']['locations'][number]) =>
+    route.relayPreference.city ?? route.mullvad.exit.cityCode;
+  const selectors = [
+    ...new Map(
+      config.routing.locations.flatMap((route) => {
+        const countrySelector = resolveCountrySelector(route);
+        const citySelector = resolveCitySelector(route);
+
+        return [
+          [
+            countrySelector,
+            {
+              selector: countrySelector,
+              targetLabel: `country ${countrySelector}`,
+            },
+          ],
+          [
+            `${countrySelector}-${citySelector}`,
+            {
+              selector: `${countrySelector}-${citySelector}`,
+              targetLabel: `city ${countrySelector}-${citySelector}`,
+            },
+          ],
+          [
+            route.mullvad.exit.relayHostname,
+            {
+              selector: route.mullvad.exit.relayHostname,
+              targetLabel: `relay ${route.mullvad.exit.relayHostname}`,
+            },
+          ],
+        ];
+      }),
+    ).values(),
+  ].slice(0, 3);
+
+  return selectors.map((entry) => ({
+    selector: entry.selector,
+    targetLabel: entry.targetLabel,
+    endpoints: ports.map((port) => createExposureEndpoint(sharedHost, sharedHost, port)),
+    guaranteedUrl: `${ports[0]?.protocol ?? 'socks5'}://${entry.selector}:@${sharedHost}:${ports[0]?.port ?? 0}`,
+    bestEffortUrl: `${ports[0]?.protocol ?? 'socks5'}://${entry.selector}@${sharedHost}:${ports[0]?.port ?? 0}`,
+  }));
+}
+
 function buildExposureGuidance(config: MullgateConfig, dnsRecords: readonly string[]): string[] {
+  if (usesInlineSelectorAccess(config)) {
+    const sharedHost = deriveInlineSelectorBindHost(config);
+
+    return [
+      'Inline-selector access keeps one shared listener per configured protocol and chooses the Mullvad exit from the proxy username instead of a pre-published per-route port.',
+      config.setup.exposure.mode === 'public'
+        ? 'Public inline-selector mode exposes one shared public listener. Only use this when you intentionally want remote selector-driven access on the public host.'
+        : `Clients should connect directly to ${sharedHost} and change the username to switch between country, city, and exact relay selectors.`,
+      'The guaranteed URL shape is `selector:@host:port`. The shorter `selector@host:port` form is best-effort only because some proxy clients do not normalize a missing password consistently.',
+    ];
+  }
+
   if (config.setup.exposure.mode === 'loopback') {
     return [
       'Loopback mode is the default local-only posture. Keep it for same-machine use and developer/operator checks.',
@@ -453,6 +646,39 @@ function buildExposureGuidance(config: MullgateConfig, dnsRecords: readonly stri
 }
 
 function buildExposurePosture(config: MullgateConfig): ExposureContract['posture'] {
+  if (usesInlineSelectorAccess(config)) {
+    if (config.setup.exposure.mode === 'loopback') {
+      return {
+        recommendation: 'local-default',
+        modeLabel: 'Loopback / inline selector',
+        summary:
+          'Same-machine selector-driven posture. One local listener per protocol accepts country, city, or relay selectors in the proxy username.',
+        remoteStory:
+          'Switch to private-network mode when other trusted-network machines should reach the same shared selector-driven listener.',
+      };
+    }
+
+    if (config.setup.exposure.mode === 'private-network') {
+      return {
+        recommendation: 'recommended-remote',
+        modeLabel: 'Private network / inline selector',
+        summary:
+          'Recommended remote selector-driven posture. One shared host IP and fixed ports let trusted-network clients choose the Mullvad exit inline.',
+        remoteStory:
+          'Other trusted-network machines connect to the shared host IP and change only the proxy username to switch country, city, or relay.',
+      };
+    }
+
+    return {
+      recommendation: 'advanced-remote',
+      modeLabel: 'Public / inline selector',
+      summary:
+        'Expert-only selector-driven public posture. One public listener accepts inline exit selection, so firewalling and explicit operator intent matter even more than in published-routes mode.',
+      remoteStory:
+        'Use this only when you intentionally want selector-driven access on a public listener and understand the authentication and exposure tradeoffs.',
+    };
+  }
+
   if (config.setup.exposure.mode === 'loopback') {
     return {
       recommendation: 'local-default',
@@ -486,6 +712,39 @@ function buildExposurePosture(config: MullgateConfig): ExposureContract['posture
 }
 
 function buildExposureRemediation(config: MullgateConfig): ExposureContract['remediation'] {
+  if (usesInlineSelectorAccess(config)) {
+    if (config.setup.exposure.mode === 'loopback') {
+      return {
+        bindPosture:
+          'Keep inline-selector loopback mode on one local bind host only. The shared listener should stay on 127.0.0.1 unless you intentionally switch exposure mode.',
+        hostnameResolution:
+          'Use the direct bind-host entrypoints for selector-driven access. Route hostnames are not the selector surface in this mode.',
+        restart:
+          'After changing access mode, exposure mode, or the bind host, rerun `mullgate proxy validate` or `mullgate proxy start` so the shared selector listeners are re-rendered.',
+      };
+    }
+
+    if (config.setup.exposure.mode === 'private-network') {
+      return {
+        bindPosture:
+          'Keep private-network inline-selector mode on one trusted-network host IP only. Mullgate binds wildcard listeners at runtime and uses the proxy username to choose exits.',
+        hostnameResolution:
+          'Use the direct shared host IP entrypoints unless you have your own DNS shortcut for that one shared listener host.',
+        restart:
+          'After changing access mode, exposure mode, or the bind host, rerun `mullgate proxy validate` or `mullgate proxy start` so the shared selector listeners are re-rendered.',
+      };
+    }
+
+    return {
+      bindPosture:
+        'Use public inline-selector mode only with one intentionally public bind IP. If you are not deliberately publishing one selector-driven listener, switch back to private-network or published-routes mode.',
+      hostnameResolution:
+        'Use the direct shared public host entrypoints unless you deliberately publish a DNS shortcut for that one listener host.',
+      restart:
+        'After changing access mode, exposure mode, or the bind host, rerun `mullgate proxy validate` or `mullgate proxy start` so the shared selector listeners are re-rendered.',
+    };
+  }
+
   if (config.setup.exposure.mode === 'loopback') {
     return {
       bindPosture:
@@ -556,6 +815,11 @@ function isPrivateIpv4(value: string): boolean {
     (first === 172 && second >= 16 && second <= 31) ||
     (first === 192 && second === 168)
   );
+}
+
+function isLoopbackIpv4(value: string): boolean {
+  const [first] = parseIpv4Octets(value);
+  return first === 127;
 }
 
 function isTailscaleIpv4(value: string): boolean {

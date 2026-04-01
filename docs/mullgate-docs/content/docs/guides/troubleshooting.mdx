@@ -12,7 +12,6 @@ The primary diagnostic surfaces are:
 - `mullgate proxy status`
 - `mullgate proxy doctor`
 - `mullgate proxy access`
-- `mullgate proxy access`
 - `mullgate proxy validate --refresh`
 
 ## Common problems
@@ -39,16 +38,30 @@ In loopback mode without a base domain, direct bind-IP entrypoints are the canon
 
 Check for:
 
-- shared bind IPs in a multi-route non-loopback setup
+- the wrong host IP being shared with clients, especially `0.0.0.0` instead of the real Tailscale or LAN IP
 - missing or incorrect DNS records
 - exposure changes that have not been refreshed into runtime state
 
 What to do:
 
-1. assign one explicit bind IP per route
+1. use the real private-network host IP, such as the Mullgate host's Tailscale `100.x` address
 2. regenerate or review exposure output
 3. publish matching DNS A records
 4. run `mullgate proxy validate --refresh` or `mullgate proxy start`
+
+### Inline selector URLs do not select the expected route
+
+Check for:
+
+- the client URL using `scheme://selector@host:port` and dropping the empty password
+- a selector that does not match any saved route or relay filter
+- public exposure with an empty password but no explicit unsafe override
+
+What to do:
+
+1. switch to the guaranteed `scheme://selector:@host:port` form
+2. inspect selector examples with `mullgate proxy access`
+3. if the listener is public and the password is empty, add `--unsafe-public-empty-password` or set a real password
 
 ### Saved configuration changed but runtime does not match
 
@@ -103,7 +116,7 @@ Use `mullgate proxy status` and `mullgate proxy doctor` to identify which layer 
 A reliable sequence is:
 
 1. inspect configuration with `mullgate proxy access`
-2. inspect hostname guidance with `mullgate proxy access`
+2. inspect hostname guidance or selector examples with `mullgate proxy access`
 3. refresh derived runtime state with `mullgate proxy validate --refresh`
 4. check runtime truth with `mullgate proxy status`
 5. investigate routing or hostname drift with `mullgate proxy doctor`
@@ -114,7 +127,9 @@ A reliable sequence is:
 If the issue remains unclear, answer these questions explicitly:
 
 - what exposure mode is configured?
-- does every route have a distinct bind IP?
+- what access mode is configured?
+- if this is `public + published-routes`, does every route have a distinct bind IP?
+- if this is `private-network`, are clients using the Mullgate host's real private-network IP?
 - what does the hostname resolve to from the failing client?
 - was the runtime refreshed after the last config edit?
 - are you testing on Linux, macOS, or Windows?

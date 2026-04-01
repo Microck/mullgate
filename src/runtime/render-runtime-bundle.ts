@@ -4,9 +4,11 @@ import path from 'node:path';
 import {
   buildExposureContract,
   computePublishedPort,
+  deriveInlineSelectorBindHost,
   deriveRuntimeBackendHost,
   deriveRuntimeListenerHost,
   type ExposureContract,
+  usesInlineSelectorAccess,
 } from '../config/exposure-contract.js';
 import type { MullgatePaths } from '../config/paths.js';
 import { REDACTED } from '../config/redact.js';
@@ -322,6 +324,10 @@ function buildPublishedEndpoints(
   config: MullgateConfig,
   https: Extract<ResolvedHttpsRuntime, { ok: true }>,
 ): RuntimeEndpoint[] {
+  if (usesInlineSelectorAccess(config)) {
+    return [];
+  }
+
   return config.routing.locations.flatMap((route, index) => {
     const endpoints: RuntimeEndpoint[] = [
       createEndpoint(config, route, index, 'socks5', config.setup.bind.socksPort),
@@ -372,24 +378,23 @@ function buildRuntimeBundleManifest(
   https: Extract<ResolvedHttpsRuntime, { ok: true }>,
   publishedEndpoints: readonly RuntimeEndpoint[],
 ): RuntimeBundleManifest {
+  const inlineSelectorEnabled = usesInlineSelectorAccess(config);
   const routeManifests = config.routing.locations.map((route, index) => {
     const routeEndpoints = publishedEndpoints.filter(
       (endpoint) => endpoint.routeId === route.runtime.routeId,
     );
-    const socks5Port = computePublishedPort(
-      config.setup.exposure.mode,
-      config.setup.bind.socksPort,
-      index,
-    );
-    const httpPort = computePublishedPort(
-      config.setup.exposure.mode,
-      config.setup.bind.httpPort,
-      index,
-    );
     const httpsPort = https.enabled
       ? computePublishedPort(config.setup.exposure.mode, https.port, index)
       : null;
-    const listenerHost = deriveRuntimeListenerHost(config.setup.exposure.mode, route.bindIp);
+    const bindHost = inlineSelectorEnabled ? deriveInlineSelectorBindHost(config) : route.bindIp;
+    const listenerHost = deriveRuntimeListenerHost(config.setup.exposure.mode, bindHost);
+    const socks5Port = inlineSelectorEnabled
+      ? config.setup.bind.socksPort
+      : computePublishedPort(config.setup.exposure.mode, config.setup.bind.socksPort, index);
+    const httpPort = inlineSelectorEnabled
+      ? config.setup.bind.httpPort
+      : computePublishedPort(config.setup.exposure.mode, config.setup.bind.httpPort, index);
+    const resolvedHttpsPort = inlineSelectorEnabled && https.enabled ? https.port : httpsPort;
 
     return {
       routeId: route.runtime.routeId,
@@ -407,14 +412,17 @@ function buildRuntimeBundleManifest(
       listeners: {
         socks5: `${listenerHost}:${socks5Port}`,
         http: `${listenerHost}:${httpPort}`,
-        https: https.enabled && httpsPort !== null ? `${listenerHost}:${httpsPort}` : null,
+        https:
+          https.enabled && resolvedHttpsPort !== null
+            ? `${listenerHost}:${resolvedHttpsPort}`
+            : null,
       },
       services: {
         routeProxy: {
           name: ROUTE_PROXY_SERVICE,
         },
         backends: {
-          https: https.enabled ? route.runtime.httpsBackendName : null,
+          https: https.enabled && !inlineSelectorEnabled ? route.runtime.httpsBackendName : null,
         },
       },
       publishedEndpoints: routeEndpoints,
@@ -446,12 +454,14 @@ function buildRuntimeBundleManifest(
       routeProxy: {
         name: ROUTE_PROXY_SERVICE,
         listeners: {
-          socks5:
-            config.setup.exposure.mode === 'private-network'
+          socks5: inlineSelectorEnabled
+            ? `shared selector listener on ${CONTAINER_BIND_HOST}:${config.setup.bind.socksPort}`
+            : config.setup.exposure.mode === 'private-network'
               ? `shared host ${CONTAINER_BIND_HOST} with per-route ports starting at ${config.setup.bind.socksPort}`
               : `per-route bind IPs on port ${config.setup.bind.socksPort}`,
-          http:
-            config.setup.exposure.mode === 'private-network'
+          http: inlineSelectorEnabled
+            ? `shared selector listener on ${CONTAINER_BIND_HOST}:${config.setup.bind.httpPort}`
+            : config.setup.exposure.mode === 'private-network'
               ? `shared host ${CONTAINER_BIND_HOST} with per-route ports starting at ${config.setup.bind.httpPort}`
               : `per-route bind IPs on port ${config.setup.bind.httpPort}`,
         },
@@ -464,9 +474,11 @@ function buildRuntimeBundleManifest(
         name: ROUTING_LAYER_SERVICE,
         listeners: {
           https: https.enabled
-            ? config.setup.exposure.mode === 'private-network'
-              ? `shared host ${CONTAINER_BIND_HOST} with per-route ports starting at ${https.port}`
-              : `per-route bind IPs on port ${https.port}`
+            ? inlineSelectorEnabled
+              ? `shared selector listener on ${CONTAINER_BIND_HOST}:${https.port}`
+              : config.setup.exposure.mode === 'private-network'
+                ? `shared host ${CONTAINER_BIND_HOST} with per-route ports starting at ${https.port}`
+                : `per-route bind IPs on port ${https.port}`
             : null,
         },
         networkMode: HOST_NETWORK_MODE,
@@ -564,6 +576,7 @@ function buildHttpsSidecarConfig(
   config: MullgateConfig,
   https: Extract<ResolvedHttpsRuntime, { ok: true }>,
 ): string {
+  const inlineSelectorEnabled = usesInlineSelectorAccess(config);
   const lines = [
     '# Generated by Mullgate. Derived artifact; edit canonical config instead.',
     'global',
@@ -578,7 +591,17 @@ function buildHttpsSidecarConfig(
     '',
   ];
 
-  if (https.enabled && config.setup.exposure.mode === 'private-network') {
+  if (https.enabled && inlineSelectorEnabled) {
+    lines.push(
+      'frontend https_selector_proxy',
+      `  bind ${CONTAINER_BIND_HOST}:${https.port} ssl crt ${HAPROXY_COMBINED_PEM_PATH}`,
+      '  default_backend inline_selector_http_proxy',
+      '',
+      'backend inline_selector_http_proxy',
+      `  server inline-selector ${deriveRuntimeBackendHost(config.setup.exposure.mode, deriveInlineSelectorBindHost(config))}:${config.setup.bind.httpPort} check`,
+      '',
+    );
+  } else if (https.enabled && config.setup.exposure.mode === 'private-network') {
     for (const [index, route] of config.routing.locations.entries()) {
       const publishedPort = computePublishedPort(config.setup.exposure.mode, https.port, index);
       lines.push(
@@ -604,6 +627,10 @@ function buildHttpsSidecarConfig(
 
   for (const route of config.routing.locations) {
     if (https.enabled) {
+      if (inlineSelectorEnabled) {
+        continue;
+      }
+
       lines.push(
         `backend ${route.runtime.httpsBackendName}`,
         `  server ${route.runtime.routeId} ${deriveRuntimeBackendHost(config.setup.exposure.mode, route.bindIp)}:${resolveHttpBackendPort(config, route.runtime.routeId)} check`,

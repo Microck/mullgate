@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 
 import { writeCliReport } from '../cli-output.js';
-import type { ExposureMode } from '../config/schema.js';
+import type { AccessMode, ExposureMode } from '../config/schema.js';
 import { ConfigStore } from '../config/store.js';
 import { registerAutostartCommand } from './autostart.js';
 import {
@@ -69,7 +69,12 @@ function registerProxyAccessCommand(target: Command): void {
   target
     .command('access')
     .option('--mode <mode>', 'Set exposure mode to loopback, private-network, or public.')
+    .option('--access-mode <mode>', 'Set access mode to published-routes or inline-selector.')
     .option('--base-domain <domain>', 'Set the base domain used to derive per-route hostnames.')
+    .option(
+      '--unsafe-public-empty-password',
+      'Allow empty passwords when inline-selector is exposed on a public host.',
+    )
     .option(
       '--clear-base-domain',
       'Remove any configured base domain and fall back to alias/direct-IP hostnames.',
@@ -135,9 +140,11 @@ function registerProxyAccessCommand(target: Command): void {
       }
 
       let mode: ExposureMode | undefined;
+      let accessMode: AccessMode | undefined;
 
       try {
         mode = options.mode ? parseExposureModeOption(options.mode) : undefined;
+        accessMode = options.accessMode ? parseAccessModeOption(options.accessMode) : undefined;
       } catch (error) {
         writeCliReport({
           sink: process.stderr,
@@ -156,6 +163,10 @@ function registerProxyAccessCommand(target: Command): void {
 
       const updateResult = updateExposureConfig(result.config, store.paths.configFile, {
         ...(mode ? { mode } : {}),
+        ...(accessMode ? { accessMode } : {}),
+        ...(options.unsafePublicEmptyPassword !== undefined
+          ? { allowUnsafePublicEmptyPassword: options.unsafePublicEmptyPassword }
+          : {}),
         ...(options.baseDomain !== undefined ? { baseDomain: options.baseDomain } : {}),
         baseDomainSpecified: Boolean(options.baseDomain !== undefined || options.clearBaseDomain),
         ...(options.clearBaseDomain ? { baseDomain: null } : {}),
@@ -237,6 +248,8 @@ function renderProxyAccessUpdateError(
 function hasAccessUpdate(options: ExposureCommandOptions): boolean {
   return Boolean(
     options.mode ||
+      options.accessMode ||
+      options.unsafePublicEmptyPassword !== undefined ||
       options.baseDomain !== undefined ||
       options.clearBaseDomain ||
       options.routeBindIp?.length,
@@ -251,6 +264,16 @@ function parseExposureModeOption(raw: string): ExposureMode {
   }
 
   throw new Error('Exposure mode must be loopback, private-network, or public.');
+}
+
+function parseAccessModeOption(raw: string): AccessMode {
+  const normalized = raw.trim();
+
+  if (normalized === 'published-routes' || normalized === 'inline-selector') {
+    return normalized;
+  }
+
+  throw new Error('Access mode must be published-routes or inline-selector.');
 }
 
 function collectRepeatedValues(value: string, previous: string[]): string[] {

@@ -268,6 +268,7 @@ export async function runStartFlow(
 
   const validationResult = await validateRenderedRuntime(
     {
+      config: baseConfig,
       renderResult: runtimeProxyRender,
       bind: baseConfig.setup.bind,
       reportPath: store.paths.runtimeValidationReportFile,
@@ -299,7 +300,7 @@ export async function runStartFlow(
     baseConfig,
     'starting',
     attemptedAt,
-    `Validated shared entry tunnel plus ${runtimeProxyRender.routes.length} routed exits via ${validationResult.validationSource}; launching Docker Compose from ${runtimeBundle.artifactPaths.dockerComposePath}.`,
+    `Validated shared entry tunnel plus ${baseConfig.routing.locations.length} configured routes via ${validationResult.validationSource}; launching Docker Compose from ${runtimeBundle.artifactPaths.dockerComposePath}.`,
   );
   const startingPersist = await persistConfigOnly(store, startingConfig);
 
@@ -407,7 +408,8 @@ export async function runStartFlow(
       'phase: compose-launch',
       'source: docker-compose',
       `attempted at: ${report.attemptedAt}`,
-      `routes: ${runtimeProxyRender.routes.length}`,
+      `routes: ${baseConfig.routing.locations.length}`,
+      `access mode: ${baseConfig.setup.access.mode}`,
       `config: ${store.paths.configFile}`,
       `entry wireproxy config: ${runtimeProxyRender.artifactPaths.entryWireproxyConfigPath}`,
       `route proxy config: ${runtimeProxyRender.artifactPaths.routeProxyConfigPath}`,
@@ -424,6 +426,30 @@ export async function runStartFlow(
 }
 
 function renderExposureInventory(manifest: RuntimeBundleManifest): string[] {
+  if (manifest.exposure.accessMode === 'inline-selector' && manifest.exposure.inlineSelector) {
+    return [
+      `mode: ${manifest.exposure.mode}`,
+      `access mode: ${manifest.exposure.accessMode}`,
+      `base domain: ${manifest.exposure.baseDomain ?? 'n/a'}`,
+      `shared host: ${manifest.exposure.inlineSelector.sharedHost}`,
+      `selector field: ${manifest.exposure.inlineSelector.selectorField}`,
+      `guaranteed syntax: ${manifest.exposure.inlineSelector.syntax.guaranteed}`,
+      `best-effort syntax: ${manifest.exposure.inlineSelector.syntax.bestEffort}`,
+      `restart needed: ${manifest.exposure.runtimeStatus.restartRequired ? 'yes' : 'no'}`,
+      'selector examples:',
+      ...manifest.exposure.inlineSelector.examples.flatMap((example, index) => [
+        `${index + 1}. ${example.targetLabel}`,
+        `   selector: ${example.selector}`,
+        `   guaranteed: ${redactInlineSelectorUrl(example.guaranteedUrl)}`,
+        `   best-effort: ${example.bestEffortUrl}`,
+      ]),
+      'warnings:',
+      ...(manifest.exposure.warnings.length > 0
+        ? manifest.exposure.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`)
+        : ['- none']),
+    ];
+  }
+
   return [
     `mode: ${manifest.exposure.mode}`,
     `base domain: ${manifest.exposure.baseDomain ?? 'n/a'}`,
@@ -442,6 +468,10 @@ function renderExposureInventory(manifest: RuntimeBundleManifest): string[] {
       ? manifest.exposure.warnings.map((warning) => `- ${warning.severity}: ${warning.message}`)
       : ['- none']),
   ];
+}
+
+function redactInlineSelectorUrl(url: string): string {
+  return url.replace(/:\/\/([^:@]+):@/, '://$1:[redacted]@');
 }
 
 function writeStartResult(
@@ -525,6 +555,7 @@ function withStartOutcome(
 
 async function validateRenderedRuntime(
   input: {
+    readonly config: MullgateConfig;
     readonly renderResult: Awaited<ReturnType<typeof renderRuntimeProxyArtifacts>> & { ok: true };
     readonly bind: MullgateConfig['setup']['bind'];
     readonly reportPath: string;
@@ -538,6 +569,10 @@ async function validateRenderedRuntime(
     routeProxyConfigPath: input.renderResult.artifactPaths.routeProxyConfigPath,
     routeProxyConfigText: input.renderResult.routeProxyConfig,
     routes: input.renderResult.routes,
+    inlineSelectors: input.renderResult.inlineSelectors,
+    accessMode: input.renderResult.accessMode,
+    exposureMode: input.config.setup.exposure.mode,
+    bindHost: input.config.setup.bind.host,
     bind: {
       socksPort: input.bind.socksPort,
       httpPort: input.bind.httpPort,

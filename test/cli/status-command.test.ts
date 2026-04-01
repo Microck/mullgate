@@ -72,6 +72,10 @@ function createFixtureConfig(env: NodeJS.ProcessEnv): MullgateConfig {
         username: 'alice',
         password: 'proxy-password',
       },
+      access: {
+        mode: 'published-routes',
+        allowUnsafePublicEmptyPassword: false,
+      },
       exposure: {
         mode: 'loopback',
         allowLan: false,
