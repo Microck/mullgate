@@ -13,6 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [1.1.0] - 2026-04-01
+
+### Added
+
+- Tailscale-first `private-network` setup defaults that prefer the host's `100.x` address when available, making new trusted-network setups reachable from other Tailscale-connected machines without extra bind-IP planning
+
+### Changed
+
+- `private-network` exposure now publishes all configured routes on one shared trusted-network host IP and assigns unique per-route listener ports so hostname and direct-IP access work from other machines on the same Tailscale or private network
+- setup, access/export/status/doctor output, and operator docs now describe the shared-host private-network model instead of the older per-route private bind-IP model
+
+### Fixed
+
+- Linux autostart now enables and reports `loginctl` linger for the current user so the `systemd --user` Mullgate service comes back after a reboot instead of depending on an interactive login session
+
 ## [1.0.2] - 2026-03-28
 
 ### Changed
