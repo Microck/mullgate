@@ -164,6 +164,8 @@ What to expect:
 - selectors can refer to countries, country-city pairs, or exact relay hostnames such as `se`, `se-got`, or `se-got-wg-101`
 - `mullgate proxy export` does not emit route URLs in `inline-selector` mode
 
+For the supported selector families and patterns, see `docs/inline-selector-selectors.md`.
+
 Example client URLs:
 
 ```text

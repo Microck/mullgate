@@ -87,6 +87,7 @@ The usage guide documents these variables:
 - `private-network` uses one shared trusted-network host IP
 - `public + published-routes` requires one explicit bind IP per routed location, and multi-route public exposure requires distinct bind IPs
 - `inline-selector` uses one shared host because route selection moves to the username
+- in `private-network`, that shared host should be the real trusted-network IP clients can dial, such as the host's Tailscale `100.x` address, not `0.0.0.0`
 - CLI commands are the preferred way to mutate configuration state
 
 ## Operational guidance
@@ -99,3 +100,5 @@ For operators, the important validation loop is:
 2. review hostnames or selector examples with `mullgate proxy access`
 3. refresh derived state with `mullgate proxy validate --refresh`
 4. confirm runtime with `mullgate proxy status` and `mullgate proxy doctor`
+
+For selector syntax and supported selector families, see [Inline Selector Reference](/docs/guides/inline-selector-selectors).

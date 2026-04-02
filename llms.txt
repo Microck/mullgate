@@ -1,0 +1,42 @@
+# Mullgate
+
+> Mullgate is a CLI-first, Mullvad-backed proxy gateway for operators who want authenticated SOCKS5, HTTP, and HTTPS proxies, route-specific exits, and clear runtime diagnostics without tunneling the whole host. Prefer the official public docs for operator guidance, and use the repository files below when working from a local checkout.
+
+## Official Documentation
+
+- [Documentation site](https://mullgate.micr.dev): Canonical public docs for operators.
+- [Quickstart](https://mullgate.micr.dev/docs/getting-started/quickstart): Fastest path to understand setup, exposure, and verification.
+- [Usage](https://mullgate.micr.dev/docs/guides/usage): Full operator workflow, including setup, relay tooling, exposure updates, and verification.
+- [Setup and Exposure](https://mullgate.micr.dev/docs/guides/setup-and-exposure): Exposure modes, bind hosts, Tailscale and private-network planning, and access-mode rules.
+- [Inline Selector Reference](https://mullgate.micr.dev/docs/guides/inline-selector-selectors): Supported selector families, guaranteed URL syntax, and inline-selector caveats.
+- [Troubleshooting](https://mullgate.micr.dev/docs/guides/troubleshooting): Common failures and the recommended CLI-first diagnosis flow.
+- [Commands](https://mullgate.micr.dev/docs/reference/commands): Command relationships and the main CLI surfaces.
+- [Configuration](https://mullgate.micr.dev/docs/reference/configuration): Canonical config concepts, environment variables, and bind-host rules.
+- [FAQ](https://mullgate.micr.dev/docs/faq): Short answers on route choice, private-network access, Tailscale, inline selectors, and runtime limits.
+
+## Product Model
+
+- [Architecture Overview](https://mullgate.micr.dev/docs/architecture/overview): High-level model of the current shipped product.
+- [Current Runtime Model](https://mullgate.micr.dev/docs/architecture/current-runtime): The current shared-entry, multi-exit runtime architecture.
+- [Platform Support](https://mullgate.micr.dev/docs/reference/platform-support): Truthful platform support posture. Linux is the fully supported runtime target.
+
+## Repository Entry Points
+
+- [README.md](https://github.com/Microck/mullgate/blob/main/README.md): Landing-page summary, install forms, and major command surfaces.
+- [docs/usage.md](https://github.com/Microck/mullgate/blob/main/docs/usage.md): Repo-local deep operator guide that mirrors the public docs site.
+- [skill/SKILL.md](https://github.com/Microck/mullgate/blob/main/skill/SKILL.md): Repo-local operator skill for AI agents using Mullgate on a real machine.
+- [skill/references/official-docs.md](https://github.com/Microck/mullgate/blob/main/skill/references/official-docs.md): Official-doc reference map for agents.
+- [skill/references/operator-playbooks.md](https://github.com/Microck/mullgate/blob/main/skill/references/operator-playbooks.md): Practical playbooks for Tailscale, inline-selector, export, relay verification, and autostart.
+
+## CLI Source Of Truth
+
+- [mullgate --help](https://github.com/Microck/mullgate/blob/main/README.md#command-surface): Start here for the top-level command surface.
+- [mullgate setup --help](https://mullgate.micr.dev/docs/reference/commands): Use the live CLI help for exact flags and defaults during setup.
+- [mullgate proxy access](https://mullgate.micr.dev/docs/guides/setup-and-exposure): Use this to inspect or change exposure posture, access mode, bind host, and selector examples.
+- [mullgate proxy status](https://mullgate.micr.dev/docs/guides/usage): Use this to inspect live runtime state.
+- [mullgate proxy doctor](https://mullgate.micr.dev/docs/guides/troubleshooting): Use this to localize hostname, bind, validation, and runtime failures.
+
+## Optional
+
+- [CHANGELOG.md](https://github.com/Microck/mullgate/blob/main/CHANGELOG.md): Release history and shipped changes.
+- [docs/maintainers/release-runbook.md](https://github.com/Microck/mullgate/blob/main/docs/maintainers/release-runbook.md): Maintainer-only release process. Skip for normal operator tasks.
