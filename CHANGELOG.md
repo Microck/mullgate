@@ -11,9 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Fixed
+
+## [1.2.0] - 2026-04-01
+
+### Added
+
+- `inline-selector` access mode, which exposes one shared listener per protocol and lets clients choose the route or exact relay inline in the proxy username
+
+### Changed
+
 - README, usage guides, docs-site pages, and command/config references now document the `inline-selector` access mode, the guaranteed `selector:@host:port` syntax, the public empty-password safety override, and the current `published-routes`-only export limitation
+- operator guidance and the bundled `SKILL.md` now map Tailscale, private-network, inline-selector, and export requests to the correct Mullgate workflow
 
 ### Fixed
+
+- release packaging now builds the macOS x64 standalone artifact on a supported runner so GitHub Releases continue to ship the full macOS binary set
 
 ## [1.1.0] - 2026-04-01
 
