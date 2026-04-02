@@ -169,6 +169,8 @@ What to expect:
 
 Use the guaranteed `scheme://selector:@host:port` form. The shorter `scheme://selector@host:port` form is best-effort only because some clients treat a missing password inconsistently.
 
+For the supported selector families and patterns, see [Inline Selector Reference](/docs/guides/inline-selector-selectors).
+
 ## Unsupported local config versions
 
 The current CLI only operates on the current v2 config/runtime shape.
@@ -301,6 +303,8 @@ Mullgate exposes proxy entrypoints in two access models:
 
 - **published-routes** — route-aware hostnames or per-route ports such as `sweden-gothenburg.proxy.example.com:1080` or `100.124.44.113:1081`
 - **inline-selector** — one shared listener per protocol, with the selector in the username such as `socks5://se:@100.124.44.113:1080`
+
+For the full selector syntax and supported selector families, see [Inline Selector Reference](/docs/guides/inline-selector-selectors).
 
 ### When hostname access works
 
@@ -450,6 +454,7 @@ In day-to-day use, the safest pattern is:
 ## Related guides
 
 - [Setup and Exposure](/docs/guides/setup-and-exposure)
+- [Inline Selector Reference](/docs/guides/inline-selector-selectors)
 - [Troubleshooting](/docs/guides/troubleshooting)
 - [Commands](/docs/reference/commands)
 - [Platform Support](/docs/reference/platform-support)
