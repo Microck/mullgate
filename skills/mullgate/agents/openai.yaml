@@ -1,4 +1,0 @@
-interface:
-  display_name: "Mullgate"
-  short_description: "Ship truthful Mullgate CLI changes"
-  default_prompt: "Use $mullgate to implement or ship a truthful Mullgate CLI change."
