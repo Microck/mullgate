@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [1.2.1] - 2026-04-02
+
+### Fixed
+
+- passwordless `inline-selector` runtimes now render valid 3proxy auth and per-relay SOCKS parent definitions, so selector-only private-network access works with empty passwords and exact relay selectors
+- `mullgate proxy start` now forces Docker Compose to recreate the runtime services, ensuring regenerated bind-mounted proxy configs actually take effect after setup or config changes
+
 ## [1.2.0] - 2026-04-01
 
 ### Added

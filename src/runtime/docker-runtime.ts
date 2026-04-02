@@ -185,7 +185,7 @@ export async function startDockerRuntime(
 
   const launchCommand = buildCommand(
     dockerBinary,
-    ['compose', '--file', options.composeFilePath, 'up', '--detach'],
+    ['compose', '--file', options.composeFilePath, 'up', '--detach', '--force-recreate'],
     cwd,
   );
   const launchResult = await runner(launchCommand.binary, launchCommand.args, {
@@ -217,7 +217,10 @@ export async function startDockerRuntime(
       composeFilePath: options.composeFilePath,
       command: launchCommand,
       message: 'Docker Compose failed to start the Mullgate runtime bundle.',
-      cause: summarizeProcessFailure(launchResult, 'docker compose up --detach failed.'),
+      cause: summarizeProcessFailure(
+        launchResult,
+        'docker compose up --detach --force-recreate failed.',
+      ),
       artifactPath: options.composeFilePath,
       exitCode: launchResult.exitCode,
     };

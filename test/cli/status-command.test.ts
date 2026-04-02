@@ -308,7 +308,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
         routeHostname: null,
         routeBindIp: null,
         serviceName: null,
-        command: `docker compose --file ${fixturePaths.runtimeComposeFile} up --detach`,
+        command: `docker compose --file ${fixturePaths.runtimeComposeFile} up --detach --force-recreate`,
       },
     });
     const stdout = createBufferSink();

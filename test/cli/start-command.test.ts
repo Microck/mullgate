@@ -270,9 +270,16 @@ describe('mullgate start command', () => {
           composeFilePath: options.composeFilePath,
           command: {
             binary: 'docker',
-            args: ['compose', '--file', options.composeFilePath, 'up', '--detach'],
+            args: [
+              'compose',
+              '--file',
+              options.composeFilePath,
+              'up',
+              '--detach',
+              '--force-recreate',
+            ],
             cwd: path.dirname(options.composeFilePath),
-            rendered: `docker compose --file ${options.composeFilePath} up --detach`,
+            rendered: `docker compose --file ${options.composeFilePath} up --detach --force-recreate`,
           },
           message: 'Docker Compose launched the Mullgate runtime bundle in detached mode.',
           stdout:
@@ -390,7 +397,7 @@ describe('mullgate start command', () => {
         "routeHostname": null,
         "routeBindIp": null,
         "serviceName": null,
-        "command": "docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach"
+        "command": "docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach --force-recreate"
       }"
     `);
   });
@@ -444,9 +451,16 @@ describe('mullgate start command', () => {
         composeFilePath: options.composeFilePath,
         command: {
           binary: 'docker',
-          args: ['compose', '--file', options.composeFilePath, 'up', '--detach'],
+          args: [
+            'compose',
+            '--file',
+            options.composeFilePath,
+            'up',
+            '--detach',
+            '--force-recreate',
+          ],
           cwd: path.dirname(options.composeFilePath),
-          rendered: `docker compose --file ${options.composeFilePath} up --detach`,
+          rendered: `docker compose --file ${options.composeFilePath} up --detach --force-recreate`,
         },
         message: 'Docker Compose launched the Mullgate runtime bundle in detached mode.',
         stdout:
@@ -535,9 +549,16 @@ describe('mullgate start command', () => {
           composeFilePath: options.composeFilePath,
           command: {
             binary: 'docker',
-            args: ['compose', '--file', options.composeFilePath, 'up', '--detach'],
+            args: [
+              'compose',
+              '--file',
+              options.composeFilePath,
+              'up',
+              '--detach',
+              '--force-recreate',
+            ],
             cwd: path.dirname(options.composeFilePath),
-            rendered: `docker compose --file ${options.composeFilePath} up --detach`,
+            rendered: `docker compose --file ${options.composeFilePath} up --detach --force-recreate`,
           },
           message: 'Docker Compose failed to start the Mullgate runtime bundle.',
           cause:
@@ -590,7 +611,7 @@ describe('mullgate start command', () => {
       service: route-proxy
       artifact: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
       docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
-      command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach
+      command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach --force-recreate
       reason: Docker Compose failed to start the Mullgate runtime bundle.
       cause: service route-proxy crashed while booting at-vie-wg-001 for proxy-password / 123456789012 / private-key-value-2 while reading -----BEGIN PRIVATE KEY-----/nfixture/n-----END PRIVATE KEY-----
       config: /tmp/mullgate-home/config/mullgate/config.json
@@ -615,7 +636,7 @@ describe('mullgate start command', () => {
         "routeHostname": "at-vie-wg-001",
         "routeBindIp": "127.0.0.2",
         "serviceName": "route-proxy",
-        "command": "docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach"
+        "command": "docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach --force-recreate"
       }"
     `);
     },

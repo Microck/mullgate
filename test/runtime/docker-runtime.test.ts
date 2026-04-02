@@ -121,9 +121,17 @@ describe('startDockerRuntime', () => {
       composeFilePath: '/tmp/mullgate/runtime/docker-compose.yml',
       command: {
         binary: 'docker',
-        args: ['compose', '--file', '/tmp/mullgate/runtime/docker-compose.yml', 'up', '--detach'],
+        args: [
+          'compose',
+          '--file',
+          '/tmp/mullgate/runtime/docker-compose.yml',
+          'up',
+          '--detach',
+          '--force-recreate',
+        ],
         cwd: '/tmp/mullgate/runtime',
-        rendered: 'docker compose --file /tmp/mullgate/runtime/docker-compose.yml up --detach',
+        rendered:
+          'docker compose --file /tmp/mullgate/runtime/docker-compose.yml up --detach --force-recreate',
       },
       message: 'Docker Compose failed to start the Mullgate runtime bundle.',
       cause: 'failed to pull image "backplane/wireproxy:20260320"',
@@ -159,9 +167,17 @@ describe('startDockerRuntime', () => {
       composeFilePath: '/tmp/mullgate/runtime/docker-compose.yml',
       command: {
         binary: 'docker',
-        args: ['compose', '--file', '/tmp/mullgate/runtime/docker-compose.yml', 'up', '--detach'],
+        args: [
+          'compose',
+          '--file',
+          '/tmp/mullgate/runtime/docker-compose.yml',
+          'up',
+          '--detach',
+          '--force-recreate',
+        ],
         cwd: '/tmp/mullgate/runtime',
-        rendered: 'docker compose --file /tmp/mullgate/runtime/docker-compose.yml up --detach',
+        rendered:
+          'docker compose --file /tmp/mullgate/runtime/docker-compose.yml up --detach --force-recreate',
       },
       message: 'Docker Compose launched the Mullgate runtime bundle in detached mode.',
       stdout:

@@ -416,7 +416,7 @@ describe('mullgate doctor command', () => {
         routeHostname: null,
         routeBindIp: null,
         serviceName: null,
-        command: `docker compose --file ${fixturePaths.runtimeComposeFile} up --detach`,
+        command: `docker compose --file ${fixturePaths.runtimeComposeFile} up --detach --force-recreate`,
       },
     });
     const stdout = createBufferSink();
