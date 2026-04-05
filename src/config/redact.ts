@@ -1,4 +1,8 @@
-import type { MullgateConfig } from './schema.js';
+import {
+  type MullgateConfig,
+  type SensitiveConfigFieldPath,
+  sensitiveConfigFieldPaths,
+} from './schema.js';
 
 export const REDACTED = '[redacted]';
 
@@ -59,12 +63,31 @@ function redactOptionalText(value: string | null, config: MullgateConfig): strin
   return value ? redactSensitiveText(value, config) : value;
 }
 
-function collectKnownSecrets(config: MullgateConfig): string[] {
-  return [
-    config.mullvad.accountNumber,
-    config.setup.auth.password,
-    config.mullvad.wireguard.privateKey,
-  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+/**
+ * Sensitive fields from `src/config/schema.ts`. This list MUST be kept in sync
+ * whenever the config schema changes:
+ * - `setup.auth.password`
+ * - `mullvad.accountNumber`
+ * - `mullvad.wireguard.privateKey`
+ */
+export function collectKnownSecrets(config: MullgateConfig): string[] {
+  return sensitiveConfigFieldPaths
+    .map((path) => readSensitiveConfigField(config, path))
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+}
+
+function readSensitiveConfigField(
+  config: MullgateConfig,
+  path: SensitiveConfigFieldPath,
+): string | null {
+  switch (path) {
+    case 'setup.auth.password':
+      return config.setup.auth.password;
+    case 'mullvad.accountNumber':
+      return config.mullvad.accountNumber;
+    case 'mullvad.wireguard.privateKey':
+      return config.mullvad.wireguard.privateKey;
+  }
 }
 
 function redactProvisioning(provisioning: MullgateConfig['mullvad']): MullgateConfig['mullvad'] {

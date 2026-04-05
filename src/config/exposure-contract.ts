@@ -157,6 +157,16 @@ export function validateAccessSettings(input: {
     };
   }
 
+  if (
+    input.allowUnsafePublicEmptyPassword &&
+    input.exposureMode === 'public' &&
+    input.password.length === 0
+  ) {
+    console.warn(
+      'SECURITY WARNING: Public exposure is enabled with an empty proxy password because `setup.access.allowUnsafePublicEmptyPassword=true`. This publishes an internet-reachable listener without a password gate. Proceed only if this is deliberate and you accept the risk.',
+    );
+  }
+
   return { ok: true };
 }
 
