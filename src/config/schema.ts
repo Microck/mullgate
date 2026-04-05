@@ -196,6 +196,14 @@ export const mullgateConfigSchema = z.object({
   diagnostics: diagnosticsSchema,
 });
 
+export const sensitiveConfigFieldPaths = [
+  'setup.auth.password',
+  'mullvad.accountNumber',
+  'mullvad.wireguard.privateKey',
+] as const;
+
+export type SensitiveConfigFieldPath = (typeof sensitiveConfigFieldPaths)[number];
+
 export const mullgateConfigInputSchema = z.object({
   version: z.literal(CONFIG_VERSION),
   createdAt: timestampString,
