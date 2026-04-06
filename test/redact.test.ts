@@ -4,8 +4,8 @@ import { resolveMullgatePaths } from '../src/config/paths.js';
 import { collectKnownSecrets } from '../src/config/redact.js';
 import {
   CONFIG_VERSION,
-  mullgateConfigSchema,
   type MullgateConfig,
+  mullgateConfigSchema,
   sensitiveConfigFieldPaths,
 } from '../src/config/schema.js';
 import { createFixtureRoute, createFixtureRuntime } from './helpers/mullgate-fixtures.js';

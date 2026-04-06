@@ -32,7 +32,6 @@ const DEFAULT_ROUTE_CHECK_IP = '1.1.1.1';
 const DEFAULT_OUTPUT_ROOT = '.tmp/m004-feasibility';
 const DEFAULT_WIREPROXY_IMAGE = 'backplane/wireproxy:20260320';
 const DEFAULT_WIREPROXY_CONTAINER_PATH = '/etc/wireproxy/wireproxy.conf';
-const _DEFAULT_HTTP_PORT = 8081;
 const DEFAULT_DNS_SERVER = '10.64.0.1';
 const DEFAULT_WIREGUARD_PORT = 51820;
 const DEFAULT_LOGICAL_EXIT_COUNT = 3 as const;

@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
-
-import type { MullvadRelay } from '../../src/mullvad/fetch-relays.js';
 import {
   createLocationAliasCatalog,
   normalizeLocationToken,
   resolveLocationAlias,
 } from '../../src/domain/location-aliases.js';
+import type { MullvadRelay } from '../../src/mullvad/fetch-relays.js';
 
 function createRelay(overrides: Partial<MullvadRelay> & { hostname: string }): MullvadRelay {
   return {
@@ -43,7 +42,7 @@ describe('normalizeLocationToken', () => {
 
   it('removes curly/smart apostrophes', () => {
     expect(normalizeLocationToken("it's")).toBe('its');
-    expect(normalizeLocationToken("don\u2019t")).toBe('dont');
+    expect(normalizeLocationToken('don\u2019t')).toBe('dont');
   });
 
   it('collapses runs of non-alphanumeric chars into single dashes', () => {
@@ -72,7 +71,7 @@ describe('normalizeLocationToken', () => {
   });
 
   it('handles special unicode characters', () => {
-    expect(normalizeLocationToken('Côte d\'Ivoire')).toBe('cote-divoire');
+    expect(normalizeLocationToken("Côte d'Ivoire")).toBe('cote-divoire');
     expect(normalizeLocationToken('Reykjavík')).toBe('reykjavik');
     expect(normalizeLocationToken('Łódź')).toBe('odz');
   });
@@ -83,11 +82,21 @@ describe('createLocationAliasCatalog', () => {
     const relays = [
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
       createRelay({
         hostname: 'se-sto-002',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ];
 
@@ -96,10 +105,10 @@ describe('createLocationAliasCatalog', () => {
     if (!result.ok) return;
 
     expect(result.value.countries).toHaveLength(1);
-    expect(result.value.countries[0]!.code).toBe('se');
+    expect(result.value.countries[0]?.code).toBe('se');
 
     expect(result.value.cities).toHaveLength(1);
-    expect(result.value.cities[0]!.code).toBe('sto');
+    expect(result.value.cities[0]?.code).toBe('sto');
 
     expect(result.value.relays).toHaveLength(2);
   });
@@ -112,7 +121,12 @@ describe('createLocationAliasCatalog', () => {
       }),
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ];
 
@@ -120,15 +134,20 @@ describe('createLocationAliasCatalog', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.value.countries[0]!.code).toBe('se');
-    expect(result.value.countries[1]!.code).toBe('us');
+    expect(result.value.countries[0]?.code).toBe('se');
+    expect(result.value.countries[1]?.code).toBe('us');
   });
 
   it('builds country aliases including code and normalized name', () => {
     const relays = [
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ];
 
@@ -136,16 +155,21 @@ describe('createLocationAliasCatalog', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    const country = result.value.countries[0]!;
-    expect(country.aliases).toContain('se');
-    expect(country.aliases).toContain('sweden');
+    const country = result.value.countries[0];
+    expect(country?.aliases).toContain('se');
+    expect(country?.aliases).toContain('sweden');
   });
 
   it('builds city aliases including code-based and name-based', () => {
     const relays = [
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ];
 
@@ -153,11 +177,11 @@ describe('createLocationAliasCatalog', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    const city = result.value.cities[0]!;
-    expect(city.aliases).toContain('se-sto');
-    expect(city.aliases).toContain('stockholm');
-    expect(city.aliases).toContain('se-stockholm');
-    expect(city.aliases).toContain('sweden-stockholm');
+    const city = result.value.cities[0];
+    expect(city?.aliases).toContain('se-sto');
+    expect(city?.aliases).toContain('stockholm');
+    expect(city?.aliases).toContain('se-stockholm');
+    expect(city?.aliases).toContain('sweden-stockholm');
   });
 
   it('returns collision failure for duplicate country code with different names', () => {
@@ -219,15 +243,20 @@ describe('createLocationAliasCatalog', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    const city = result.value.cities[0]!;
-    expect(city.aliases).toContain('zurich');
+    const city = result.value.cities[0];
+    expect(city?.aliases).toContain('zurich');
   });
 
   it('creates an index with normalized alias keys', () => {
     const relays = [
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ];
 
@@ -236,10 +265,10 @@ describe('createLocationAliasCatalog', () => {
     if (!result.ok) return;
 
     const index = result.value.index;
-    expect(index['se']).toBeDefined();
-    expect(index['sweden']).toBeDefined();
+    expect(index.se).toBeDefined();
+    expect(index.sweden).toBeDefined();
     expect(index['se-sto']).toBeDefined();
-    expect(index['stockholm']).toBeDefined();
+    expect(index.stockholm).toBeDefined();
     expect(index['se-sto-001']).toBeDefined();
   });
 });
@@ -257,7 +286,12 @@ describe('resolveLocationAlias', () => {
     const catalog = makeCatalog([
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ]);
 
@@ -274,7 +308,12 @@ describe('resolveLocationAlias', () => {
     const catalog = makeCatalog([
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ]);
 
@@ -289,7 +328,12 @@ describe('resolveLocationAlias', () => {
     const catalog = makeCatalog([
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ]);
 
@@ -298,14 +342,19 @@ describe('resolveLocationAlias', () => {
     if (!result.ok) return;
 
     expect(result.value.kind).toBe('city');
-    expect(result.value.cityCode).toBe('sto');
+    expect((result.value as { cityCode: string }).cityCode).toBe('sto');
   });
 
   it('resolves a relay hostname', () => {
     const catalog = makeCatalog([
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ]);
 
@@ -314,14 +363,19 @@ describe('resolveLocationAlias', () => {
     if (!result.ok) return;
 
     expect(result.value.kind).toBe('relay');
-    expect(result.value.hostname).toBe('se-sto-001');
+    expect((result.value as { hostname: string }).hostname).toBe('se-sto-001');
   });
 
   it('returns ALIAS_NOT_FOUND for unknown alias', () => {
     const catalog = makeCatalog([
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ]);
 
@@ -334,7 +388,7 @@ describe('resolveLocationAlias', () => {
   });
 
   it('returns ALIAS_AMBIGUOUS for alias matching multiple targets', () => {
-    const catalog = makeCatalog([
+    const _catalog = makeCatalog([
       createRelay({
         hostname: 'xx-aaa-001',
         location: { countryCode: 'xx', countryName: 'Xland', cityCode: 'aaa', cityName: 'CityA' },
@@ -371,7 +425,12 @@ describe('resolveLocationAlias', () => {
     const catalog = makeCatalog([
       createRelay({
         hostname: 'se-sto-001',
-        location: { countryCode: 'se', countryName: 'Sweden', cityCode: 'sto', cityName: 'Stockholm' },
+        location: {
+          countryCode: 'se',
+          countryName: 'Sweden',
+          cityCode: 'sto',
+          cityName: 'Stockholm',
+        },
       }),
     ]);
 

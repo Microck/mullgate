@@ -14,18 +14,16 @@ import {
 } from '../../src/config/exposure-contract.js';
 import type { MullgateConfig } from '../../src/config/schema.js';
 
-function createMinimalConfig(
-  overrides?: {
-    exposureMode?: 'loopback' | 'private-network' | 'public';
-    accessMode?: 'published-routes' | 'inline-selector';
-    baseDomain?: string | null;
-    password?: string;
-    allowUnsafePublicEmptyPassword?: boolean;
-    routeCount?: number;
-    runtimePhase?: 'unvalidated' | 'validated' | 'starting' | 'running' | 'error';
-    runtimeMessage?: string | null;
-  },
-): MullgateConfig {
+function createMinimalConfig(overrides?: {
+  exposureMode?: 'loopback' | 'private-network' | 'public';
+  accessMode?: 'published-routes' | 'inline-selector';
+  baseDomain?: string | null;
+  password?: string;
+  allowUnsafePublicEmptyPassword?: boolean;
+  routeCount?: number;
+  runtimePhase?: 'unvalidated' | 'validated' | 'starting' | 'running' | 'error';
+  runtimeMessage?: string | null;
+}): MullgateConfig {
   const exposureMode = overrides?.exposureMode ?? 'loopback';
   const accessMode = overrides?.accessMode ?? 'published-routes';
   const routeCount = overrides?.routeCount ?? 1;
