@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { collectKnownSecrets, REDACTED, redactSensitiveText } from '../../src/config/redact.js';
-import {
-  sensitiveConfigFieldPaths,
-  type MullgateConfig,
-} from '../../src/config/schema.js';
+import { type MullgateConfig, sensitiveConfigFieldPaths } from '../../src/config/schema.js';
 
 function createMinimalConfig(overrides?: {
   accountNumber?: string;
@@ -175,7 +172,9 @@ describe('redactSensitiveText', () => {
     const text = 'first:123456 second:123456 third:123456';
     const result = redactSensitiveText(text, config);
     expect(result).not.toContain('123456');
-    const count = (result.match(new RegExp(REDACTED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) ?? []).length;
+    const count = (
+      result.match(new RegExp(REDACTED.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) ?? []
+    ).length;
     expect(count).toBe(3);
   });
 
@@ -214,7 +213,7 @@ describe('collectKnownSecrets schema sync', () => {
           break;
       }
       expect(secret, `${path} should be non-empty in fixture`).toBeTruthy();
-      expect(collected.has(secret!), `${path} missing from collectKnownSecrets()`).toBe(true);
+      expect(collected.has(secret), `${path} missing from collectKnownSecrets()`).toBe(true);
     }
   });
 });
