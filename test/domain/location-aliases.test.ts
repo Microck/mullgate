@@ -342,7 +342,7 @@ describe('resolveLocationAlias', () => {
     if (!result.ok) return;
 
     expect(result.value.kind).toBe('city');
-    expect(result.value.cityCode).toBe('sto');
+    expect((result.value as { cityCode: string }).cityCode).toBe('sto');
   });
 
   it('resolves a relay hostname', () => {
@@ -363,7 +363,7 @@ describe('resolveLocationAlias', () => {
     if (!result.ok) return;
 
     expect(result.value.kind).toBe('relay');
-    expect(result.value.hostname).toBe('se-sto-001');
+    expect((result.value as { hostname: string }).hostname).toBe('se-sto-001');
   });
 
   it('returns ALIAS_NOT_FOUND for unknown alias', () => {

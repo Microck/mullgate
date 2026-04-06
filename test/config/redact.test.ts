@@ -200,7 +200,7 @@ describe('collectKnownSecrets schema sync', () => {
     const collected = new Set(collectKnownSecrets(config));
 
     for (const path of sensitiveConfigFieldPaths) {
-      let secret: string | undefined;
+      let secret: string | null | undefined;
       switch (path) {
         case 'setup.auth.password':
           secret = config.setup.auth.password;
@@ -213,7 +213,9 @@ describe('collectKnownSecrets schema sync', () => {
           break;
       }
       expect(secret, `${path} should be non-empty in fixture`).toBeTruthy();
-      expect(collected.has(secret), `${path} missing from collectKnownSecrets()`).toBe(true);
+      expect(collected.has(String(secret)), `${path} missing from collectKnownSecrets()`).toBe(
+        true,
+      );
     }
   });
 });
