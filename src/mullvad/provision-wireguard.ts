@@ -380,8 +380,8 @@ function createProvisionFailure(input: {
     endpoint: input.endpoint,
     checkedAt: input.checkedAt,
     code: input.code,
-    message: sanitizeText(input.message),
-    ...(input.cause ? { cause: sanitizeText(input.cause) } : {}),
+    message: input.message,
+    ...(input.cause ? { cause: input.cause } : {}),
     ...(input.statusCode !== undefined ? { statusCode: input.statusCode } : {}),
     ...(input.retryAfterMs !== undefined ? { retryAfterMs: input.retryAfterMs } : {}),
     retryable: input.retryable,
@@ -452,8 +452,4 @@ function formatZodIssues(error: z.ZodError): string {
   return error.issues
     .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
     .join('; ');
-}
-
-function sanitizeText(value: string): string {
-  return value;
 }
