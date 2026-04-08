@@ -13,6 +13,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [1.3.0] - 2026-04-08
+
+### Added
+
+- `mullgate proxy stop`, `mullgate proxy restart`, `mullgate proxy logs`, `mullgate version`, and `mullgate completions <bash|zsh|fish>` for day-two runtime control, support reporting, and shell integration
+- an env-gated end-to-end runtime test that exercises the real `setup -> start -> status -> doctor -> stop` operator path when live Mullvad credentials are available
+
+### Changed
+
+- `mullgate proxy start` now supports `--dry-run` so operators can rerender and validate runtime artifacts without launching Docker
+- relay list output now renders as an aligned table, and stale saved relay catalogs now opportunistically refresh during `mullgate proxy start`
+- README, usage docs, hosted docs command reference, and the bundled operator skill now document the expanded runtime-control and support-command surface
+- docs home now includes an interactive terminal walkthrough and the docs search trigger is enabled in the hosted layout
+- build output now ships source maps and Vitest now enforces coverage thresholds for the repo
+
+### Fixed
+
+- bash, zsh, and fish completion generation now matches the actual `mullgate config path` command instead of advertising a non-existent `config paths` subcommand
+
 ## [1.2.1] - 2026-04-02
 
 ### Fixed

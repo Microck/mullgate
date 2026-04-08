@@ -1,8 +1,9 @@
 import Link from 'next/link';
+import { TerminalDemo } from '@/components/terminal-demo';
 
 export default function HomePage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-4xl flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-1 flex-col items-center justify-center px-6 py-16 text-center">
       <p className="mb-3 text-sm font-medium uppercase tracking-[0.2em] text-fd-muted-foreground">
         Mullgate Documentation
       </p>
@@ -24,6 +25,7 @@ export default function HomePage() {
           Quickstart
         </Link>
       </div>
+      <TerminalDemo />
     </main>
   );
 }

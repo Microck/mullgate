@@ -55,13 +55,19 @@ flowchart TB
         export[mullgate proxy export]
         exportRegions[mullgate proxy export --regions]
         relays[mullgate proxy relay list or probe]
-        recommend[mullgate proxy relay recommend]
-        validate[mullgate proxy validate --refresh]
-        start[mullgate proxy start]
-        status[mullgate proxy status]
-        doctor[mullgate proxy doctor]
-        autostart[mullgate proxy autostart]
-        path[mullgate config path]
+    recommend[mullgate proxy relay recommend]
+    validate[mullgate proxy validate --refresh]
+    start[mullgate proxy start]
+    dryRun[mullgate proxy start --dry-run]
+    stop[mullgate proxy stop]
+    restart[mullgate proxy restart]
+    status[mullgate proxy status]
+    logs[mullgate proxy logs]
+    doctor[mullgate proxy doctor]
+    autostart[mullgate proxy autostart]
+    version[mullgate version]
+    completions[mullgate completions bash]
+    path[mullgate config path]
     end
 
     subgraph state[Canonical config and saved state]
@@ -105,9 +111,15 @@ flowchart TB
     operator --> recommend
     operator --> validate
     operator --> start
+    operator --> dryRun
+    operator --> stop
+    operator --> restart
     operator --> status
+    operator --> logs
     operator --> doctor
     operator --> autostart
+    operator --> version
+    operator --> completions
     operator --> path
 
     setup --> config
@@ -203,8 +215,10 @@ mullgate setup --non-interactive
 mullgate proxy access
 mullgate proxy export --regions
 mullgate proxy export --guided
+mullgate proxy start --dry-run
 mullgate proxy start
 mullgate proxy status
+mullgate proxy logs --tail 50
 mullgate proxy doctor
 ```
 
@@ -238,14 +252,21 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 | `mullgate proxy relay recommend` | `--country`, `--count`, `--apply` | preview or pin an exact relay choice |
 | `mullgate proxy relay verify` | `--route` | verify a configured route across the published proxy protocols |
 | `mullgate proxy validate` | `--refresh` | refresh saved validation metadata and config-derived artifacts |
-| `mullgate proxy start` | none | launch the runtime |
+| `mullgate proxy start` | `--dry-run` | render and validate artifacts, then optionally launch the runtime |
+| `mullgate proxy stop` | none | stop the saved Docker runtime bundle without rerendering artifacts |
+| `mullgate proxy restart` | none | stop the current bundle, rerender artifacts, and start it again |
 | `mullgate proxy status` | none | inspect live runtime state |
+| `mullgate proxy logs` | `--tail`, `--follow` | read the saved Docker Compose logs for the current runtime bundle |
 | `mullgate proxy doctor` | none | diagnose routing, hostname, and runtime failures |
 | `mullgate proxy autostart` | `enable`, `disable`, `status` | manage login-time startup on supported platforms |
 | `mullgate config path` | none | print config, state, cache, and runtime paths |
 | `mullgate config show` | none | print the saved canonical config |
 | `mullgate config get` | `<key>` | read one saved config value |
 | `mullgate config set` | `<key> <value>` | update one saved config value |
+| `mullgate version` | none | print CLI version plus support metadata |
+| `mullgate completions <shell>` | `bash`, `zsh`, `fish` | generate shell completion scripts |
+
+for operator workflows, `mullgate proxy start --dry-run` is the safe preflight path before touching Docker, `mullgate proxy logs` is the first live-runtime evidence surface after `status`, and `mullgate proxy restart` is the canonical "rerender + bounce" shortcut once setup is already saved.
 
 ## examples
 

@@ -5,15 +5,10 @@ import path from 'node:path';
 
 import type { Command } from 'commander';
 
-import { writeCliReport } from '../cli-output.js';
+import { type WritableTextSink, writeCliReport } from '../cli-output.js';
 import { resolveMullgatePaths } from '../config/paths.js';
 
 const AUTOSTART_UNIT_NAME = 'mullgate.service';
-
-type WritableTextSink = {
-  write(chunk: string): unknown;
-  isTTY?: boolean;
-};
 
 type SystemctlResult = {
   readonly code: number;

@@ -9,10 +9,11 @@ import {
   verifyHttpsAssets,
   withRuntimeStatus,
 } from '../app/setup-runner.js';
-import { writeCliReport } from '../cli-output.js';
+import { type WritableTextSink, writeCliReport } from '../cli-output.js';
 import type { MullgatePaths } from '../config/paths.js';
 import type { MullgateConfig, RuntimeStartDiagnostic } from '../config/schema.js';
 import { ConfigStore } from '../config/store.js';
+import { fetchRelays, type MullvadRelayCatalog } from '../mullvad/fetch-relays.js';
 import {
   type DockerRuntimeResult,
   type StartDockerRuntimeOptions,
@@ -33,10 +34,7 @@ import {
 } from '../runtime/validate-runtime.js';
 
 type ValidationSourceSummary = string;
-
-type WritableTextSink = {
-  write(chunk: string): unknown;
-};
+const RELAY_CACHE_REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type RouteDiagnosticContext = {
   readonly routeId?: string | null;
@@ -73,7 +71,7 @@ export type StartSuccess = {
   readonly exitCode: 0;
   readonly paths: MullgatePaths;
   readonly config: MullgateConfig;
-  readonly report: RuntimeStartDiagnostic;
+  readonly report?: RuntimeStartDiagnostic;
   readonly validationSource: ValidationSourceSummary;
   readonly composeFilePath: string;
   readonly manifestPath: string;
@@ -118,6 +116,7 @@ export type StartFlowResult = StartSuccess | StartFailure;
 export type StartCommandDependencies = {
   readonly store?: ConfigStore;
   readonly checkedAt?: string;
+  readonly dryRun?: boolean;
   readonly startRuntime?: (options: StartDockerRuntimeOptions) => Promise<DockerRuntimeResult>;
   readonly validateOptions?: Pick<
     ValidateRuntimeOptions,
@@ -136,14 +135,18 @@ export function registerStartCommand(
     .description(
       'Re-render derived runtime artifacts from saved config, validate them, and launch the Docker runtime bundle.',
     )
+    .option('--dry-run', 'Render and validate artifacts without launching Docker.')
     .action(createStartCommandAction(dependencies));
 }
 
 export function createStartCommandAction(
   dependencies: StartCommandDependencies = {},
-): () => Promise<void> {
-  return async () => {
-    const result = await runStartFlow(dependencies);
+): (options?: { dryRun?: boolean }) => Promise<void> {
+  return async (options?: { dryRun?: boolean }) => {
+    const result = await runStartFlow({
+      ...dependencies,
+      dryRun: Boolean(options?.dryRun || dependencies.dryRun),
+    });
     writeStartResult(result, dependencies);
     process.exitCode = result.exitCode;
   };
@@ -219,9 +222,15 @@ export async function runStartFlow(
     });
   }
 
+  const effectiveRelayCatalog = await refreshRelayCatalogIfStale(
+    store.paths.provisioningCacheFile,
+    relayCatalog.value,
+    attemptedAt,
+  );
+
   const runtimeProxyRender = await renderRuntimeProxyArtifacts({
     config: baseConfig,
-    relayCatalog: relayCatalog.value,
+    relayCatalog: effectiveRelayCatalog,
     paths: store.paths,
     generatedAt: attemptedAt,
   });
@@ -294,6 +303,51 @@ export async function runStartFlow(
       routeBindIp: validationResult.routeBindIp,
       serviceName: validationResult.serviceName,
     });
+  }
+
+  if (dependencies.dryRun) {
+    const validatedConfig = withRuntimeStatus(
+      baseConfig,
+      'validated',
+      attemptedAt,
+      `Validated shared entry tunnel plus ${baseConfig.routing.locations.length} configured routes via ${validationResult.validationSource}; Docker launch skipped because --dry-run was used.`,
+    );
+    const persisted = await persistConfigOnly(store, validatedConfig);
+
+    if (!persisted.ok) {
+      return persisted;
+    }
+
+    return {
+      ok: true,
+      phase: 'compose-launch',
+      source: 'docker-compose',
+      exitCode: 0,
+      paths: store.paths,
+      config: validatedConfig,
+      validationSource: validationResult.validationSource,
+      composeFilePath: runtimeBundle.artifactPaths.dockerComposePath,
+      manifestPath: runtimeBundle.artifactPaths.manifestPath,
+      validationReportPath: validationResult.reportPath,
+      summary: [
+        'Mullgate runtime dry-run complete.',
+        'phase: validation',
+        'source: saved-config',
+        `attempted at: ${attemptedAt}`,
+        `routes: ${baseConfig.routing.locations.length}`,
+        `access mode: ${baseConfig.setup.access.mode}`,
+        `config: ${store.paths.configFile}`,
+        `entry wireproxy config: ${runtimeProxyRender.artifactPaths.entryWireproxyConfigPath}`,
+        `route proxy config: ${runtimeProxyRender.artifactPaths.routeProxyConfigPath}`,
+        `relay cache: ${runtimeProxyRender.artifactPaths.relayCachePath}`,
+        `docker compose: ${runtimeBundle.artifactPaths.dockerComposePath}`,
+        `runtime manifest: ${runtimeBundle.artifactPaths.manifestPath}`,
+        `validation report: ${validationResult.reportPath}`,
+        `validation: ${validationResult.validationSource}`,
+        'docker launch: skipped (--dry-run)',
+        'runtime status: validated',
+      ].join('\n'),
+    };
   }
 
   const startingConfig = withRuntimeStatus(
@@ -474,6 +528,34 @@ function redactInlineSelectorUrl(url: string): string {
   return url.replace(/:\/\/([^:@]+):@/, '://$1:[redacted]@');
 }
 
+async function refreshRelayCatalogIfStale(
+  relayCachePath: string,
+  relayCatalog: MullvadRelayCatalog,
+  checkedAt: string,
+): Promise<MullvadRelayCatalog> {
+  const fetchedAt = Date.parse(relayCatalog.fetchedAt);
+
+  if (
+    !Number.isFinite(fetchedAt) ||
+    Date.parse(checkedAt) - fetchedAt <= RELAY_CACHE_REFRESH_TTL_MS
+  ) {
+    return relayCatalog;
+  }
+
+  const refreshed = await fetchRelays({ fetchedAt: checkedAt });
+
+  if (!refreshed.ok) {
+    return relayCatalog;
+  }
+
+  await mkdir(path.dirname(relayCachePath), { recursive: true, mode: 0o700 });
+  await writeFile(relayCachePath, `${JSON.stringify(refreshed.value, null, 2)}\n`, {
+    mode: 0o600,
+  });
+
+  return refreshed.value;
+}
+
 function writeStartResult(
   result: StartFlowResult,
   dependencies: Pick<StartCommandDependencies, 'stdout' | 'stderr'>,
@@ -501,6 +583,11 @@ function writeStartResult(
     ...(result.command ? [`command: ${result.command}`] : []),
     `reason: ${result.message}`,
     ...(result.cause ? [`cause: ${result.cause}`] : []),
+    ...(result.phase === 'compose-launch' && result.code === 'COMPOSE_UP_FAILED'
+      ? [
+          'remediation: Inspect `docker compose ps` / `docker compose logs`, fix the failing entry tunnel, route proxy, or routing layer, then rerun `mullgate proxy start`.',
+        ]
+      : []),
     `config: ${result.paths.configFile}`,
     ...(result.validationSource ? [`validation: ${result.validationSource}`] : []),
     ...(result.report ? [`start report: ${result.paths.runtimeStartDiagnosticsFile}`] : []),

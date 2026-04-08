@@ -4,7 +4,9 @@ import {
   type ProcessExecution,
   type ProcessRunner,
   queryDockerComposeStatus,
+  readDockerComposeLogs,
   startDockerRuntime,
+  stopDockerRuntime,
 } from '../../src/runtime/docker-runtime.js';
 
 function createQueuedRunner(steps: ProcessExecution[]): ProcessRunner {
@@ -381,6 +383,99 @@ describe('queryDockerComposeStatus', () => {
         'Docker Compose returned runtime status that Mullgate could not parse as typed JSON.',
       cause: expect.stringContaining('Unexpected token'),
       artifactPath: '/tmp/mullgate/runtime/docker-compose.yml',
+    });
+  });
+});
+
+describe('stopDockerRuntime', () => {
+  it('returns structured metadata when compose down succeeds', async () => {
+    const result = await stopDockerRuntime({
+      composeFilePath: '/tmp/mullgate/runtime/docker-compose.yml',
+      checkedAt: '2026-03-21T06:05:00.000Z',
+      runner: createQueuedRunner([
+        {
+          exitCode: 0,
+          stdout: 'Docker Compose version v2.40.1\n',
+          stderr: '',
+        },
+        {
+          exitCode: 0,
+          stdout: 'Container mullgate-routing-layer-1  Removed\n',
+          stderr: '',
+        },
+      ]),
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      phase: 'compose-down',
+      source: 'docker-compose',
+      checkedAt: '2026-03-21T06:05:00.000Z',
+      composeFilePath: '/tmp/mullgate/runtime/docker-compose.yml',
+      command: {
+        binary: 'docker',
+        args: [
+          'compose',
+          '--file',
+          '/tmp/mullgate/runtime/docker-compose.yml',
+          'down',
+          '--remove-orphans',
+        ],
+        cwd: '/tmp/mullgate/runtime',
+        rendered:
+          'docker compose --file /tmp/mullgate/runtime/docker-compose.yml down --remove-orphans',
+      },
+      message: 'Docker Compose stopped the Mullgate runtime bundle.',
+      stdout: 'Container mullgate-routing-layer-1  Removed\n',
+      stderr: '',
+    });
+  });
+});
+
+describe('readDockerComposeLogs', () => {
+  it('builds the expected compose logs command with tail control', async () => {
+    const result = await readDockerComposeLogs({
+      composeFilePath: '/tmp/mullgate/runtime/docker-compose.yml',
+      checkedAt: '2026-03-21T06:06:00.000Z',
+      tail: 50,
+      runner: createQueuedRunner([
+        {
+          exitCode: 0,
+          stdout: 'Docker Compose version v2.40.1\n',
+          stderr: '',
+        },
+        {
+          exitCode: 0,
+          stdout: 'route-proxy-1  | accepted connection\n',
+          stderr: '',
+        },
+      ]),
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      phase: 'compose-logs',
+      source: 'docker-compose',
+      checkedAt: '2026-03-21T06:06:00.000Z',
+      composeFilePath: '/tmp/mullgate/runtime/docker-compose.yml',
+      command: {
+        binary: 'docker',
+        args: [
+          'compose',
+          '--file',
+          '/tmp/mullgate/runtime/docker-compose.yml',
+          'logs',
+          '--no-color',
+          '--tail',
+          '50',
+        ],
+        cwd: '/tmp/mullgate/runtime',
+        rendered:
+          'docker compose --file /tmp/mullgate/runtime/docker-compose.yml logs --no-color --tail 50',
+      },
+      message: 'Docker Compose returned the requested Mullgate runtime logs.',
+      stdout: 'route-proxy-1  | accepted connection\n',
+      stderr: '',
     });
   });
 });
