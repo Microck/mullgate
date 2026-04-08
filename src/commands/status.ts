@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 
-import { writeCliReport } from '../cli-output.js';
+import { type WritableTextSink, writeCliReport } from '../cli-output.js';
 import {
   buildExposureContract,
   computePublishedPort,
@@ -31,10 +31,6 @@ import {
 } from './runtime-diagnostics.js';
 
 const ROUTING_LAYER_SERVICE = 'routing-layer';
-
-type WritableTextSink = {
-  write(chunk: string): unknown;
-};
 
 type StatusPhase = 'unconfigured' | 'stopped' | 'starting' | 'running' | 'degraded' | 'error';
 

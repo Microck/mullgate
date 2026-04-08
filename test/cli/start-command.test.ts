@@ -519,6 +519,68 @@ describe('mullgate start command', () => {
     ]);
   });
 
+  it('supports a dry-run that validates artifacts without launching Docker', async () => {
+    const env = createTempEnvironment();
+    const store = await seedSavedConfig(env);
+    const stdout = createBufferSink();
+    const stderr = createBufferSink();
+    const wireproxyBinary = await createFakeWireproxyBinary(
+      requireDefined(env.HOME, 'Expected HOME in the test env.'),
+    );
+    let launchCount = 0;
+
+    const action = createStartCommandAction({
+      store,
+      checkedAt: '2026-03-21T01:03:00.000Z',
+      stdout,
+      stderr,
+      validateOptions: {
+        wireproxyBinary,
+      },
+      startRuntime: async () => {
+        launchCount += 1;
+        throw new Error('dry-run should not launch Docker');
+      },
+    });
+
+    await action({ dryRun: true });
+
+    expect(launchCount).toBe(0);
+    expect(process.exitCode).toBe(0);
+    expect(stderr.value.current).toBe('');
+
+    const loadResult = await store.load();
+    expect(loadResult.ok && loadResult.source === 'file').toBe(true);
+
+    if (!loadResult.ok || loadResult.source !== 'file') {
+      return;
+    }
+
+    expect(loadResult.config.runtime.status).toMatchObject({
+      phase: 'validated',
+      lastCheckedAt: '2026-03-21T01:03:00.000Z',
+    });
+    expect(`\n${normalizeOutput(stdout.value.current, env)}`).toMatchInlineSnapshot(`
+      "
+      Mullgate runtime dry-run complete.
+      phase: validation
+      source: saved-config
+      attempted at: 2026-03-21T01:03:00.000Z
+      routes: 2
+      access mode: published-routes
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+      route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+      relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+      docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+      runtime manifest: /tmp/mullgate-home/state/mullgate/runtime/runtime-manifest.json
+      validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+      validation: wireproxy-binary/configtest + docker/3proxy-startup
+      docker launch: skipped (--dry-run)
+      runtime status: validated"
+    `);
+  });
+
   it(
     'persists secret-safe route-aware compose failure diagnostics with phase, source, code, and validation metadata',
     { timeout: 15000 },
@@ -614,6 +676,7 @@ describe('mullgate start command', () => {
       command: docker compose --file /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml up --detach --force-recreate
       reason: Docker Compose failed to start the Mullgate runtime bundle.
       cause: service route-proxy crashed while booting at-vie-wg-001 for proxy-password / 123456789012 / private-key-value-2 while reading -----BEGIN PRIVATE KEY-----/nfixture/n-----END PRIVATE KEY-----
+      remediation: Inspect \`docker compose ps\` / \`docker compose logs\`, fix the failing entry tunnel, route proxy, or routing layer, then rerun \`mullgate proxy start\`.
       config: /tmp/mullgate-home/config/mullgate/config.json
       validation: wireproxy-binary/configtest + docker/3proxy-startup
       start report: /tmp/mullgate-home/state/mullgate/runtime/last-start.json

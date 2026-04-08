@@ -653,7 +653,7 @@ function renderRelayListReport(input: {
     `listed count: ${input.selectedRelays.length}`,
     ...(input.selectedRelays.length === 0
       ? ['relays: none']
-      : input.selectedRelays.map((relay, index) => renderRelayLine(relay, index))),
+      : ['relay table', ...renderRelayTable(input.selectedRelays)]),
   ].join('\n');
 }
 
@@ -717,10 +717,6 @@ function renderRelayVerifyReport(input: {
   ].join('\n');
 }
 
-function renderRelayLine(relay: MullvadRelay, index: number): string {
-  return `${index + 1}. ${renderRelaySummary(relay)} active=${relay.active ? 'yes' : 'no'} endpoint=${relay.endpointIpv4}`;
-}
-
 function renderRelaySummary(relay: MullvadRelay): string {
   return [
     relay.hostname,
@@ -731,6 +727,43 @@ function renderRelaySummary(relay: MullvadRelay): string {
     `run-mode=${relay.stboot ? 'ram' : 'disk'}`,
     `port-speed=${relay.networkPortSpeed ?? 'n/a'}`,
   ].join(' ');
+}
+
+function renderRelayTable(relays: readonly MullvadRelay[]): string[] {
+  const headers = [
+    '#',
+    'hostname',
+    'country',
+    'city',
+    'provider',
+    'owner',
+    'mode',
+    'speed',
+    'active',
+  ];
+  const rows = relays.map((relay, index) => [
+    String(index + 1),
+    relay.hostname,
+    relay.location.countryCode,
+    relay.location.cityCode,
+    relay.provider ?? 'n/a',
+    relay.owned ? 'mullvad' : 'rented',
+    relay.stboot ? 'ram' : 'disk',
+    relay.networkPortSpeed ? `${relay.networkPortSpeed}` : 'n/a',
+    relay.active ? 'yes' : 'no',
+  ]);
+  const widths = headers.map((header, columnIndex) =>
+    Math.max(header.length, ...rows.map((row) => row[columnIndex]?.length ?? 0)),
+  );
+
+  const formatRow = (row: readonly string[]) =>
+    row.map((value, index) => value.padEnd(widths[index] ?? value.length)).join('  ');
+
+  return [
+    formatRow(headers),
+    widths.map((width) => '-'.repeat(width)).join('  '),
+    ...rows.map(formatRow),
+  ];
 }
 
 function renderGlobalRelayFilterLabel(input: {

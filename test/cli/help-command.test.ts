@@ -63,6 +63,9 @@ describe('mullgate help command contract', () => {
       setupHelp,
       proxyHelp,
       proxyStartHelp,
+      proxyStopHelp,
+      proxyRestartHelp,
+      proxyLogsHelp,
       proxyStatusHelp,
       proxyDoctorHelp,
       proxyAccessHelp,
@@ -72,11 +75,16 @@ describe('mullgate help command contract', () => {
       proxyAutostartHelp,
       proxyValidateHelp,
       configHelp,
+      versionHelp,
+      completionsHelp,
     ] = await Promise.all([
       expectHelpOutput(['--help']),
       expectHelpOutput(['setup', '--help']),
       expectHelpOutput(['proxy', '--help']),
       expectHelpOutput(['proxy', 'start', '--help']),
+      expectHelpOutput(['proxy', 'stop', '--help']),
+      expectHelpOutput(['proxy', 'restart', '--help']),
+      expectHelpOutput(['proxy', 'logs', '--help']),
       expectHelpOutput(['proxy', 'status', '--help']),
       expectHelpOutput(['proxy', 'doctor', '--help']),
       expectHelpOutput(['proxy', 'access', '--help']),
@@ -86,6 +94,8 @@ describe('mullgate help command contract', () => {
       expectHelpOutput(['proxy', 'autostart', '--help']),
       expectHelpOutput(['proxy', 'validate', '--help']),
       expectHelpOutput(['config', '--help']),
+      expectHelpOutput(['version', '--help']),
+      expectHelpOutput(['completions', '--help']),
     ]);
 
     expect(`\n${topLevelHelp}`).toMatchInlineSnapshot(`
@@ -95,16 +105,20 @@ describe('mullgate help command contract', () => {
       Minimal Mullvad proxy CLI for setup, daily proxy operations, and advanced config
 
       Options:
-        -h, --help       display help for command
+        -v, --version        display the installed Mullgate CLI version
+        -h, --help           display help for command
 
       Commands:
-        setup [options]  Run the guided Mullvad-backed setup flow and persist config
-                         plus derived runtime artifacts.
-        proxy            Operate runtime, access, export, relay, and startup surfaces
-                         for routed proxies.
-        config           Inspect saved config values, raw paths, and advanced config
-                         fields.
-        help [command]   display help for command"
+        setup [options]      Run the guided Mullvad-backed setup flow and persist
+                             config plus derived runtime artifacts.
+        proxy                Operate runtime, access, export, relay, and startup
+                             surfaces for routed proxies.
+        config               Inspect saved config values, raw paths, and advanced
+                             config fields.
+        version              Print the CLI version plus core runtime metadata for
+                             support reports.
+        completions <shell>  Generate shell completion scripts for bash, zsh, or fish.
+        help [command]       display help for command"
     `);
     expect(`\n${setupHelp}`).toMatchInlineSnapshot(`
       "
@@ -164,10 +178,16 @@ describe('mullgate help command contract', () => {
         -h, --help          display help for command
 
       Commands:
-        start               Re-render derived runtime artifacts from saved config,
+        start [options]     Re-render derived runtime artifacts from saved config,
                             validate them, and launch the Docker runtime bundle.
+        stop                Stop the saved Docker runtime bundle without rerendering
+                            config artifacts.
+        restart             Stop the current runtime bundle, rerender artifacts, and
+                            start it again.
         status              Inspect saved Mullgate state, runtime artifacts, and live
                             Docker Compose status in one report.
+        logs [options]      Read the saved Docker Compose logs for the current runtime
+                            bundle.
         doctor              Run deterministic, route-aware diagnostics for config,
                             runtime, bind, DNS, and last-start failures.
         validate [options]  Validate the saved or freshly rendered shared runtime
@@ -188,7 +208,10 @@ describe('mullgate help command contract', () => {
       Quick commands:
         mullgate proxy access
         mullgate proxy start
+        mullgate proxy stop
+        mullgate proxy restart
         mullgate proxy status
+        mullgate proxy logs --tail 50
         mullgate proxy doctor
         mullgate proxy export --regions
 
@@ -207,7 +230,37 @@ describe('mullgate help command contract', () => {
       the Docker runtime bundle.
 
       Options:
+        --dry-run   Render and validate artifacts without launching Docker.
         -h, --help  display help for command"
+    `);
+    expect(`\n${proxyStopHelp}`).toMatchInlineSnapshot(`
+      "
+      Usage: mullgate proxy stop [options]
+
+      Stop the saved Docker runtime bundle without rerendering config artifacts.
+
+      Options:
+        -h, --help  display help for command"
+    `);
+    expect(`\n${proxyRestartHelp}`).toMatchInlineSnapshot(`
+      "
+      Usage: mullgate proxy restart [options]
+
+      Stop the current runtime bundle, rerender artifacts, and start it again.
+
+      Options:
+        -h, --help  display help for command"
+    `);
+    expect(`\n${proxyLogsHelp}`).toMatchInlineSnapshot(`
+      "
+      Usage: mullgate proxy logs [options]
+
+      Read the saved Docker Compose logs for the current runtime bundle.
+
+      Options:
+        --tail <lines>  Show this many log lines from the end of the bundle logs.
+        --follow        Keep streaming the Docker Compose logs until interrupted.
+        -h, --help      display help for command"
     `);
     expect(`\n${proxyStatusHelp}`).toMatchInlineSnapshot(`
       "
@@ -385,6 +438,27 @@ describe('mullgate help command contract', () => {
         set [options] <keyPath> [value]  Update a saved config value without editing
                                          JSON by hand.
         help [command]                   display help for command"
+    `);
+    expect(`\n${versionHelp}`).toMatchInlineSnapshot(`
+      "
+      Usage: mullgate version [options]
+
+      Print the CLI version plus core runtime metadata for support reports.
+
+      Options:
+        -h, --help  display help for command"
+    `);
+    expect(`\n${completionsHelp}`).toMatchInlineSnapshot(`
+      "
+      Usage: mullgate completions [options] <shell>
+
+      Generate shell completion scripts for bash, zsh, or fish.
+
+      Arguments:
+        shell       Target shell: bash, zsh, or fish.
+
+      Options:
+        -h, --help  display help for command"
     `);
   });
 });

@@ -119,6 +119,82 @@ export type DockerComposeStatusFailure = {
 
 export type DockerComposeStatusResult = DockerComposeStatusSuccess | DockerComposeStatusFailure;
 
+export type StopDockerRuntimeOptions = {
+  readonly composeFilePath: string;
+  readonly checkedAt?: string;
+  readonly cwd?: string;
+  readonly dockerBinary?: string;
+  readonly runner?: ProcessRunner;
+};
+
+export type StopDockerRuntimeSuccess = {
+  ok: true;
+  phase: 'compose-down';
+  source: 'docker-compose';
+  checkedAt: string;
+  composeFilePath: string;
+  command: DockerCommandMetadata;
+  message: string;
+  stdout: string;
+  stderr: string;
+};
+
+export type StopDockerRuntimeFailure = {
+  ok: false;
+  phase: 'compose-detect' | 'compose-down';
+  source: 'docker-binary' | 'docker-compose';
+  checkedAt: string;
+  code: 'DOCKER_COMPOSE_MISSING' | 'COMPOSE_DOWN_FAILED';
+  composeFilePath: string;
+  command: DockerCommandMetadata;
+  message: string;
+  cause?: string;
+  artifactPath?: string;
+  exitCode?: number | null;
+};
+
+export type StopDockerRuntimeResult = StopDockerRuntimeSuccess | StopDockerRuntimeFailure;
+
+export type ReadDockerComposeLogsOptions = {
+  readonly composeFilePath: string;
+  readonly checkedAt?: string;
+  readonly cwd?: string;
+  readonly dockerBinary?: string;
+  readonly runner?: ProcessRunner;
+  readonly tail?: number;
+  readonly follow?: boolean;
+};
+
+export type ReadDockerComposeLogsSuccess = {
+  ok: true;
+  phase: 'compose-logs';
+  source: 'docker-compose';
+  checkedAt: string;
+  composeFilePath: string;
+  command: DockerCommandMetadata;
+  message: string;
+  stdout: string;
+  stderr: string;
+};
+
+export type ReadDockerComposeLogsFailure = {
+  ok: false;
+  phase: 'compose-detect' | 'compose-logs';
+  source: 'docker-binary' | 'docker-compose';
+  checkedAt: string;
+  code: 'DOCKER_COMPOSE_MISSING' | 'COMPOSE_LOGS_FAILED';
+  composeFilePath: string;
+  command: DockerCommandMetadata;
+  message: string;
+  cause?: string;
+  artifactPath?: string;
+  exitCode?: number | null;
+};
+
+export type ReadDockerComposeLogsResult =
+  | ReadDockerComposeLogsSuccess
+  | ReadDockerComposeLogsFailure;
+
 export type StartDockerRuntimeOptions = {
   readonly composeFilePath: string;
   readonly checkedAt?: string;
@@ -236,6 +312,166 @@ export async function startDockerRuntime(
     message: 'Docker Compose launched the Mullgate runtime bundle in detached mode.',
     stdout: launchResult.stdout,
     stderr: launchResult.stderr,
+  };
+}
+
+export async function stopDockerRuntime(
+  options: StopDockerRuntimeOptions,
+): Promise<StopDockerRuntimeResult> {
+  const checkedAt = options.checkedAt ?? new Date().toISOString();
+  const dockerBinary = options.dockerBinary ?? DEFAULT_DOCKER_BINARY;
+  const cwd = options.cwd ?? path.dirname(options.composeFilePath);
+  const runner = options.runner ?? defaultProcessRunner;
+
+  const detectFailure = await detectDockerCompose({
+    composeFilePath: options.composeFilePath,
+    checkedAt,
+    dockerBinary,
+    cwd,
+    runner,
+    missingBinaryMessage:
+      'Docker CLI is not installed or is not on PATH, so Mullgate cannot stop the runtime bundle.',
+    detectFailureMessage:
+      'Docker is installed but `docker compose` is unavailable, so Mullgate cannot stop the runtime bundle.',
+  });
+
+  if (detectFailure) {
+    return detectFailure;
+  }
+
+  const stopCommand = buildCommand(
+    dockerBinary,
+    ['compose', '--file', options.composeFilePath, 'down', '--remove-orphans'],
+    cwd,
+  );
+  const stopResult = await runner(stopCommand.binary, stopCommand.args, { cwd: stopCommand.cwd });
+
+  if (stopResult.error?.code === 'ENOENT') {
+    return {
+      ok: false,
+      phase: 'compose-down',
+      source: 'docker-binary',
+      checkedAt,
+      code: 'DOCKER_COMPOSE_MISSING',
+      composeFilePath: options.composeFilePath,
+      command: stopCommand,
+      message: 'Docker disappeared before Mullgate could stop the runtime bundle.',
+      cause: stopResult.error.message,
+      artifactPath: options.composeFilePath,
+    };
+  }
+
+  if ((stopResult.exitCode ?? 1) !== 0) {
+    return {
+      ok: false,
+      phase: 'compose-down',
+      source: 'docker-compose',
+      checkedAt,
+      code: 'COMPOSE_DOWN_FAILED',
+      composeFilePath: options.composeFilePath,
+      command: stopCommand,
+      message: 'Docker Compose failed while stopping the Mullgate runtime bundle.',
+      cause: summarizeProcessFailure(stopResult, 'docker compose down --remove-orphans failed.'),
+      artifactPath: options.composeFilePath,
+      exitCode: stopResult.exitCode,
+    };
+  }
+
+  return {
+    ok: true,
+    phase: 'compose-down',
+    source: 'docker-compose',
+    checkedAt,
+    composeFilePath: options.composeFilePath,
+    command: stopCommand,
+    message: 'Docker Compose stopped the Mullgate runtime bundle.',
+    stdout: stopResult.stdout,
+    stderr: stopResult.stderr,
+  };
+}
+
+export async function readDockerComposeLogs(
+  options: ReadDockerComposeLogsOptions,
+): Promise<ReadDockerComposeLogsResult> {
+  const checkedAt = options.checkedAt ?? new Date().toISOString();
+  const dockerBinary = options.dockerBinary ?? DEFAULT_DOCKER_BINARY;
+  const cwd = options.cwd ?? path.dirname(options.composeFilePath);
+  const runner = options.runner ?? defaultProcessRunner;
+  const tail = Math.max(1, options.tail ?? 200);
+
+  const detectFailure = await detectDockerCompose({
+    composeFilePath: options.composeFilePath,
+    checkedAt,
+    dockerBinary,
+    cwd,
+    runner,
+    missingBinaryMessage:
+      'Docker CLI is not installed or is not on PATH, so Mullgate cannot read runtime logs.',
+    detectFailureMessage:
+      'Docker is installed but `docker compose` is unavailable, so Mullgate cannot read runtime logs.',
+  });
+
+  if (detectFailure) {
+    return detectFailure;
+  }
+
+  const logCommand = buildCommand(
+    dockerBinary,
+    [
+      'compose',
+      '--file',
+      options.composeFilePath,
+      'logs',
+      '--no-color',
+      '--tail',
+      String(tail),
+      ...(options.follow ? ['--follow'] : []),
+    ],
+    cwd,
+  );
+  const logResult = await runner(logCommand.binary, logCommand.args, { cwd: logCommand.cwd });
+
+  if (logResult.error?.code === 'ENOENT') {
+    return {
+      ok: false,
+      phase: 'compose-logs',
+      source: 'docker-binary',
+      checkedAt,
+      code: 'DOCKER_COMPOSE_MISSING',
+      composeFilePath: options.composeFilePath,
+      command: logCommand,
+      message: 'Docker disappeared before Mullgate could read the runtime logs.',
+      cause: logResult.error.message,
+      artifactPath: options.composeFilePath,
+    };
+  }
+
+  if ((logResult.exitCode ?? 1) !== 0) {
+    return {
+      ok: false,
+      phase: 'compose-logs',
+      source: 'docker-compose',
+      checkedAt,
+      code: 'COMPOSE_LOGS_FAILED',
+      composeFilePath: options.composeFilePath,
+      command: logCommand,
+      message: 'Docker Compose failed while reading the Mullgate runtime logs.',
+      cause: summarizeProcessFailure(logResult, 'docker compose logs failed.'),
+      artifactPath: options.composeFilePath,
+      exitCode: logResult.exitCode,
+    };
+  }
+
+  return {
+    ok: true,
+    phase: 'compose-logs',
+    source: 'docker-compose',
+    checkedAt,
+    composeFilePath: options.composeFilePath,
+    command: logCommand,
+    message: 'Docker Compose returned the requested Mullgate runtime logs.',
+    stdout: logResult.stdout,
+    stderr: logResult.stderr,
   };
 }
 

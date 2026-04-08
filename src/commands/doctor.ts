@@ -5,7 +5,7 @@ import { isIP } from 'node:net';
 import type { Command } from 'commander';
 
 import { loadStoredRelayCatalog } from '../app/setup-runner.js';
-import { writeCliReport } from '../cli-output.js';
+import { type WritableTextSink, writeCliReport } from '../cli-output.js';
 import {
   buildExposureContract,
   deriveLoopbackBindIp,
@@ -39,10 +39,6 @@ import {
 
 const ROUTING_LAYER_SERVICE = 'routing-layer';
 const RELAY_CACHE_STALE_MS = 7 * 24 * 60 * 60 * 1000;
-
-type WritableTextSink = {
-  write(chunk: string): unknown;
-};
 
 type DoctorOutcome = 'pass' | 'degraded' | 'fail';
 

@@ -8,8 +8,12 @@ The documentation repeatedly anchors itself to the following CLI help contract:
 - `mullgate --help`
 - `mullgate setup --help`
 - `mullgate proxy --help`
+- `mullgate proxy start --help`
+- `mullgate proxy logs --help`
 - `mullgate proxy relay --help`
 - `mullgate config --help`
+- `mullgate version --help`
+- `mullgate completions --help`
 
 ## Core workflow commands
 
@@ -23,14 +27,19 @@ The documentation repeatedly anchors itself to the following CLI help contract:
 | `mullgate proxy relay recommend` | `--country`, `--count`, `--apply` | preview or pin an exact relay choice |
 | `mullgate proxy relay verify` | `--route` | verify a configured route across the published proxy protocols |
 | `mullgate proxy validate` | `--refresh` | refresh saved validation metadata and config-derived artifacts |
-| `mullgate proxy start` | none | launch the runtime |
+| `mullgate proxy start` | `--dry-run` | render and validate artifacts, then optionally launch the runtime |
+| `mullgate proxy stop` | none | stop the saved Docker runtime bundle without rerendering artifacts |
+| `mullgate proxy restart` | none | stop the current runtime bundle, rerender artifacts, and start it again |
 | `mullgate proxy status` | none | inspect live runtime state |
+| `mullgate proxy logs` | `--tail`, `--follow` | read the saved Docker Compose logs for the current runtime bundle |
 | `mullgate proxy doctor` | none | diagnose routing, hostname, and runtime failures |
 | `mullgate proxy autostart` | `enable`, `disable`, `status` | manage Linux user-service startup, including linger-backed reboot startup |
 | `mullgate config path` | none | print config, state, cache, and runtime paths |
 | `mullgate config show` | none | print the saved canonical config |
 | `mullgate config get` | `<key>` | read one saved config value |
 | `mullgate config set` | `<key> <value>` | update one saved config value |
+| `mullgate version` | none | print CLI version plus support metadata |
+| `mullgate completions <shell>` | `bash`, `zsh`, `fish` | generate shell completion scripts |
 
 ## Invocation forms
 
@@ -52,9 +61,12 @@ A practical workflow usually looks like this:
 7. `mullgate proxy relay recommend`
 8. `mullgate proxy access`
 9. `mullgate proxy validate --refresh`
-10. `mullgate proxy start`
-11. `mullgate proxy status`
-12. `mullgate proxy doctor`
+10. `mullgate proxy start --dry-run`
+11. `mullgate proxy start`
+12. `mullgate proxy status`
+13. `mullgate proxy logs --tail 50`
+14. `mullgate proxy doctor`
+15. `mullgate proxy restart` when you need a stop-plus-rerender cycle later
 
 If you switch to `inline-selector`, skip `mullgate proxy export` and use `mullgate proxy access` to inspect the shared listener and selector examples. For the supported selector families and guaranteed URL shape, see [Inline Selector Reference](/docs/guides/inline-selector-selectors).
 

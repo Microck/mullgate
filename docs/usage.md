@@ -5,12 +5,15 @@ This guide expands on the consumer-facing repository [README](../README.md). It 
 - `mullgate --help`
 - `mullgate setup --help`
 - `mullgate proxy start --help`
+- `mullgate proxy logs --help`
 - `mullgate proxy status --help`
 - `mullgate proxy doctor --help`
 - `mullgate proxy autostart --help`
 - `mullgate proxy relay --help`
 - `mullgate proxy relay recommend --help`
 - `mullgate config --help`
+- `mullgate version --help`
+- `mullgate completions --help`
 
 ## Install forms
 
@@ -186,6 +189,47 @@ If an installed `mullgate` command reports an unsupported config version:
 - rerun `mullgate proxy start`
 
 Do not expect the current CLI to keep operating on an older runtime bundle in place.
+
+## Runtime control and support utilities
+
+Use these commands after setup when you need to preflight, stop, restart, inspect, or hand support metadata to someone else.
+
+### Dry-run the rendered runtime bundle
+
+```bash
+mullgate proxy start --dry-run
+```
+
+Use this before touching Docker when you want Mullgate to rerender and validate the runtime artifacts but stop short of launching containers.
+
+### Stop or restart the saved bundle
+
+```bash
+mullgate proxy stop
+mullgate proxy restart
+```
+
+- `proxy stop` is the canonical clean shutdown for the saved runtime bundle
+- `proxy restart` is the canonical "stop, rerender, and start again" shortcut after a config or relay change
+
+### Read the saved Docker Compose logs
+
+```bash
+mullgate proxy logs --tail 200
+mullgate proxy logs --tail 50 --follow
+```
+
+Use `mullgate proxy logs` right after `mullgate proxy status` when a runtime looks unhealthy and you want evidence from the saved bundle instead of guessing.
+
+### Print support metadata or install shell completions
+
+```bash
+mullgate version
+mullgate completions bash > ~/.local/share/bash-completion/completions/mullgate
+```
+
+- `mullgate version` prints the CLI version, config schema, Node version, platform, architecture, and hostname for support reports
+- `mullgate completions <bash|zsh|fish>` prints shell completion scripts to stdout so you can install them in the shell-specific location you already use
 
 ## Relay discovery, recommendation, and exit verification
 
