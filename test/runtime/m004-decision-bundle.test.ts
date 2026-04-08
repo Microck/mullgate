@@ -5,8 +5,15 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { CompatibilitySummaryBundle } from '../../src/m004/compatibility-runner.js';
+import { renderCompatibilityHelp } from '../../src/m004/compatibility-runner.js';
 import type { MilestoneDecisionBundle } from '../../src/m004/milestone-contract.js';
-import { runMilestoneVerifier } from '../../src/m004/milestone-runner.js';
+import {
+  parseMilestoneArgs,
+  renderCompatibilityPassThroughHelp,
+  renderMilestoneFailureHelp,
+  renderMilestoneHelp,
+  runMilestoneVerifier,
+} from '../../src/m004/milestone-runner.js';
 
 const fixturesDir = path.join(process.cwd(), 'test/fixtures', 'm004');
 
@@ -15,6 +22,91 @@ async function readJsonFile<T>(filePath: string): Promise<T> {
 }
 
 describe('m004 milestone runner', () => {
+  it('parses milestone args from flags and surfaces the bundled help on failures', () => {
+    expect(
+      parseMilestoneArgs(
+        [
+          '--target-url',
+          'https://example.com/exit.json',
+          '--route-check-ip',
+          '9.9.9.9',
+          '--logical-exit-count',
+          '2',
+          '--output-root',
+          '.tmp/custom-m004',
+          '--fixture',
+          './compatibility.json',
+          '--keep-temp-home',
+        ],
+        {
+          MULLGATE_ACCOUNT_NUMBER: ' 123456 ',
+          MULLGATE_PROXY_USERNAME: ' alice ',
+          MULLGATE_PROXY_PASSWORD: ' secret ',
+          MULLGATE_DEVICE_NAME: ' mullgate-m004 ',
+          MULLGATE_MULLVAD_WG_URL: ' https://wg.example.test ',
+          MULLGATE_MULLVAD_RELAYS_URL: ' https://relays.example.test ',
+          MULLGATE_M004_WIREPROXY_IMAGE: ' custom/wireproxy:latest ',
+        },
+      ),
+    ).toEqual({
+      ok: true,
+      options: {
+        targetUrl: 'https://example.com/exit.json',
+        routeCheckIp: '9.9.9.9',
+        logicalExitCount: 2,
+        outputRoot: '.tmp/custom-m004',
+        keepTempHome: true,
+        fixturePath: './compatibility.json',
+        accountNumber: '123456',
+        proxyUsername: 'alice',
+        proxyPassword: 'secret',
+        deviceName: 'mullgate-m004',
+        mullvadWgUrl: 'https://wg.example.test',
+        mullvadRelaysUrl: 'https://relays.example.test',
+        wireproxyImage: 'custom/wireproxy:latest',
+      },
+    });
+
+    expect(parseMilestoneArgs(['--help'])).toEqual({
+      ok: false,
+      helpText: renderMilestoneHelp(),
+      exitCode: 0,
+    });
+
+    expect(parseMilestoneArgs(['--logical-exit-count', '4'])).toEqual({
+      ok: false,
+      helpText: renderMilestoneHelp(),
+      exitCode: 1,
+      error: 'Invalid --logical-exit-count value: 4. Expected 2 or 3.',
+    });
+
+    expect(parseMilestoneArgs(['--target-url'])).toEqual({
+      ok: false,
+      helpText: renderMilestoneHelp(),
+      exitCode: 1,
+      error: 'Missing value for --target-url.',
+    });
+  });
+
+  it('renders milestone failure guidance and compatibility pass-through help', () => {
+    const missingEnv = renderMilestoneFailureHelp(
+      new Error('Missing required environment variables for the compatibility verifier.'),
+      {},
+    );
+
+    expect(missingEnv).toContain(
+      'Missing required environment variables for the live compatibility verifier:',
+    );
+    expect(missingEnv).toContain('MULLGATE_ACCOUNT_NUMBER');
+    expect(missingEnv).toContain('Usage: pnpm exec tsx scripts/verify-m004.ts [options]');
+    expect(renderMilestoneFailureHelp(new Error('boom'))).toContain('boom');
+    expect(renderMilestoneFailureHelp('plain failure')).toContain('plain failure');
+    expect(renderCompatibilityPassThroughHelp()).toBe(renderCompatibilityHelp());
+    expect(renderMilestoneHelp()).toContain(
+      'Run the final M004 milestone verifier: reuse the S02 compatibility verifier as',
+    );
+  });
+
   it('wraps the compatibility fixture path into stable milestone decision artifacts', async () => {
     const outputRoot = await mkdtemp(path.join(tmpdir(), 'm004-milestone-runner-'));
 

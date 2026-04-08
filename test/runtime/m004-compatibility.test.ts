@@ -10,7 +10,12 @@ import {
   createCompatibilityArtifact,
   serializeCompatibilityArtifact,
 } from '../../src/m004/compatibility-contract.js';
-import { runCompatibilityVerifier } from '../../src/m004/compatibility-runner.js';
+import {
+  parseCompatibilityArgs,
+  renderCompatibilityHelp,
+  renderMissingCompatibilityEnvError,
+  runCompatibilityVerifier,
+} from '../../src/m004/compatibility-runner.js';
 import {
   createEntryIdentityFromRelay,
   createFeasibilityArtifact,
@@ -192,6 +197,109 @@ function createProtocolObservations(
 const fixturesDir = path.join(process.cwd(), 'test/fixtures');
 
 describe('m004 compatibility contract', () => {
+  it('parses compatibility args from flags and prefers the compatibility-specific output root env', () => {
+    expect(
+      parseCompatibilityArgs(
+        [
+          '--target-url',
+          'https://example.com/exit.json',
+          '--route-check-ip',
+          '9.9.9.9',
+          '--logical-exit-count',
+          '2',
+          '--output-root',
+          '.tmp/custom-compatibility',
+          '--fixture',
+          './compatibility.json',
+          '--keep-temp-home',
+        ],
+        {
+          MULLGATE_ACCOUNT_NUMBER: ' 123456 ',
+          MULLGATE_PROXY_USERNAME: ' alice ',
+          MULLGATE_PROXY_PASSWORD: ' secret ',
+          MULLGATE_DEVICE_NAME: ' mullgate-compatibility ',
+          MULLGATE_MULLVAD_WG_URL: ' https://wg.example.test ',
+          MULLGATE_MULLVAD_RELAYS_URL: ' https://relays.example.test ',
+          MULLGATE_M004_WIREPROXY_IMAGE: ' custom/wireproxy:latest ',
+        },
+      ),
+    ).toEqual({
+      ok: true,
+      options: {
+        targetUrl: 'https://example.com/exit.json',
+        routeCheckIp: '9.9.9.9',
+        logicalExitCount: 2,
+        outputRoot: '.tmp/custom-compatibility',
+        keepTempHome: true,
+        fixturePath: './compatibility.json',
+        accountNumber: '123456',
+        proxyUsername: 'alice',
+        proxyPassword: 'secret',
+        deviceName: 'mullgate-compatibility',
+        mullvadWgUrl: 'https://wg.example.test',
+        mullvadRelaysUrl: 'https://relays.example.test',
+        wireproxyImage: 'custom/wireproxy:latest',
+      },
+    });
+
+    expect(
+      parseCompatibilityArgs([], {
+        MULLGATE_VERIFY_TARGET_URL: ' https://env.example/exit.json ',
+        MULLGATE_VERIFY_ROUTE_CHECK_IP: ' 8.8.8.8 ',
+        MULLGATE_M004_LOGICAL_EXIT_COUNT: '2',
+        MULLGATE_M004_OUTPUT_ROOT: '.tmp/fallback-root',
+        MULLGATE_M004_COMPATIBILITY_OUTPUT_ROOT: ' .tmp/env-compatibility ',
+      }),
+    ).toEqual({
+      ok: true,
+      options: {
+        targetUrl: 'https://env.example/exit.json',
+        routeCheckIp: '8.8.8.8',
+        logicalExitCount: 2,
+        outputRoot: '.tmp/env-compatibility',
+        keepTempHome: false,
+      },
+    });
+  });
+
+  it('renders compatibility help and missing-env guidance for invalid cli inputs', () => {
+    expect(parseCompatibilityArgs(['--help'])).toEqual({
+      ok: false,
+      helpText: renderCompatibilityHelp(),
+      exitCode: 0,
+    });
+
+    expect(parseCompatibilityArgs(['--logical-exit-count', '4'])).toEqual({
+      ok: false,
+      helpText: renderCompatibilityHelp(),
+      exitCode: 1,
+      error: 'Invalid --logical-exit-count value: 4. Expected 2 or 3.',
+    });
+
+    expect(parseCompatibilityArgs(['--target-url'])).toEqual({
+      ok: false,
+      helpText: renderCompatibilityHelp(),
+      exitCode: 1,
+      error: 'Missing value for --target-url.',
+    });
+
+    expect(renderCompatibilityHelp()).toContain(
+      'Run the isolated M004 compatibility verifier: reuse the S01 single-entry',
+    );
+    expect(renderCompatibilityHelp()).toContain('Fixture mode:');
+    expect(renderMissingCompatibilityEnvError({})).toContain(
+      'Missing required environment variables for the live compatibility verifier:',
+    );
+    expect(
+      renderMissingCompatibilityEnvError({
+        MULLGATE_ACCOUNT_NUMBER: '1',
+        MULLGATE_PROXY_USERNAME: 'user',
+        MULLGATE_PROXY_PASSWORD: 'pass',
+        MULLGATE_DEVICE_NAME: 'device',
+      }),
+    ).toBeNull();
+  });
+
   it('emits an approved compatibility artifact when hostname-selected routing stays truthful for every protocol', () => {
     const artifact = createCompatibilityArtifact({
       generatedAt: '2026-03-22T00:10:00.000Z',
