@@ -10,12 +10,12 @@ const ANSI = {
   white: '\u001B[37m',
 } as const;
 
-type WritableTextSink = {
+export type WritableTextSink = {
   write(chunk: string): unknown;
   isTTY?: boolean;
 };
 
-type CliTone = 'info' | 'success' | 'error';
+export type CliTone = 'info' | 'success' | 'error';
 
 export function writeCliReport(input: {
   readonly sink: WritableTextSink;

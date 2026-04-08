@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import packageJson from '../package.json' with { type: 'json' };
 import { writeCliReport } from './cli-output.js';
+import { registerCompletionsCommand } from './commands/completions.js';
 import { registerConfigCommands } from './commands/config.js';
 import { registerProxyCommand } from './commands/proxy.js';
 import { registerSetupCommand } from './commands/setup.js';
+import { registerVersionCommand } from './commands/version.js';
 
 export function createCli(): Command {
   const program = new Command();
@@ -12,11 +15,14 @@ export function createCli(): Command {
   program
     .name('mullgate')
     .description('Minimal Mullvad proxy CLI for setup, daily proxy operations, and advanced config')
+    .version(packageJson.version, '-v, --version', 'display the installed Mullgate CLI version')
     .showHelpAfterError();
 
   registerSetupCommand(program);
   registerProxyCommand(program);
   registerConfigCommands(program);
+  registerVersionCommand(program);
+  registerCompletionsCommand(program);
 
   return program;
 }

@@ -21,6 +21,9 @@ export function baseOptions(): BaseLayoutProps {
       },
     ],
     githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
+    searchToggle: {
+      enabled: true,
+    },
     slots: {
       themeSwitch: MullvadThemeSwitch,
     },

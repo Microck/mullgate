@@ -307,8 +307,11 @@ describe('relay and recommend flows', () => {
       inactive relays: active only
       matched count: 2
       listed count: 2
-      1. se-got-wg-101 country=se city=got provider=m247 owner=mullvad run-mode=ram port-speed=10000 active=yes endpoint=185.213.154.2
-      2. se-sto-wg-002 country=se city=sto provider=m247 owner=mullvad run-mode=ram port-speed=10000 active=yes endpoint=185.213.154.22"
+      relay table
+      #  hostname       country  city  provider  owner    mode  speed  active
+      -  -------------  -------  ----  --------  -------  ----  -----  ------
+      1  se-got-wg-101  se       got   m247      mullvad  ram   10000  yes   
+      2  se-sto-wg-002  se       sto   m247      mullvad  ram   10000  yes   "
     `);
   });
 

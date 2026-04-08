@@ -1,6 +1,6 @@
 ---
 name: use-mullgate
-description: Install, configure, expose, verify, and troubleshoot Mullgate as an operator on a real machine. Use when the request is to actually use Mullgate rather than develop the Mullgate codebase, including first-run setup, non-interactive setup, Tailscale or private-network exposure, inline-selector access, proxy export, relay discovery or recommendation, exact-exit verification, and Linux autostart.
+description: Install, configure, expose, verify, and troubleshoot Mullgate as an operator on a real machine. Use when the request is to actually use Mullgate rather than develop the Mullgate codebase, including first-run setup, non-interactive setup, Tailscale or private-network exposure, inline-selector access, proxy export, relay discovery or recommendation, exact-exit verification, runtime logs and restarts, version/completion reporting, and Linux autostart.
 ---
 
 # Use Mullgate
@@ -60,17 +60,27 @@ Map the request before choosing commands:
 - "Give me a proxy list or file I can import elsewhere"
   - keep or switch to `published-routes`
   - use `mullgate proxy export`
+- "Validate what start would render without touching Docker"
+  - use `mullgate proxy start --dry-run`
+- "Restart the saved runtime cleanly"
+  - use `mullgate proxy restart`
+- "Stop the runtime" or "show me the container logs"
+  - use `mullgate proxy stop` or `mullgate proxy logs --tail 200`
 - "Start automatically after reboot"
   - use `mullgate proxy autostart enable`
   - verify with `mullgate proxy autostart status`
+- "What version is installed?" or "generate shell completion scripts"
+  - use `mullgate version` or `mullgate completions <bash|zsh|fish>`
 
 ## Default Workflow
 
 1. Inspect current posture with `mullgate proxy access`.
 2. Change exposure or access with `mullgate proxy access --mode ... --access-mode ... --route-bind-ip ...` when needed.
-3. Refresh derived state with `mullgate proxy validate --refresh` or restart with `mullgate proxy start`.
-4. Check live/runtime truth with `mullgate proxy status`.
-5. Diagnose failures with `mullgate proxy doctor`.
+3. Preflight the rendered bundle with `mullgate proxy start --dry-run` when runtime changes are risky.
+4. Launch or relaunch with `mullgate proxy start` or `mullgate proxy restart`.
+5. Check live/runtime truth with `mullgate proxy status`.
+6. Pull bundle evidence with `mullgate proxy logs --tail 200`.
+7. Diagnose failures with `mullgate proxy doctor`.
 
 ## Playbooks
 

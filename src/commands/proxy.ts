@@ -16,10 +16,13 @@ import {
   updateExposureConfig,
 } from './config.js';
 import { registerDoctorCommand } from './doctor.js';
+import { registerLogsCommand } from './logs.js';
 import { registerRecommendCommand } from './recommend.js';
 import { registerRelaysCommand } from './relays.js';
+import { registerRestartCommand } from './restart.js';
 import { registerStartCommand } from './start.js';
 import { registerStatusCommand } from './status.js';
+import { registerStopCommand } from './stop.js';
 
 export function registerProxyCommand(program: Command): void {
   const proxy = program
@@ -29,7 +32,10 @@ export function registerProxyCommand(program: Command): void {
     );
 
   registerStartCommand(proxy);
+  registerStopCommand(proxy);
+  registerRestartCommand(proxy);
   registerStatusCommand(proxy);
+  registerLogsCommand(proxy);
   registerDoctorCommand(proxy);
   registerValidateCommand(proxy);
   registerLocationsCommand(proxy, {
@@ -51,7 +57,10 @@ export function registerProxyCommand(program: Command): void {
       'Quick commands:',
       '  mullgate proxy access',
       '  mullgate proxy start',
+      '  mullgate proxy stop',
+      '  mullgate proxy restart',
       '  mullgate proxy status',
+      '  mullgate proxy logs --tail 50',
       '  mullgate proxy doctor',
       '  mullgate proxy export --regions',
       '',
