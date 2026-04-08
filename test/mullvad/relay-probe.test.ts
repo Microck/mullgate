@@ -53,6 +53,17 @@ describe('relay probe helpers', () => {
     });
   });
 
+  it('reports invalid proxy exit payload JSON', () => {
+    expect(parseProxyExitPayload('not-json')).toEqual({
+      ok: false,
+      message: expect.stringContaining('Unexpected token'),
+    });
+  });
+
+  it('returns null when ping output does not contain a latency', () => {
+    expect(parsePingLatencyMs('PING 1.1.1.1 with no latency summary')).toBeNull();
+  });
+
   it('probes relay latency with an injected runner', async () => {
     const result = await probeRelayLatency({
       relay: createRelay(),
@@ -68,6 +79,42 @@ describe('relay probe helpers', () => {
       ok: true,
       relay: createRelay(),
       latencyMs: 12.3,
+    });
+  });
+
+  it('surfaces relay probe failures when ping exits non-zero', async () => {
+    const result = await probeRelayLatency({
+      relay: createRelay(),
+      runner: async () => ({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'network unreachable',
+      }),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      relay: createRelay(),
+      message: 'Ping failed for se-got-wg-101.',
+      cause: 'network unreachable',
+    });
+  });
+
+  it('surfaces relay probe failures when ping latency cannot be parsed', async () => {
+    const result = await probeRelayLatency({
+      relay: createRelay(),
+      runner: async () => ({
+        exitCode: 0,
+        stdout: 'PING 1.1.1.1 with no latency summary',
+        stderr: '',
+      }),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      relay: createRelay(),
+      message: 'Ping succeeded for se-got-wg-101, but Mullgate could not parse the latency.',
+      cause: 'PING 1.1.1.1 with no latency summary',
     });
   });
 
@@ -96,6 +143,171 @@ describe('relay probe helpers', () => {
         city: 'Gothenburg',
         mullvadExitIp: true,
       },
+    });
+  });
+
+  it('uses a socks5h proxy URL and strips inherited proxy env vars', async () => {
+    const originalEnv = process.env;
+    let runnerInput:
+      | {
+          readonly command: string;
+          readonly args: readonly string[];
+          readonly env?: NodeJS.ProcessEnv;
+        }
+      | undefined;
+
+    process.env = {
+      ...originalEnv,
+      HTTP_PROXY: 'http://proxy.example',
+      HTTPS_PROXY: 'http://proxy.example',
+      ALL_PROXY: 'socks5://proxy.example',
+      NO_PROXY: 'localhost',
+    };
+
+    try {
+      await probeProxyExit({
+        protocol: 'socks5',
+        host: '127.0.0.1',
+        port: 1080,
+        username: 'alice',
+        password: 'secret',
+        targetUrl: 'https://am.i.mullvad.net/json',
+        runner: async (input) => {
+          runnerInput = input;
+          return {
+            exitCode: 0,
+            stdout: '{"ip":"203.0.113.9","mullvad_exit_ip":true}',
+            stderr: '',
+          };
+        },
+      });
+    } finally {
+      process.env = originalEnv;
+    }
+
+    expect(runnerInput).toBeDefined();
+    expect(runnerInput?.command).toBe('curl');
+    expect(runnerInput?.args).toContain('socks5h://127.0.0.1:1080');
+    expect(runnerInput?.env).not.toHaveProperty('HTTP_PROXY');
+    expect(runnerInput?.env).not.toHaveProperty('HTTPS_PROXY');
+    expect(runnerInput?.env).not.toHaveProperty('ALL_PROXY');
+    expect(runnerInput?.env).not.toHaveProperty('NO_PROXY');
+  });
+
+  it('adds proxy-insecure for https proxy probes', async () => {
+    let runnerInput:
+      | {
+          readonly command: string;
+          readonly args: readonly string[];
+          readonly env?: NodeJS.ProcessEnv;
+        }
+      | undefined;
+
+    await probeProxyExit({
+      protocol: 'https',
+      host: '127.0.0.1',
+      port: 8443,
+      username: 'alice',
+      password: 'secret',
+      targetUrl: 'https://am.i.mullvad.net/json',
+      runner: async (input) => {
+        runnerInput = input;
+        return {
+          exitCode: 0,
+          stdout: '{"ip":"203.0.113.9","mullvad_exit_ip":true}',
+          stderr: '',
+        };
+      },
+    });
+
+    expect(runnerInput?.args).toContain('--proxy-insecure');
+  });
+
+  it('surfaces proxy exit failures from curl execution errors', async () => {
+    const result = await probeProxyExit({
+      protocol: 'http',
+      host: '127.0.0.1',
+      port: 8080,
+      username: 'alice',
+      password: 'secret',
+      targetUrl: 'https://am.i.mullvad.net/json',
+      runner: async () => ({
+        exitCode: 28,
+        stdout: '',
+        stderr: 'operation timed out',
+      }),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      protocol: 'http',
+      proxyUrl: 'http://127.0.0.1:8080',
+      message: 'Exit probe failed for http://127.0.0.1:8080.',
+      cause: 'operation timed out',
+    });
+  });
+
+  it('surfaces invalid JSON, missing ip, and non-Mullvad exits', async () => {
+    const invalidJson = await probeProxyExit({
+      protocol: 'http',
+      host: '127.0.0.1',
+      port: 8080,
+      username: 'alice',
+      password: 'secret',
+      targetUrl: 'https://am.i.mullvad.net/json',
+      runner: async () => ({
+        exitCode: 0,
+        stdout: 'not-json',
+        stderr: '',
+      }),
+    });
+
+    const missingIp = await probeProxyExit({
+      protocol: 'http',
+      host: '127.0.0.1',
+      port: 8080,
+      username: 'alice',
+      password: 'secret',
+      targetUrl: 'https://am.i.mullvad.net/json',
+      runner: async () => ({
+        exitCode: 0,
+        stdout: '{"country":"SE","mullvad_exit_ip":true}',
+        stderr: '',
+      }),
+    });
+
+    const notMullvad = await probeProxyExit({
+      protocol: 'http',
+      host: '127.0.0.1',
+      port: 8080,
+      username: 'alice',
+      password: 'secret',
+      targetUrl: 'https://am.i.mullvad.net/json',
+      runner: async () => ({
+        exitCode: 0,
+        stdout: '{"ip":"203.0.113.9","mullvad_exit_ip":false}',
+        stderr: '',
+      }),
+    });
+
+    expect(invalidJson).toEqual({
+      ok: false,
+      protocol: 'http',
+      proxyUrl: 'http://127.0.0.1:8080',
+      message: 'Exit probe returned invalid JSON for http://127.0.0.1:8080.',
+      cause: expect.stringContaining('Unexpected token'),
+    });
+    expect(missingIp).toEqual({
+      ok: false,
+      protocol: 'http',
+      proxyUrl: 'http://127.0.0.1:8080',
+      message: 'Exit probe response for http://127.0.0.1:8080 did not include an ip field.',
+    });
+    expect(notMullvad).toEqual({
+      ok: false,
+      protocol: 'http',
+      proxyUrl: 'http://127.0.0.1:8080',
+      message: 'Exit probe for http://127.0.0.1:8080 did not report a Mullvad exit.',
     });
   });
 });
