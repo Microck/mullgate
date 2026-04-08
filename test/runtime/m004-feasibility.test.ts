@@ -16,7 +16,11 @@ import {
   selectFeasibilityExitRelays,
   serializeFeasibilityArtifact,
 } from '../../src/m004/feasibility-contract.js';
-import { runFeasibilityVerifier } from '../../src/m004/feasibility-runner.js';
+import {
+  parseFeasibilityArgs,
+  renderFeasibilityHelp,
+  runFeasibilityVerifier,
+} from '../../src/m004/feasibility-runner.js';
 import { normalizeRelayPayload } from '../../src/mullvad/fetch-relays.js';
 
 const fixturesDir = path.join(process.cwd(), 'test/fixtures');
@@ -134,6 +138,97 @@ function createArtifact(options: {
 }
 
 describe('m004 feasibility contract', () => {
+  it('parses feasibility CLI args from flags and environment defaults', () => {
+    expect(
+      parseFeasibilityArgs(
+        [
+          '--target-url',
+          'https://example.com/exit.json',
+          '--route-check-ip',
+          '9.9.9.9',
+          '--logical-exit-count',
+          '2',
+          '--output-root',
+          '.tmp/custom-feasibility',
+          '--fixture',
+          './fixture.json',
+          '--keep-temp-home',
+        ],
+        {
+          MULLGATE_ACCOUNT_NUMBER: ' 123456 ',
+          MULLGATE_PROXY_USERNAME: ' alice ',
+          MULLGATE_PROXY_PASSWORD: ' secret ',
+          MULLGATE_DEVICE_NAME: ' mullgate-fixture ',
+          MULLGATE_MULLVAD_WG_URL: ' https://wg.example.test ',
+          MULLGATE_MULLVAD_RELAYS_URL: ' https://relays.example.test ',
+          MULLGATE_M004_WIREPROXY_IMAGE: ' custom/wireproxy:latest ',
+        },
+      ),
+    ).toEqual({
+      ok: true,
+      options: {
+        targetUrl: 'https://example.com/exit.json',
+        routeCheckIp: '9.9.9.9',
+        logicalExitCount: 2,
+        outputRoot: '.tmp/custom-feasibility',
+        keepTempHome: true,
+        fixturePath: './fixture.json',
+        accountNumber: '123456',
+        proxyUsername: 'alice',
+        proxyPassword: 'secret',
+        deviceName: 'mullgate-fixture',
+        mullvadWgUrl: 'https://wg.example.test',
+        mullvadRelaysUrl: 'https://relays.example.test',
+        wireproxyImage: 'custom/wireproxy:latest',
+      },
+    });
+
+    expect(
+      parseFeasibilityArgs([], {
+        MULLGATE_VERIFY_TARGET_URL: ' https://env.example/exit.json ',
+        MULLGATE_VERIFY_ROUTE_CHECK_IP: ' 8.8.8.8 ',
+        MULLGATE_M004_LOGICAL_EXIT_COUNT: '2',
+        MULLGATE_M004_OUTPUT_ROOT: ' .tmp/env-feasibility ',
+      }),
+    ).toEqual({
+      ok: true,
+      options: {
+        targetUrl: 'https://env.example/exit.json',
+        routeCheckIp: '8.8.8.8',
+        logicalExitCount: 2,
+        outputRoot: '.tmp/env-feasibility',
+        keepTempHome: false,
+      },
+    });
+  });
+
+  it('renders feasibility help and rejects invalid args with the same operator guidance', () => {
+    expect(parseFeasibilityArgs(['--help'])).toEqual({
+      ok: false,
+      helpText: renderFeasibilityHelp(),
+      exitCode: 0,
+    });
+
+    expect(parseFeasibilityArgs(['--logical-exit-count', '4'])).toEqual({
+      ok: false,
+      helpText: renderFeasibilityHelp(),
+      exitCode: 1,
+      error: 'Invalid --logical-exit-count value: 4. Expected 2 or 3.',
+    });
+
+    expect(parseFeasibilityArgs(['--unknown-flag'])).toEqual({
+      ok: false,
+      helpText: renderFeasibilityHelp(),
+      exitCode: 1,
+      error: 'Unknown argument: --unknown-flag',
+    });
+
+    expect(renderFeasibilityHelp()).toContain(
+      'Run the isolated M004 feasibility verifier: provision exactly one Mullvad',
+    );
+    expect(renderFeasibilityHelp()).toContain('Fixture mode:');
+  });
+
   it('selects deterministic SOCKS-capable relays from the legacy Mullvad catalog while preferring non-entry cities', async () => {
     const relayFixture = await readJsonFixture<unknown>('www-relays-all.json');
     const normalized = normalizeRelayPayload(relayFixture, {
