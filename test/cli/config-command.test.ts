@@ -4,13 +4,18 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildProxyExportPlan,
+  describeConfiguredProxyExportRoutes,
+  listMatchingRelays,
   parseProxyExportSelectors,
+  planProxyExportRelayTargets,
   renderExposureReport,
   renderHostsReport,
   renderPathReport,
   renderProxyExportPreview,
+  renderProxyExportSelectorLabel,
   renderProxyExportSuccess,
   renderRegionGroupsReport,
+  resolveProxyExportSelectorsWithCatalog,
   updateExposureConfig,
 } from '../../src/commands/config.js';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
@@ -222,6 +227,43 @@ function createFixtureRelayCatalog(): MullvadRelayCatalog {
           countryName: 'United States',
           cityCode: 'nyc',
           cityName: 'New York',
+        },
+      },
+    ],
+  };
+}
+
+function createExpandedFixtureRelayCatalog(): MullvadRelayCatalog {
+  const relayCatalog = createFixtureRelayCatalog();
+
+  return {
+    ...relayCatalog,
+    countries: [
+      ...relayCatalog.countries,
+      {
+        code: 'de',
+        name: 'Germany',
+        cities: [{ code: 'ber', name: 'Berlin', relayCount: 1 }],
+      },
+    ],
+    relays: [
+      ...relayCatalog.relays,
+      {
+        hostname: 'de-ber-wg-010',
+        fqdn: 'de-ber-wg-010.relays.mullvad.net',
+        source: 'www-relays-all',
+        active: true,
+        owned: false,
+        provider: 'xtom',
+        publicKey: 'relay-public-key-de-ber-010',
+        endpointIpv4: '185.213.154.10',
+        networkPortSpeed: 2000,
+        stboot: false,
+        location: {
+          countryCode: 'de',
+          countryName: 'Germany',
+          cityCode: 'ber',
+          cityName: 'Berlin',
         },
       },
     ],
@@ -765,6 +807,68 @@ copy/paste hosts block
     });
   });
 
+  it.each([
+    {
+      tokens: ['--city', 'Gothenburg'],
+      message: 'Pass --city after a --country selector.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--city', 'Gothenburg', '--city', 'Stockholm'],
+      message: 'Selector country=sweden already has a --city.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--server', 'se-got-wg-101', '--city', 'Gothenburg'],
+      message: 'Selector country=sweden already has a --server, so --city is redundant.',
+    },
+    {
+      tokens: ['--server', 'se-got-wg-101'],
+      message: 'Pass --server after a --country selector.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--server', 'se-got-wg-101', '--server', 'se-sto-wg-101'],
+      message: 'Selector country=sweden already has a --server.',
+    },
+    {
+      tokens: ['--provider', 'm247'],
+      message: 'Pass --provider after a --country or --region selector.',
+    },
+    {
+      tokens: ['--owner', 'mullvad'],
+      message: 'Pass --owner after a --country or --region selector.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--owner', 'mullvad', '--owner', 'rented'],
+      message: 'Selector country=sweden already has an --owner filter.',
+    },
+    {
+      tokens: ['--run-mode', 'ram'],
+      message: 'Pass --run-mode after a --country or --region selector.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--run-mode', 'ram', '--run-mode', 'disk'],
+      message: 'Selector country=sweden already has a --run-mode filter.',
+    },
+    {
+      tokens: ['--min-port-speed', '1000'],
+      message: 'Pass --min-port-speed after a --country or --region selector.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--min-port-speed', '1000', '--min-port-speed', '2000'],
+      message: 'Selector country=sweden already has a --min-port-speed filter.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--count', '1', '--count', '2'],
+      message: 'Selector country=sweden already has a --count.',
+    },
+  ])('rejects invalid proxy export selector refinements: $message', ({ tokens, message }) => {
+    expect(parseProxyExportSelectors(tokens)).toEqual({
+      ok: false,
+      phase: 'export-proxies',
+      source: 'input',
+      message,
+    });
+  });
+
   it('plans proxy exports with ordered selector dedupe and stable filenames', () => {
     const config = createFixtureConfig();
     const firstRoute = requireRoute(config, 0);
@@ -942,6 +1046,195 @@ copy/paste hosts block
     }
 
     expect(result.entries.map((entry) => entry.alias)).toEqual(['sweden-gothenburg']);
+  });
+
+  it('normalizes proxy export selectors against catalog metadata', () => {
+    const result = resolveProxyExportSelectorsWithCatalog({
+      config: createFixtureConfig(),
+      selectors: [
+        {
+          kind: 'country',
+          value: 'Sweden',
+          city: 'Gothenburg',
+          server: 'se-got-wg-101',
+          providers: [' M247 '],
+          owner: 'mullvad',
+          runMode: 'ram',
+          minPortSpeed: 9000,
+          requestedCount: 1,
+        },
+        {
+          kind: 'region',
+          value: 'Europe',
+          providers: [' Datawagon '],
+          owner: 'rented',
+          runMode: 'disk',
+          minPortSpeed: 1000,
+          requestedCount: 2,
+        },
+      ],
+      relayCatalog: createFixtureRelayCatalog(),
+      configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      selectors: [
+        {
+          kind: 'country',
+          value: 'se',
+          city: 'got',
+          server: 'se-got-wg-101',
+          providers: ['m247'],
+          owner: 'mullvad',
+          runMode: 'ram',
+          minPortSpeed: 9000,
+          requestedCount: 1,
+        },
+        {
+          kind: 'region',
+          value: 'europe',
+          providers: ['datawagon'],
+          owner: 'rented',
+          runMode: 'disk',
+          minPortSpeed: 1000,
+          requestedCount: 2,
+        },
+      ],
+    });
+  });
+
+  it('rejects unknown providers and oversized exact-server selector counts', () => {
+    expect(
+      resolveProxyExportSelectorsWithCatalog({
+        config: createFixtureConfig(),
+        selectors: [
+          {
+            kind: 'country',
+            value: 'Sweden',
+            providers: ['unknown'],
+            owner: 'all',
+            runMode: 'all',
+            minPortSpeed: null,
+            requestedCount: 1,
+          },
+        ],
+        relayCatalog: createFixtureRelayCatalog(),
+        configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+      }),
+    ).toEqual({
+      ok: false,
+      phase: 'export-proxies',
+      source: 'input',
+      message: 'Unknown provider unknown.',
+      configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
+
+    expect(
+      resolveProxyExportSelectorsWithCatalog({
+        config: createFixtureConfig(),
+        selectors: [
+          {
+            kind: 'country',
+            value: 'Sweden',
+            city: 'Gothenburg',
+            server: 'se-got-wg-101',
+            providers: [],
+            owner: 'all',
+            runMode: 'all',
+            minPortSpeed: null,
+            requestedCount: 2,
+          },
+        ],
+        relayCatalog: createFixtureRelayCatalog(),
+        configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+      }),
+    ).toEqual({
+      ok: false,
+      phase: 'export-proxies',
+      source: 'input',
+      message:
+        'Selector country=se city=got server=se-got-wg-101 targets one exact server, so --count cannot exceed 1.',
+      configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+    });
+  });
+
+  it('describes configured routes and plans only the missing export relays', () => {
+    const config = createFixtureConfig();
+    const relayCatalog = createExpandedFixtureRelayCatalog();
+    const configuredRoutes = describeConfiguredProxyExportRoutes({
+      config,
+      relayCatalog,
+    });
+
+    expect(configuredRoutes).toEqual([
+      {
+        routeIndex: 0,
+        routeId: 'sweden-gothenburg',
+        routeAlias: 'sweden-gothenburg',
+        routeHostname: 'sweden-gothenburg',
+        countryCode: 'se',
+        cityCode: 'got',
+        relayHostname: 'se-got-wg-101',
+        provider: 'm247',
+        owner: 'mullvad',
+        runMode: 'ram',
+        portSpeed: 10000,
+      },
+      {
+        routeIndex: 1,
+        routeId: 'austria-vienna',
+        routeAlias: 'austria-vienna',
+        routeHostname: 'austria-vienna',
+        countryCode: 'at',
+        cityCode: 'vie',
+        relayHostname: 'at-vie-wg-001',
+        provider: 'datawagon',
+        owner: 'rented',
+        runMode: 'disk',
+        portSpeed: 1000,
+      },
+    ]);
+
+    expect(
+      listMatchingRelays({
+        relayCatalog,
+        providers: [],
+        owner: 'rented',
+        runMode: 'disk',
+        minPortSpeed: 1500,
+      }).map((relay) => relay.hostname),
+    ).toEqual(['us-nyc-wg-001', 'de-ber-wg-010']);
+
+    const selector = {
+      kind: 'region' as const,
+      value: 'europe',
+      providers: [],
+      owner: 'all' as const,
+      runMode: 'all' as const,
+      minPortSpeed: null,
+      requestedCount: 3,
+    };
+
+    expect(renderProxyExportSelectorLabel(selector)).toBe('region=europe');
+
+    expect(
+      planProxyExportRelayTargets({
+        config,
+        relayCatalog,
+        selectors: [selector],
+        configuredRoutes,
+        configPath: '/tmp/mullgate-home/config/mullgate/config.json',
+      }),
+    ).toEqual({
+      ok: true,
+      targets: [
+        {
+          relay: relayCatalog.relays[3],
+          selector,
+        },
+      ],
+    });
   });
 
   it('fails proxy export explicitly when inline-selector mode is enabled', () => {
