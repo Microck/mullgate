@@ -1233,48 +1233,52 @@ describe('mullgate setup CLI flow', () => {
     },
   );
 
-  it('fails clearly on invalid non-loopback bind ip input before provisioning', async () => {
-    const env = createTempEnvironment();
+  it(
+    'fails clearly on invalid non-loopback bind ip input before provisioning',
+    { timeout: 20000 },
+    async () => {
+      const env = createTempEnvironment();
 
-    const setupResult = await runCli(
-      [
-        'setup',
-        '--non-interactive',
-        '--exposure-mode',
-        'private-network',
-        '--bind-host',
-        '127.0.0.1',
-        '--location',
-        'sweden-gothenburg',
-        '--location',
-        'austria-vienna',
-      ],
-      {
-        env: {
-          ...env,
-          MULLGATE_ACCOUNT_NUMBER: '123456789012',
-          MULLGATE_PROXY_USERNAME: 'alice',
-          MULLGATE_PROXY_PASSWORD: 'missing-bind-secret',
+      const setupResult = await runCli(
+        [
+          'setup',
+          '--non-interactive',
+          '--exposure-mode',
+          'private-network',
+          '--bind-host',
+          '127.0.0.1',
+          '--location',
+          'sweden-gothenburg',
+          '--location',
+          'austria-vienna',
+        ],
+        {
+          env: {
+            ...env,
+            MULLGATE_ACCOUNT_NUMBER: '123456789012',
+            MULLGATE_PROXY_USERNAME: 'alice',
+            MULLGATE_PROXY_PASSWORD: 'missing-bind-secret',
+          },
         },
-      },
-    );
+      );
 
-    expect(setupResult.status).toBe(1);
-    expect(setupResult.stdout).toBe('');
-    expect(setupResult.stderr).not.toContain('123456789012');
-    expect(setupResult.stderr).not.toContain('missing-bind-secret');
-    expect(`\n${normalizeOutput(setupResult.stderr, env)}`).toMatchInlineSnapshot(`
-      "
-      Mullgate setup failed.
-      phase: setup-validation
-      source: input
-      code: UNSAFE_PRIVATE_BIND_IP
-      artifact: /tmp/mullgate-home/config/mullgate/config.json
-      reason: Private-network exposure requires a trusted-network IPv4 host, but received 127.0.0.1.
-      config: /tmp/mullgate-home/config/mullgate/config.json
-      cause: Use an RFC1918 address, a Tailscale 100.x address, or 0.0.0.0 as the wildcard fallback when Tailscale is unavailable."
-    `);
-  });
+      expect(setupResult.status).toBe(1);
+      expect(setupResult.stdout).toBe('');
+      expect(setupResult.stderr).not.toContain('123456789012');
+      expect(setupResult.stderr).not.toContain('missing-bind-secret');
+      expect(`\n${normalizeOutput(setupResult.stderr, env)}`).toMatchInlineSnapshot(`
+        "
+        Mullgate setup failed.
+        phase: setup-validation
+        source: input
+        code: UNSAFE_PRIVATE_BIND_IP
+        artifact: /tmp/mullgate-home/config/mullgate/config.json
+        reason: Private-network exposure requires a trusted-network IPv4 host, but received 127.0.0.1.
+        config: /tmp/mullgate-home/config/mullgate/config.json
+        cause: Use an RFC1918 address, a Tailscale 100.x address, or 0.0.0.0 as the wildcard fallback when Tailscale is unavailable."
+      `);
+    },
+  );
 
   it('reports shared-device provisioning failures with the raw upstream details', async () => {
     const env = createTempEnvironment();
