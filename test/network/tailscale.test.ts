@@ -36,16 +36,32 @@ async function createFakeTailscaleCommand(output: {
   readonly stderr?: string;
 }): Promise<string> {
   const binDir = await mkdtemp(path.join(tmpdir(), 'mullgate-tailscale-bin-'));
-  const commandPath = path.join(binDir, 'tailscale');
+  const scriptPath = path.join(binDir, 'fake-tailscale.mjs');
+  const posixLauncherPath = path.join(binDir, 'tailscale');
+  const windowsLauncherPath = path.join(binDir, 'tailscale.cmd');
   temporaryDirectories.push(binDir);
 
-  const script = `#!/usr/bin/env node
-process.stdout.write(${JSON.stringify(output.stdout ?? '')});
-process.stderr.write(${JSON.stringify(output.stderr ?? '')});
-`;
-
-  await writeFile(commandPath, script, 'utf8');
-  await chmod(commandPath, 0o755);
+  await writeFile(
+    scriptPath,
+    [
+      `process.stdout.write(${JSON.stringify(output.stdout ?? '')});`,
+      `process.stderr.write(${JSON.stringify(output.stderr ?? '')});`,
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  await writeFile(
+    posixLauncherPath,
+    ['#!/bin/sh', 'exec node "$(dirname "$0")/fake-tailscale.mjs" "$@"', ''].join('\n'),
+    'utf8',
+  );
+  await writeFile(
+    windowsLauncherPath,
+    ['@echo off', 'node "%~dp0fake-tailscale.mjs" %*', ''].join('\r\n'),
+    'utf8',
+  );
+  await chmod(scriptPath, 0o755);
+  await chmod(posixLauncherPath, 0o755);
 
   return binDir;
 }
