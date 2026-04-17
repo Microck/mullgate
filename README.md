@@ -22,6 +22,21 @@ the main setup path is `mullgate setup`. on a real terminal it opens a guided fl
   <img src="images/demos/50-proxy-proof.gif" alt="50 proxy demo" width="60%">
 </p>
 
+## table of contents
+
+- [why](#why)
+- [how mullgate differs from mullvad's socks5 proxy](#how-mullgate-differs-from-mullvads-socks5-proxy)
+- [architecture](#architecture)
+- [quickstart](#quickstart)
+- [platform support](#platform-support)
+- [command surface](#command-surface)
+- [examples](#examples)
+- [documentation](#documentation)
+- [contributing](#contributing)
+- [changelog](#changelog)
+- [security](#security)
+- [disclaimer](#disclaimer)
+- [license](#license)
 
 ## why
 
@@ -367,6 +382,18 @@ mullgate proxy autostart status
 - [command reference](https://mullgate.micr.dev/docs/reference/commands)
 - [troubleshooting](https://mullgate.micr.dev/docs/guides/troubleshooting)
 - [`.env.example`](.env.example) - documented setup inputs for local runs
+
+## contributing
+
+see [contributing guidelines](CONTRIBUTING.md) for prerequisites, local setup, and technical arc. this project follows the [code of conduct](CODE_OF_CONDUCT.md).
+
+## changelog
+
+see [changelog](CHANGELOG.md) for release history. this project follows [keep a changelog](https://keepachangelog.com/) and [semantic versioning](https://semver.org/).
+
+## security
+
+see [security policy](SECURITY.md) for responsible disclosure. do not open a public issue for security problems — email `contact@micr.dev` instead.
 
 ## disclaimer
 
