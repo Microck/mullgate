@@ -217,7 +217,6 @@ export const mullgateConfigInputSchema = z.object({
 
 export type ExposureMode = z.infer<typeof exposureModeSchema>;
 export type AccessMode = z.infer<typeof accessModeSchema>;
-export type ExposureConfig = z.infer<typeof exposureConfigSchema>;
 export type RoutedLocationExit = z.infer<typeof routedLocationExitSchema>;
 export type RoutedLocation = z.infer<typeof routedLocationSchema>;
 export type RoutedLocationInput = z.infer<typeof routedLocationInputSchema>;
