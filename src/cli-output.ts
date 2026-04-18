@@ -17,6 +17,11 @@ export type WritableTextSink = {
 
 export type CliTone = 'info' | 'success' | 'error';
 
+/**
+ * Write a formatted CLI report to a text sink, applying color and styling when the sink is a TTY.
+ *
+ * @param input - Sink, text content, and optional tone (`'info'`, `'success'`, `'error'`).
+ */
 export function writeCliReport(input: {
   readonly sink: WritableTextSink;
   readonly text: string;
@@ -25,6 +30,11 @@ export function writeCliReport(input: {
   input.sink.write(`${renderCliReport(input.text, input.sink, input.tone)}\n`);
 }
 
+/**
+ * Write raw text to a sink without any formatting.
+ *
+ * @param input - Sink and raw text content.
+ */
 export function writeCliRaw(input: {
   readonly sink: WritableTextSink;
   readonly text: string;
@@ -32,6 +42,16 @@ export function writeCliRaw(input: {
   input.sink.write(input.text);
 }
 
+/**
+ * Render CLI report text with ANSI color codes for TTY output.
+ * Headings, key-value pairs, list items, and inline code are colorized.
+ * Returns the text unchanged when the sink is not a TTY.
+ *
+ * @param text - The plain-text report.
+ * @param sink - Used to check `isTTY`.
+ * @param tone - Color tone for the title line.
+ * @returns The colorized report string.
+ */
 export function renderCliReport(
   text: string,
   sink: Pick<WritableTextSink, 'isTTY'>,
