@@ -230,9 +230,6 @@ export function normalizeMullgateConfig(input: unknown): MullgateConfig {
   });
 }
 
-export function syncLegacyMirrorsToRouting(config: MullgateConfig): MullgateConfig {
-  return normalizeMullgateConfig(config);
-}
 
 function normalizeRoutingLocations(config: MullgateConfigInput): RoutedLocation[] {
   const usedRouteIds = new Set<string>();
