@@ -4,8 +4,15 @@ import {
   sensitiveConfigFieldPaths,
 } from './schema.js';
 
+/** Placeholder used in place of sensitive configuration values. */
 export const REDACTED = '[redacted]';
 
+/**
+ * Return a deep copy of `config` with all sensitive fields replaced by {@link REDACTED}.
+ *
+ * @param config - The full Mullgate configuration.
+ * @returns A safe-to-log copy with secrets redacted.
+ */
 export function redactConfig(config: MullgateConfig): MullgateConfig {
   const redacted = {
     ...config,
@@ -45,10 +52,23 @@ export function redactConfig(config: MullgateConfig): MullgateConfig {
   } satisfies MullgateConfig;
 }
 
+/**
+ * Serialize a redacted config as pretty-printed JSON.
+ *
+ * @param config - The full Mullgate configuration.
+ * @returns A JSON string with secrets replaced by `[redacted]`.
+ */
 export function formatRedactedConfig(config: MullgateConfig): string {
   return JSON.stringify(redactConfig(config), null, 2);
 }
 
+/**
+ * Replace all known secrets and PEM-encoded private keys within an arbitrary string.
+ *
+ * @param value - The text to sanitize.
+ * @param config - Used to discover current secret values.
+ * @returns The sanitized text with secrets replaced by `[redacted]`.
+ */
 export function redactSensitiveText(value: string, config: MullgateConfig): string {
   let redacted = value;
 
