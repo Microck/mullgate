@@ -2,7 +2,6 @@
   <img src=".github/assets/mullgate-logo.png" alt="mullgate" width="720">
 </p>
 
-
 <p align="center">
   <a href="https://github.com/Microck/mullgate/releases"><img src="https://img.shields.io/github/v/release/Microck/mullgate?display_name=tag&style=flat-square&label=release&color=000000" alt="release badge"></a>
   <a href="https://www.npmjs.com/package/mullgate"><img src="https://flat.badgen.net/npm/dt/mullgate?label=downloads&color=000000" alt="npm downloads"></a>
@@ -22,6 +21,21 @@ the main setup path is `mullgate setup`. on a real terminal it opens a guided fl
   <img src="images/demos/50-proxy-proof.gif" alt="50 proxy demo" width="60%">
 </p>
 
+## table of contents
+
+- [why](#why)
+- [how mullgate differs from mullvad's socks5 proxy](#how-mullgate-differs-from-mullvads-socks5-proxy)
+- [architecture](#architecture)
+- [requirements](#requirements)
+- [quickstart](#quickstart)
+- [platform support](#platform-support)
+- [command surface](#command-surface)
+- [examples](#examples)
+- [documentation](#documentation)
+- [contributing](#contributing)
+- [security](#security)
+- [changelog](#changelog)
+- [license](#license)
 
 ## why
 
@@ -172,9 +186,17 @@ flowchart TB
 
 the diagram above shows the current shipped mullgate model end to end: setup writes canonical config, exposure defines the published host and hostname truth, relay tooling can pin exact exits, `start` renders and launches the shared-entry runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces.
 
-## quickstart
+## requirements
 
-`mullgate` currently requires Node.js 22+.
+| requirement | minimum version |
+| --- | --- |
+| Node.js | 22+ |
+| Docker | required for full runtime execution |
+| Mullvad account | active subscription with WireGuard access |
+
+Linux is required for the full runtime. macOS and Windows support install, config, and diagnostics only.
+
+## quickstart
 
 install from npm for the normal path, or use a GitHub release standalone binary/archive when you want a pinned platform artifact.
 
@@ -367,6 +389,18 @@ mullgate proxy autostart status
 - [command reference](https://mullgate.micr.dev/docs/reference/commands)
 - [troubleshooting](https://mullgate.micr.dev/docs/guides/troubleshooting)
 - [`.env.example`](.env.example) - documented setup inputs for local runs
+
+## contributing
+
+contributions are welcome. see [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, code style expectations, and the PR process.
+
+## security
+
+found a vulnerability? please report it responsibly via [SECURITY.md](SECURITY.md).
+
+## changelog
+
+see [CHANGELOG.md](CHANGELOG.md) for release history and breaking changes.
 
 ## disclaimer
 
