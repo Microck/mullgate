@@ -59,53 +59,51 @@ afterAll(async () => {
 });
 
 describe.skipIf(process.env.MULLGATE_E2E !== '1')('mullgate e2e runtime flow', () => {
-  it(
-    'runs setup, start, status, doctor, and stop against a real Docker-backed environment',
-    { timeout: 180000 },
-    async () => {
-      const root = mkdtempSync(path.join(tmpdir(), 'mullgate-e2e-'));
-      const home = root.replaceAll('\\', '/');
-      temporaryDirectories.push(root);
+  it('runs setup, start, status, doctor, and stop against a real Docker-backed environment', {
+    timeout: 180000,
+  }, async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'mullgate-e2e-'));
+    const home = root.replaceAll('\\', '/');
+    temporaryDirectories.push(root);
 
-      const env = {
-        ...process.env,
-        MULLGATE_PLATFORM: 'linux',
-        HOME: home,
-        XDG_CONFIG_HOME: `${home}/config`,
-        XDG_STATE_HOME: `${home}/state`,
-        XDG_CACHE_HOME: `${home}/cache`,
-      };
+    const env = {
+      ...process.env,
+      MULLGATE_PLATFORM: 'linux',
+      HOME: home,
+      XDG_CONFIG_HOME: `${home}/config`,
+      XDG_STATE_HOME: `${home}/state`,
+      XDG_CACHE_HOME: `${home}/cache`,
+    };
 
-      const setupResult = await runCli(
-        [
-          'setup',
-          '--non-interactive',
-          '--account-number',
-          requiredEnv('MULLGATE_E2E_ACCOUNT_NUMBER'),
-          '--username',
-          requiredEnv('MULLGATE_E2E_PROXY_USERNAME'),
-          '--password',
-          requiredEnv('MULLGATE_E2E_PROXY_PASSWORD'),
-          '--location',
-          requiredEnv('MULLGATE_E2E_LOCATION'),
-        ],
-        env,
-      );
+    const setupResult = await runCli(
+      [
+        'setup',
+        '--non-interactive',
+        '--account-number',
+        requiredEnv('MULLGATE_E2E_ACCOUNT_NUMBER'),
+        '--username',
+        requiredEnv('MULLGATE_E2E_PROXY_USERNAME'),
+        '--password',
+        requiredEnv('MULLGATE_E2E_PROXY_PASSWORD'),
+        '--location',
+        requiredEnv('MULLGATE_E2E_LOCATION'),
+      ],
+      env,
+    );
 
-      expect(setupResult.status).toBe(0);
+    expect(setupResult.status).toBe(0);
 
-      const startResult = await runCli(['proxy', 'start'], env);
-      expect(startResult.status).toBe(0);
+    const startResult = await runCli(['proxy', 'start'], env);
+    expect(startResult.status).toBe(0);
 
-      const statusResult = await runCli(['proxy', 'status'], env);
-      expect(statusResult.status).toBe(0);
-      expect(statusResult.stdout).toContain('runtime status: running');
+    const statusResult = await runCli(['proxy', 'status'], env);
+    expect(statusResult.status).toBe(0);
+    expect(statusResult.stdout).toContain('runtime status: running');
 
-      const doctorResult = await runCli(['proxy', 'doctor'], env);
-      expect(doctorResult.status).toBe(0);
+    const doctorResult = await runCli(['proxy', 'doctor'], env);
+    expect(doctorResult.status).toBe(0);
 
-      const stopResult = await runCli(['proxy', 'stop'], env);
-      expect(stopResult.status).toBe(0);
-    },
-  );
+    const stopResult = await runCli(['proxy', 'stop'], env);
+    expect(stopResult.status).toBe(0);
+  });
 });

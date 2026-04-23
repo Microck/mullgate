@@ -118,7 +118,7 @@ export async function enableAutostart(
 
   try {
     await mkdir(path.dirname(support.unitPath), { recursive: true, mode: 0o700 });
-    await writeFile(support.unitPath, `${unitFile}\n`, { mode: 0o644 });
+    await writeFile(support.unitPath, `${unitFile}\n`, { mode: 0o600 });
   } catch (error) {
     return renderAutostartFailure({
       action: 'enable',

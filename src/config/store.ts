@@ -230,7 +230,6 @@ export function normalizeMullgateConfig(input: unknown): MullgateConfig {
   });
 }
 
-
 function normalizeRoutingLocations(config: MullgateConfigInput): RoutedLocation[] {
   const usedRouteIds = new Set<string>();
 

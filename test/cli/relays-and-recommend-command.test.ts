@@ -3,7 +3,7 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runRecommendFlow } from '../../src/commands/recommend.js';
 import {
@@ -22,7 +22,7 @@ const tempRoots: string[] = [];
 
 afterEach(async () => {
   await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-  delete process.env.MULLGATE_MULLVAD_RELAYS_URL;
+  vi.unstubAllEnvs();
 });
 
 function createTempStore(): { readonly store: ConfigStore; readonly home: string } {
@@ -279,7 +279,7 @@ describe('relay and recommend flows', () => {
   it('lists relays with richer policy filters', async () => {
     const { store, home } = createTempStore();
     await store.save(createFixtureConfig(store));
-    process.env.MULLGATE_MULLVAD_RELAYS_URL = createRelayCatalogDataUrl();
+    vi.stubEnv('MULLGATE_MULLVAD_RELAYS_URL', createRelayCatalogDataUrl());
 
     const result = await runRelaysListFlow({
       options: {
@@ -318,7 +318,7 @@ describe('relay and recommend flows', () => {
   it('probes relays and ranks them by latency', async () => {
     const { store, home } = createTempStore();
     await store.save(createFixtureConfig(store));
-    process.env.MULLGATE_MULLVAD_RELAYS_URL = createRelayCatalogDataUrl();
+    vi.stubEnv('MULLGATE_MULLVAD_RELAYS_URL', createRelayCatalogDataUrl());
 
     const result = await runRelaysProbeFlow({
       options: {
@@ -362,7 +362,7 @@ describe('relay and recommend flows', () => {
   it('verifies configured route exits through Mullvad', async () => {
     const { store, home } = createTempStore();
     await store.save(createFixtureConfig(store));
-    process.env.MULLGATE_MULLVAD_RELAYS_URL = createRelayCatalogDataUrl();
+    vi.stubEnv('MULLGATE_MULLVAD_RELAYS_URL', createRelayCatalogDataUrl());
 
     const result = await runRelaysVerifyFlow({
       options: {
@@ -416,59 +416,53 @@ describe('relay and recommend flows', () => {
   it('recommends the fastest exact relay and previews the resulting route', async () => {
     const { store, home } = createTempStore();
     await store.save(createFixtureConfig(store));
-    process.env.MULLGATE_MULLVAD_RELAYS_URL = createRelayCatalogDataUrl();
+    vi.stubEnv('MULLGATE_MULLVAD_RELAYS_URL', createRelayCatalogDataUrl());
 
-    const previousArgv = [...process.argv];
-    process.argv = ['node', 'src/cli.ts', 'recommend', '--country', 'Sweden', '--count', '1'];
+    const result = await runRecommendFlow({
+      options: {},
+      argv: ['node', 'src/cli.ts', 'recommend', '--country', 'Sweden', '--count', '1'],
+      store,
+      runner: async ({ args }) => {
+        const targetIp = args.at(-1);
 
-    try {
-      const result = await runRecommendFlow({
-        options: {},
-        store,
-        runner: async ({ args }) => {
-          const targetIp = args.at(-1);
+        return {
+          exitCode: 0,
+          stdout: `64 bytes from ${targetIp}: icmp_seq=1 ttl=57 time=${targetIp === '185.213.154.22' ? '7.1' : '13.4'} ms`,
+          stderr: '',
+        };
+      },
+    });
 
-          return {
-            exitCode: 0,
-            stdout: `64 bytes from ${targetIp}: icmp_seq=1 ttl=57 time=${targetIp === '185.213.154.22' ? '7.1' : '13.4'} ms`,
-            stderr: '',
-          };
-        },
-      });
+    expect(result.ok).toBe(true);
 
-      expect(result.ok).toBe(true);
-
-      if (!result.ok) {
-        return;
-      }
-
-      expect(`\n${normalizeFixtureHomePath(result.text, home)}`).toMatchInlineSnapshot(`
-        "
-        Mullgate route recommendations.
-        phase: recommend-routes
-        source: relay-probe
-        config: /tmp/mullgate-home/config/mullgate/config.json
-        apply: no
-        selectors: 1
-        1. country=se matched=2 probed=2 recommended=1
-        recommended routes: 1
-        1. relay=se-got-wg-101 latency=13.4ms
-           selector: country=se
-           provider: m247
-           owner: mullvad
-           run mode: ram
-           port speed: 10000
-           route status: existing configured route
-           route alias: sweden-gothenburg
-           route id: sweden-gothenburg-proxy-example-com
-           hostname: sweden-gothenburg.proxy.example.com
-           bind ip: 192.168.10.10
-           socks5: socks5://alice:multi-route-secret@192.168.10.10:1080
-           http: http://alice:multi-route-secret@192.168.10.10:8080
-           https: https://alice:multi-route-secret@192.168.10.10:8443"
-      `);
-    } finally {
-      process.argv = previousArgv;
+    if (!result.ok) {
+      return;
     }
+
+    expect(`\n${normalizeFixtureHomePath(result.text, home)}`).toMatchInlineSnapshot(`
+      "
+      Mullgate route recommendations.
+      phase: recommend-routes
+      source: relay-probe
+      config: /tmp/mullgate-home/config/mullgate/config.json
+      apply: no
+      selectors: 1
+      1. country=se matched=2 probed=2 recommended=1
+      recommended routes: 1
+      1. relay=se-got-wg-101 latency=13.4ms
+         selector: country=se
+         provider: m247
+         owner: mullvad
+         run mode: ram
+         port speed: 10000
+         route status: existing configured route
+         route alias: sweden-gothenburg
+         route id: sweden-gothenburg-proxy-example-com
+         hostname: sweden-gothenburg.proxy.example.com
+         bind ip: 192.168.10.10
+         socks5: socks5://alice:multi-route-secret@192.168.10.10:1080
+         http: http://alice:multi-route-secret@192.168.10.10:8080
+         https: https://alice:multi-route-secret@192.168.10.10:8443"
+    `);
   });
 });

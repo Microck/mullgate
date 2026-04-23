@@ -2,7 +2,7 @@
 
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
-import { type ComponentProps, useEffect, useState } from 'react';
+import { type ComponentProps, useSyncExternalStore } from 'react';
 import { cn } from '@/lib/cn';
 
 type MullvadThemeSwitchProps = ComponentProps<'div'> & {
@@ -22,13 +22,17 @@ const themeOptions = [
   },
 ] as const;
 
+function subscribeToMountState(): () => void {
+  return () => {};
+}
+
 export function MullvadThemeSwitch({ className, mode: _mode, ...props }: MullvadThemeSwitchProps) {
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    subscribeToMountState,
+    () => true,
+    () => false,
+  );
 
   const activeTheme = mounted ? resolvedTheme : 'light';
 

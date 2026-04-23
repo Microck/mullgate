@@ -4013,7 +4013,7 @@ export function parseRelayOwnerFilter(raw: string): RelayOwnerFilter {
     return normalized;
   }
 
-  throw new Error('Relay ownership must be one of mullvad, rented, or all.');
+  throw new Error(`Relay ownership ${formatRawInput(raw)} must be one of mullvad, rented, or all.`);
 }
 
 export function parseRelayRunModeFilter(raw: string): RelayRunModeFilter {
@@ -4023,14 +4023,14 @@ export function parseRelayRunModeFilter(raw: string): RelayRunModeFilter {
     return normalized;
   }
 
-  throw new Error('Relay run mode must be one of ram, disk, or all.');
+  throw new Error(`Relay run mode ${formatRawInput(raw)} must be one of ram, disk, or all.`);
 }
 
 function parseProxyExportMinPortSpeed(raw: string): number {
   const value = Number(raw.trim());
 
   if (!Number.isInteger(value) || value < 1) {
-    throw new Error('Minimum port speed must be a positive integer.');
+    throw new Error(`Minimum port speed ${formatRawInput(raw)} must be a positive integer.`);
   }
 
   return value;
@@ -4437,7 +4437,9 @@ function parseExposureModeOption(raw: string): ExposureMode {
     return normalized;
   }
 
-  throw new Error('Exposure mode must be loopback, private-network, or public.');
+  throw new Error(
+    `Exposure mode ${formatRawInput(raw)} must be loopback, private-network, or public.`,
+  );
 }
 
 function collectRepeatedValues(value: string, previous: string[]): string[] {
@@ -4497,7 +4499,7 @@ function parseProxyExportProtocol(raw: string | undefined): ProxyExportProtocol 
     return normalized;
   }
 
-  throw new Error('Protocol must be one of socks5, http, or https.');
+  throw new Error(`Protocol ${formatRawInput(raw ?? '')} must be one of socks5, http, or https.`);
 }
 
 export function createAuthenticatedEndpointUrl(
@@ -4682,11 +4684,25 @@ function readOptionalString(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function formatRawInput(raw: string | undefined): string {
+  const trimmed = raw?.trim() ?? '';
+  return trimmed.length > 0 ? JSON.stringify(trimmed) : 'an empty value';
+}
+
+function formatUnknownInput(value: unknown): string {
+  if (typeof value === 'string') {
+    return formatRawInput(value);
+  }
+
+  const serialized = JSON.stringify(value);
+  return serialized ? formatRawInput(serialized) : String(value);
+}
+
 function parseRequiredString(raw: string): string {
   const value = raw.trim();
 
   if (!value) {
-    throw new Error('A non-empty string value is required.');
+    throw new Error(`Expected a non-empty string value, but received ${formatRawInput(raw)}.`);
   }
 
   return value;
@@ -4708,7 +4724,7 @@ function parseNullableString(raw: string, options: { json: boolean }): string | 
       return parsed.trim();
     }
 
-    throw new Error('Expected JSON string or null.');
+    throw new Error(`Expected a JSON string or null, but received ${formatUnknownInput(parsed)}.`);
   }
 
   const value = raw.trim();
@@ -4719,7 +4735,7 @@ function parsePort(raw: string, options?: { json: boolean }): number {
   const value = parseNumber(raw, options?.json ?? false);
 
   if (!Number.isInteger(value) || value < 1 || value > 65535) {
-    throw new Error('Ports must be integers between 1 and 65535.');
+    throw new Error(`Port ${formatRawInput(raw)} must be an integer between 1 and 65535.`);
   }
 
   return value;
@@ -4741,7 +4757,7 @@ function parseNullablePort(raw: string, options: { json: boolean }): number | nu
       return parsePort(String(parsed));
     }
 
-    throw new Error('Expected JSON number or null.');
+    throw new Error(`Expected a JSON number or null, but received ${formatUnknownInput(parsed)}.`);
   }
 
   return parsePort(raw);
@@ -4752,7 +4768,7 @@ function parseBoolean(raw: string, options: { json: boolean }): boolean {
     const parsed = JSON.parse(raw) as unknown;
 
     if (typeof parsed !== 'boolean') {
-      throw new Error('Expected JSON boolean.');
+      throw new Error(`Expected a JSON boolean, but received ${formatUnknownInput(parsed)}.`);
     }
 
     return parsed;
@@ -4768,7 +4784,7 @@ function parseBoolean(raw: string, options: { json: boolean }): boolean {
     return false;
   }
 
-  throw new Error('Boolean values must be true or false.');
+  throw new Error(`Boolean value ${formatRawInput(raw)} must be true or false.`);
 }
 
 function parseAccessMode(raw: string): AccessMode {
@@ -4778,7 +4794,9 @@ function parseAccessMode(raw: string): AccessMode {
     return value;
   }
 
-  throw new Error('Access mode must be published-routes or inline-selector.');
+  throw new Error(
+    `Access mode ${formatRawInput(raw)} must be published-routes or inline-selector.`,
+  );
 }
 
 function parseStringArray(raw: string, options: { json: boolean }): string[] {
@@ -4786,7 +4804,9 @@ function parseStringArray(raw: string, options: { json: boolean }): string[] {
     const parsed = JSON.parse(raw) as unknown;
 
     if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== 'string')) {
-      throw new Error('Expected JSON array of strings.');
+      throw new Error(
+        `Expected a JSON array of strings, but received ${formatUnknownInput(parsed)}.`,
+      );
     }
 
     return parsed.map((value) => value.trim()).filter((value) => value.length > 0);
@@ -4803,7 +4823,7 @@ function parseNumber(raw: string, json: boolean): number {
     const parsed = JSON.parse(raw) as unknown;
 
     if (typeof parsed !== 'number') {
-      throw new Error('Expected JSON number.');
+      throw new Error(`Expected a JSON number, but received ${formatUnknownInput(parsed)}.`);
     }
 
     return parsed;
@@ -4812,7 +4832,7 @@ function parseNumber(raw: string, json: boolean): number {
   const numeric = Number(raw.trim());
 
   if (!Number.isFinite(numeric)) {
-    throw new Error('Expected a numeric value.');
+    throw new Error(`Expected a numeric value, but received ${formatRawInput(raw)}.`);
   }
 
   return numeric;
