@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  vite: 8.0.7
+  vite: 8.0.8
 
 importers:
 
@@ -438,7 +438,7 @@ packages:
     resolution: {integrity: sha512-R9HTZBhW6yCSGbGQnDnH3QHfJxokKN4KB+Yvk9Q1le7eQNYwiCyKxmLmurSpFy6BzJanSLuEUDrD+j97Q+ZLPg==}
     peerDependencies:
       msw: ^2.4.9
-      vite: 8.0.7
+      vite: 8.0.8
     peerDependenciesMeta:
       msw:
         optional: true
@@ -774,7 +774,7 @@ packages:
       '@vitest/ui': 4.1.4
       happy-dom: '*'
       jsdom: '*'
-      vite: 8.0.7
+      vite: 8.0.8
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
