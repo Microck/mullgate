@@ -1090,7 +1090,7 @@ export function updateExposureConfig(
   };
 }
 
-function renderExposureUpdateSuccess(config: MullgateConfig, configPath: string): string {
+function _renderExposureUpdateSuccess(config: MullgateConfig, configPath: string): string {
   return [
     'Mullgate exposure updated.',
     'phase: persist-config',
@@ -1103,7 +1103,7 @@ function renderExposureUpdateSuccess(config: MullgateConfig, configPath: string)
   ].join('\n');
 }
 
-function renderExposureUpdateError(result: ExposureUpdateFailure): string {
+function _renderExposureUpdateError(result: ExposureUpdateFailure): string {
   return [
     'Mullgate exposure update failed.',
     `phase: ${result.phase}`,
@@ -4421,7 +4421,7 @@ function applyPostSetNormalization(config: MullgateConfig, changedPath: string):
   }
 }
 
-function hasExposureUpdate(options: ExposureCommandOptions): boolean {
+function _hasExposureUpdate(options: ExposureCommandOptions): boolean {
   return Boolean(
     options.mode ||
       options.baseDomain !== undefined ||
@@ -4430,7 +4430,7 @@ function hasExposureUpdate(options: ExposureCommandOptions): boolean {
   );
 }
 
-function parseExposureModeOption(raw: string): ExposureMode {
+function _parseExposureModeOption(raw: string): ExposureMode {
   const normalized = raw.trim();
 
   if (normalized === 'loopback' || normalized === 'private-network' || normalized === 'public') {
@@ -4440,7 +4440,7 @@ function parseExposureModeOption(raw: string): ExposureMode {
   throw new Error('Exposure mode must be loopback, private-network, or public.');
 }
 
-function collectRepeatedValues(value: string, previous: string[]): string[] {
+function _collectRepeatedValues(value: string, previous: string[]): string[] {
   return [...previous, value.trim()].filter((entry) => entry.length > 0);
 }
 
