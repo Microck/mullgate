@@ -24,7 +24,14 @@ const PROXY_SUBCOMMANDS = [
   'access',
   'relay',
 ] as const;
-const CONFIG_SUBCOMMANDS = ['path', 'show', 'get', 'set', 'validate', 'regions', 'hosts'] as const;
+const CONFIG_SUBCOMMANDS = ['path', 'show', 'get', 'set'] as const;
+
+function renderFishFlag(flag: string): string {
+  const normalized = flag.replace(/^-+/, '');
+  return flag.startsWith('--')
+    ? `complete -c mullgate -f -n "__fish_use_subcommand" -l "${normalized}"`
+    : `complete -c mullgate -f -n "__fish_use_subcommand" -s "${normalized}"`;
+}
 
 export function registerCompletionsCommand(
   program: Command,
@@ -134,17 +141,42 @@ function renderFishScript(): string {
     ...TOP_LEVEL_COMMANDS.map(
       (command) => `complete -c mullgate -f -n "__fish_use_subcommand" -a "${command}"`,
     ),
-    ...TOP_LEVEL_FLAGS.map(
-      (flag) =>
-        `complete -c mullgate -f -n "__fish_use_subcommand" -l "${flag.replace(/^-+/, '')}"`,
-    ),
+    ...TOP_LEVEL_FLAGS.map((flag) => renderFishFlag(flag)),
     ...PROXY_SUBCOMMANDS.map(
       (command) => `complete -c mullgate -f -n "__fish_seen_subcommand_from proxy" -a "${command}"`,
+    ),
+    ...CONFIG_SUBCOMMANDS.map(
+      (command) =>
+        `complete -c mullgate -f -n "__fish_seen_subcommand_from config" -a "${command}"`,
     ),
     `complete -c mullgate -n "__fish_seen_subcommand_from completions" -a "bash zsh fish"`,
     `complete -c mullgate -n "__fish_seen_subcommand_from proxy start" -l dry-run`,
     `complete -c mullgate -n "__fish_seen_subcommand_from proxy logs" -l tail`,
     `complete -c mullgate -n "__fish_seen_subcommand_from proxy logs" -l follow`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy access" -l mode`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy access" -l access-mode`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy access" -l base-domain`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy access" -l clear-base-domain`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy access" -l route-bind-ip`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy access" -l unsafe-public-empty-password`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l protocol`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l country`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l region`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l city`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l server`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l provider`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l owner`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l run-mode`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l min-port-speed`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l count`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l guided`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l regions`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l dry-run`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l stdout`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l force`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from proxy export" -l output`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from config set" -l stdin`,
+    `complete -c mullgate -n "__fish_seen_subcommand_from config set" -l json`,
   ];
 
   return `${lines.join('\n')}\n`;

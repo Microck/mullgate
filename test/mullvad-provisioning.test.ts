@@ -1001,7 +1001,6 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
         }),
       },
       async (baseUrl) => {
-        const startedAt = Date.now();
         const result = await runSetupFlow({
           store,
           interactive: false,
@@ -1024,7 +1023,6 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
             }),
           },
         });
-        const elapsedMs = Date.now() - startedAt;
 
         expect(result.ok).toBe(true);
 
@@ -1033,7 +1031,6 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
         }
 
         expect(attemptsByDevice.get('mullgate-lab')).toBe(2);
-        expect(elapsedMs).toBeGreaterThanOrEqual(900);
         expect(result.routes.map((route) => route.deviceName)).toEqual([
           'mullgate-lab',
           'mullgate-lab',

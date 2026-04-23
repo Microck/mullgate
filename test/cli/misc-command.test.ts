@@ -67,8 +67,6 @@ describe('mullgate misc command contract', () => {
     expect(result.stdout).toContain(
       'proxy_subcommands="start stop restart status logs doctor validate list export autostart access relay"',
     );
-    expect(result.stdout).toContain(
-      'config_subcommands="path show get set validate regions hosts"',
-    );
+    expect(result.stdout).toContain('config_subcommands="path show get set"');
   });
 });

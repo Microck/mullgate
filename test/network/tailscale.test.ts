@@ -2,7 +2,7 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   deriveDefaultBindHost,
@@ -67,17 +67,12 @@ async function createFakeTailscaleCommand(output: {
 }
 
 async function withPrependedPath<T>(binDir: string, run: () => Promise<T> | T): Promise<T> {
-  const originalPath = process.env.PATH;
-  process.env.PATH = `${binDir}${path.delimiter}${originalPath ?? ''}`;
-
-  try {
-    return await run();
-  } finally {
-    process.env.PATH = originalPath;
-  }
+  vi.stubEnv('PATH', `${binDir}${path.delimiter}${process.env.PATH ?? ''}`);
+  return await run();
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     temporaryDirectories
       .splice(0)

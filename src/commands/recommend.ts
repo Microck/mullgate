@@ -140,6 +140,7 @@ export async function runRecommendFlow(input: {
   readonly options: RecommendCommandOptions;
   readonly store?: ConfigStore;
   readonly runner?: CommandRunner;
+  readonly argv?: readonly string[];
 }): Promise<{ readonly ok: true; readonly text: string } | ProxyExportFailure> {
   const store = input.store ?? new ConfigStore();
   const loadResult = await store.load();
@@ -168,7 +169,7 @@ export async function runRecommendFlow(input: {
   const selectorResult = parseProxyExportSelectors(
     (() => {
       const proxyRelayRecommend = extractOrderedCommandArgs({
-        argv: process.argv,
+        argv: input.argv ?? process.argv,
         commandPath: ['proxy', 'relay', 'recommend'],
       });
 
@@ -177,7 +178,7 @@ export async function runRecommendFlow(input: {
       }
 
       return extractOrderedCommandArgs({
-        argv: process.argv,
+        argv: input.argv ?? process.argv,
         commandPath: ['recommend'],
       });
     })(),

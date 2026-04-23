@@ -49,10 +49,10 @@ describe('config exported helper functions', () => {
 
   it('rejects invalid relay owner and run-mode filters', () => {
     expect(() => parseRelayOwnerFilter('invalid')).toThrow(
-      'Relay ownership must be one of mullvad, rented, or all.',
+      'Relay ownership "invalid" must be one of mullvad, rented, or all.',
     );
     expect(() => parseRelayRunModeFilter('invalid')).toThrow(
-      'Relay run mode must be one of ram, disk, or all.',
+      'Relay run mode "invalid" must be one of ram, disk, or all.',
     );
   });
 

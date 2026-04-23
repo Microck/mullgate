@@ -32,11 +32,31 @@ async function main(): Promise<void> {
   await program.parseAsync(process.argv);
 }
 
+function readErrorDetail(error: unknown, key: string): string | undefined {
+  if (!error || typeof error !== 'object' || !(key in error)) {
+    return undefined;
+  }
+
+  const value = (error as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
+  const lines = [
+    'Mullgate CLI failed.',
+    ...(readErrorDetail(error, 'phase') ? [`phase: ${readErrorDetail(error, 'phase')}`] : []),
+    ...(readErrorDetail(error, 'source') ? [`source: ${readErrorDetail(error, 'source')}`] : []),
+    ...(readErrorDetail(error, 'code') ? [`code: ${readErrorDetail(error, 'code')}`] : []),
+    ...(readErrorDetail(error, 'artifactPath')
+      ? [`artifact: ${readErrorDetail(error, 'artifactPath')}`]
+      : []),
+    `reason: ${message}`,
+    ...(readErrorDetail(error, 'cause') ? [`cause: ${readErrorDetail(error, 'cause')}`] : []),
+  ];
   writeCliReport({
     sink: process.stderr,
-    text: ['Mullgate CLI failed.', `reason: ${message}`].join('\n'),
+    text: lines.join('\n'),
     tone: 'error',
   });
   process.exitCode = 1;

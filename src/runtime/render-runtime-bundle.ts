@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { chmod, type FileHandle, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -670,9 +671,10 @@ async function ensureDirectory(directoryPath: string): Promise<void> {
 
 async function writeFileAtomic(filePath: string, content: string, mode: number): Promise<void> {
   const directory = path.dirname(filePath);
+  const randomSuffix = crypto.randomBytes(4).readUInt32LE(0);
   const temporaryPath = path.join(
     directory,
-    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`,
+    `.${path.basename(filePath)}.${process.pid}.${randomSuffix}.tmp`,
   );
 
   let fileHandle: FileHandle | undefined;
