@@ -52,22 +52,24 @@ flowchart TB
     subgraph cli[CLI command surface]
         setup[mullgate setup]
         access[mullgate proxy access]
+        list[mullgate proxy list]
         export[mullgate proxy export]
         exportRegions[mullgate proxy export --regions]
         relays[mullgate proxy relay list or probe]
-    recommend[mullgate proxy relay recommend]
-    validate[mullgate proxy validate --refresh]
-    start[mullgate proxy start]
-    dryRun[mullgate proxy start --dry-run]
-    stop[mullgate proxy stop]
-    restart[mullgate proxy restart]
-    status[mullgate proxy status]
-    logs[mullgate proxy logs]
-    doctor[mullgate proxy doctor]
-    autostart[mullgate proxy autostart]
-    version[mullgate version]
-    completions[mullgate completions bash]
-    path[mullgate config path]
+        verify[mullgate proxy relay verify]
+        recommend[mullgate proxy relay recommend]
+        validate[mullgate proxy validate --refresh]
+        start[mullgate proxy start]
+        dryRun[mullgate proxy start --dry-run]
+        stop[mullgate proxy stop]
+        restart[mullgate proxy restart]
+        status[mullgate proxy status]
+        logs[mullgate proxy logs]
+        doctor[mullgate proxy doctor]
+        autostart[mullgate proxy autostart]
+        version[mullgate version]
+        completions[mullgate completions bash]
+        path[mullgate config path]
     end
 
     subgraph state[Canonical config and saved state]
@@ -105,9 +107,11 @@ flowchart TB
 
     operator --> setup
     operator --> access
+    operator --> list
     operator --> exportRegions
     operator --> export
     operator --> relays
+    operator --> verify
     operator --> recommend
     operator --> validate
     operator --> start
@@ -244,9 +248,10 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 
 | command | key flags | purpose |
 | --- | --- | --- |
-| `mullgate setup` | `--non-interactive`, `--location`, `--exposure-mode` | create or update canonical config and derived runtime artifacts |
-| `mullgate proxy access` | `--mode`, `--access-mode`, `--base-domain`, `--route-bind-ip` | inspect or update exposure posture, access mode, shared-host planning, DNS guidance, selector examples, and direct-IP entrypoints |
-| `mullgate proxy export` | `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories for `published-routes` mode |
+| `mullgate setup` | `--non-interactive`, `--location`, `--exposure-mode`, `--bind-host`, `--route-bind-ip`, `--base-domain`, `--socks-port`, `--http-port`, `--https-port` | create or update canonical config and derived runtime artifacts |
+| `mullgate proxy access` | `--mode`, `--access-mode`, `--base-domain`, `--clear-base-domain`, `--route-bind-ip`, `--unsafe-public-empty-password` | inspect or update exposure posture, access mode, shared-host planning, DNS guidance, selector examples, and direct-IP entrypoints |
+| `mullgate proxy list` | none | list configured routed proxies, hostnames, bind IPs, and runtime IDs |
+| `mullgate proxy export` | `--protocol`, `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories for `published-routes` mode |
 | `mullgate proxy relay list` | selector flags such as `--country`, `--owner`, `--provider` | inspect relay candidates that match a policy |
 | `mullgate proxy relay probe` | `--country`, `--count` | latency-probe likely relay candidates |
 | `mullgate proxy relay recommend` | `--country`, `--count`, `--apply` | preview or pin an exact relay choice |
@@ -262,7 +267,7 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 | `mullgate config path` | none | print config, state, cache, and runtime paths |
 | `mullgate config show` | none | print the saved canonical config |
 | `mullgate config get` | `<key>` | read one saved config value |
-| `mullgate config set` | `<key> <value>` | update one saved config value |
+| `mullgate config set` | `<key> <value>`, `--stdin`, `--json` | update one saved config value |
 | `mullgate version` | none | print CLI version plus support metadata |
 | `mullgate completions <shell>` | `bash`, `zsh`, `fish` | generate shell completion scripts |
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { MullvadRelay } from '../../src/mullvad/fetch-relays.js';
 import {
@@ -28,6 +28,10 @@ function createRelay(): MullvadRelay {
     },
   };
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('relay probe helpers', () => {
   it('parses linux and windows ping output', () => {
@@ -147,7 +151,6 @@ describe('relay probe helpers', () => {
   });
 
   it('uses a socks5h proxy URL and strips inherited proxy env vars', async () => {
-    const originalEnv = process.env;
     let runnerInput:
       | {
           readonly command: string;
@@ -156,34 +159,27 @@ describe('relay probe helpers', () => {
         }
       | undefined;
 
-    process.env = {
-      ...originalEnv,
-      HTTP_PROXY: 'http://proxy.example',
-      HTTPS_PROXY: 'http://proxy.example',
-      ALL_PROXY: 'socks5://proxy.example',
-      NO_PROXY: 'localhost',
-    };
+    vi.stubEnv('HTTP_PROXY', 'http://proxy.example');
+    vi.stubEnv('HTTPS_PROXY', 'http://proxy.example');
+    vi.stubEnv('ALL_PROXY', 'socks5://proxy.example');
+    vi.stubEnv('NO_PROXY', 'localhost');
 
-    try {
-      await probeProxyExit({
-        protocol: 'socks5',
-        host: '127.0.0.1',
-        port: 1080,
-        username: 'alice',
-        password: 'secret',
-        targetUrl: 'https://am.i.mullvad.net/json',
-        runner: async (input) => {
-          runnerInput = input;
-          return {
-            exitCode: 0,
-            stdout: '{"ip":"203.0.113.9","mullvad_exit_ip":true}',
-            stderr: '',
-          };
-        },
-      });
-    } finally {
-      process.env = originalEnv;
-    }
+    await probeProxyExit({
+      protocol: 'socks5',
+      host: '127.0.0.1',
+      port: 1080,
+      username: 'alice',
+      password: 'secret',
+      targetUrl: 'https://am.i.mullvad.net/json',
+      runner: async (input) => {
+        runnerInput = input;
+        return {
+          exitCode: 0,
+          stdout: '{"ip":"203.0.113.9","mullvad_exit_ip":true}',
+          stderr: '',
+        };
+      },
+    });
 
     expect(runnerInput).toBeDefined();
     expect(runnerInput?.command).toBe('curl');

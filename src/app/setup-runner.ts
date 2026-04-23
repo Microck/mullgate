@@ -1376,31 +1376,50 @@ function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputVa
   const httpPort = values.httpPort;
   const username = values.username?.trim();
   const password = values.password?.trim();
+  const missingFields = [
+    ...(accountNumber ? [] : ['account-number']),
+    ...(bindHost ? [] : ['bind-host']),
+    ...(socksPort === undefined ? ['socks-port'] : []),
+    ...(httpPort === undefined ? ['http-port'] : []),
+    ...(username ? [] : ['username']),
+  ];
 
-  if (
-    !accountNumber ||
-    !bindHost ||
-    socksPort === undefined ||
-    httpPort === undefined ||
-    !username
-  ) {
-    throw new Error('Setup values are incomplete. Missing one or more required setup inputs.');
+  if (missingFields.length > 0) {
+    throw new Error(
+      `Setup values are incomplete. Missing required inputs: ${missingFields.join(', ')}.`,
+    );
   }
 
   const finalizedRouteBindIps = (routeBindIps.length > 0 ? routeBindIps : [bindHost]) as [
     string,
     ...string[],
   ];
+  const finalizedAccountNumber = requireDefined(
+    accountNumber,
+    'Expected account number after setup input validation.',
+  );
+  const finalizedSocksPort = requireDefined(
+    socksPort,
+    'Expected SOCKS port after setup input validation.',
+  );
+  const finalizedHttpPort = requireDefined(
+    httpPort,
+    'Expected HTTP port after setup input validation.',
+  );
+  const finalizedUsername = requireDefined(
+    username,
+    'Expected username after setup input validation.',
+  );
 
   return {
-    accountNumber,
+    accountNumber: finalizedAccountNumber,
     bindHost,
     routeBindIps: finalizedRouteBindIps,
     exposureMode,
     exposureBaseDomain: normalizeExposureBaseDomain(values.exposureBaseDomain),
-    socksPort,
-    httpPort,
-    username,
+    socksPort: finalizedSocksPort,
+    httpPort: finalizedHttpPort,
+    username: finalizedUsername,
     password: password ?? '',
     locations,
     location: locations[0],
