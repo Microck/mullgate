@@ -110,6 +110,13 @@ export type RenderRuntimeProxyOptions = {
   readonly generatedAt?: string;
 };
 
+/**
+ * Plans the runtime proxy artifacts (WireProxy entry config and 3proxy config) without writing to disk.
+ * Validates the config and resolves relay selections.
+ *
+ * @param options - Configuration for the proxy artifact planning.
+ * @returns A result containing the planned configs or a failure with error details.
+ */
 export function planRuntimeProxyArtifacts(
   options: RenderRuntimeProxyOptions,
 ): RenderRuntimeProxyResult {
@@ -291,6 +298,13 @@ export function planRuntimeProxyArtifacts(
   };
 }
 
+/**
+ * Renders and persists the runtime proxy artifacts to disk.
+ * Writes the WireProxy entry config, 3proxy config, and relay cache.
+ *
+ * @param options - Configuration for the proxy artifact rendering.
+ * @returns A result containing the rendered configs or a failure with error details.
+ */
 export async function renderRuntimeProxyArtifacts(
   options: RenderRuntimeProxyOptions,
 ): Promise<RenderRuntimeProxyResult> {

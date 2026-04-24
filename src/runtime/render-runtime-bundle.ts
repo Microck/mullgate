@@ -179,6 +179,13 @@ export type RenderRuntimeBundleOptions = {
   readonly generatedAt?: string;
 };
 
+/**
+ * Plans the runtime bundle artifacts without writing them to disk.
+ * Validates the config and returns the planned compose, HAProxy config, and manifest.
+ *
+ * @param options - Configuration for the bundle planning.
+ * @returns A result containing the planned artifacts or a failure with error details.
+ */
 export function planRuntimeBundle(options: RenderRuntimeBundleOptions): RenderRuntimeBundleResult {
   const checkedAt = options.generatedAt ?? new Date().toISOString();
   const https = resolveHttpsRuntime(options.config);
@@ -223,6 +230,13 @@ export function planRuntimeBundle(options: RenderRuntimeBundleOptions): RenderRu
   };
 }
 
+/**
+ * Renders and persists the runtime bundle artifacts to disk.
+ * Writes docker-compose.yml, HAProxy config, and the manifest JSON.
+ *
+ * @param options - Configuration for the bundle rendering.
+ * @returns A result containing the rendered artifacts or a failure with error details.
+ */
 export async function renderRuntimeBundle(
   options: RenderRuntimeBundleOptions,
 ): Promise<RenderRuntimeBundleResult> {
