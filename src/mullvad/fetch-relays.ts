@@ -148,6 +148,12 @@ export type FetchRelaysOptions = {
   fetchedAt?: string;
 };
 
+/**
+ * Fetches the Mullvad relay catalog from the API.
+ *
+ * @param options - Optional configuration for the fetch operation.
+ * @returns A result containing the relay catalog or a failure with error details.
+ */
 export async function fetchRelays(options: FetchRelaysOptions = {}): Promise<FetchRelaysResult> {
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const url = new URL(options.url ?? MULLVAD_RELAYS_URL);
@@ -206,6 +212,13 @@ export async function fetchRelays(options: FetchRelaysOptions = {}): Promise<Fet
   });
 }
 
+/**
+ * Normalizes a raw relay payload (from either the app API or legacy API) into a standardized catalog.
+ *
+ * @param payload - The raw JSON payload to normalize.
+ * @param options - Optional configuration for normalization.
+ * @returns A result containing the relay catalog or a failure with error details.
+ */
 export function normalizeRelayPayload(
   payload: unknown,
   options: {

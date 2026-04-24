@@ -50,6 +50,12 @@ type ResolvedBaseDir = {
   readonly source: MullgatePathSource;
 };
 
+/**
+ * Resolves all Mullgate path locations based on the platform and environment variables.
+ *
+ * @param env - Optional environment variables (defaults to process.env).
+ * @returns An object containing all resolved paths for config, state, cache, and runtime directories.
+ */
 export function resolveMullgatePaths(env: NodeJS.ProcessEnv = process.env): MullgatePaths {
   const platformResolution = resolveTargetPlatform(env);
   const pathModule = selectPathModule(platformResolution.platform);

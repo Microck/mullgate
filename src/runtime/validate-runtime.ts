@@ -80,6 +80,13 @@ const DEFAULT_DOCKER_BINARY = 'docker';
 const DEFAULT_ROUTE_PROXY_DOCKER_IMAGE = 'tarampampam/3proxy:latest';
 const DOCKER_ROUTE_PROXY_CONFIG_PATH = '/etc/3proxy/3proxy.cfg';
 
+/**
+ * Validates the runtime artifacts (WireProxy entry config and route proxy config) for correctness.
+ * Checks both syntax and can optionally run Docker-based startup validation.
+ *
+ * @param options - Configuration for the validation.
+ * @returns A result containing validation checks or a failure if validation failed.
+ */
 export async function validateRuntimeArtifacts(
   options: ValidateRuntimeOptions,
 ): Promise<ValidateRuntimeResult> {
