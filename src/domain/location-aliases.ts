@@ -94,6 +94,13 @@ export type ResolveLocationAliasResult =
     }
   | LocationAliasFailure;
 
+/**
+ * Creates a location alias catalog from a list of Mullvad relays.
+ * This builds searchable aliases for countries, cities, and individual relays.
+ *
+ * @param relays - The list of Mullvad relays to build the catalog from.
+ * @returns A result containing the catalog or a failure with error details.
+ */
 export function createLocationAliasCatalog(
   relays: readonly MullvadRelay[],
 ): CreateLocationAliasCatalogResult {
@@ -277,6 +284,13 @@ export function createLocationAliasCatalog(
   };
 }
 
+/**
+ * Resolves a location alias to its target location (country, city, or relay).
+ *
+ * @param catalog - The location alias catalog to search in.
+ * @param input - The alias string to resolve (e.g., "us", "us-ny", "us-ny-1001").
+ * @returns A result containing the resolved target or a failure if not found.
+ */
 export function resolveLocationAlias(
   catalog: LocationAliasCatalog,
   input: string,
@@ -314,6 +328,14 @@ export function resolveLocationAlias(
   };
 }
 
+/**
+ * Normalizes a location token for consistent matching.
+ * Converts to lowercase, removes diacritics, replaces special characters with dashes,
+ * and collapses multiple dashes.
+ *
+ * @param input - The input string to normalize.
+ * @returns The normalized token.
+ */
 export function normalizeLocationToken(input: string): string {
   return input
     .normalize('NFKD')

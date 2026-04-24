@@ -98,6 +98,12 @@ export type ProvisionWireguardOptions = {
   generateKeyPair?: () => WireguardKeyPair;
 };
 
+/**
+ * Generates a new WireGuard X25519 key pair for local key generation.
+ *
+ * @returns A WireguardKeyPair containing the public and private keys in base64 format.
+ * @throws Error if key generation fails.
+ */
 export function generateWireguardKeyPair(): WireguardKeyPair {
   const { privateKey, publicKey } = generateKeyPairSync('x25519');
   const privateJwk = privateKey.export({ format: 'jwk' });
@@ -113,6 +119,12 @@ export function generateWireguardKeyPair(): WireguardKeyPair {
   };
 }
 
+/**
+ * Provisions a new WireGuard device with Mullvad using the given account number.
+ *
+ * @param options - Options for the provisioning operation.
+ * @returns A result containing the provisioned device or a failure with error details.
+ */
 export async function provisionWireguard(
   options: ProvisionWireguardOptions,
 ): Promise<ProvisionWireguardResult> {

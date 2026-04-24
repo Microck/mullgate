@@ -60,6 +60,12 @@ export type ProxyExitProbeFailure = {
 
 export type ProxyExitProbeResult = ProxyExitProbeSuccess | ProxyExitProbeFailure;
 
+/**
+ * Probes a Mullvad relay to measure its latency using ping.
+ *
+ * @param input - The input containing the relay to probe and optional command runner.
+ * @returns A result containing the latency in milliseconds or a failure if the relay is unreachable.
+ */
 export async function probeRelayLatency(input: {
   readonly relay: MullvadRelay;
   readonly runner?: CommandRunner;
@@ -98,6 +104,12 @@ export async function probeRelayLatency(input: {
   };
 }
 
+/**
+ * Probes a proxy exit to verify it's working and returning Mullvad exit IPs.
+ *
+ * @param input - The input containing proxy configuration and target URL.
+ * @returns A result containing the exit details or a failure if the probe fails.
+ */
 export async function probeProxyExit(input: {
   readonly protocol: ProxyProtocol;
   readonly host: string;
@@ -190,6 +202,13 @@ export async function probeProxyExit(input: {
   };
 }
 
+/**
+ * Parses ping output to extract latency in milliseconds.
+ * Supports parsing time= format, min/avg/max format, and Windows "Average =" format.
+ *
+ * @param output - The raw ping command output.
+ * @returns The latency in milliseconds, or null if parsing failed.
+ */
 export function parsePingLatencyMs(output: string): number | null {
   const timeMatch = /time[=<]\s*([0-9.]+)\s*ms/i.exec(output);
 
@@ -212,6 +231,12 @@ export function parsePingLatencyMs(output: string): number | null {
   return null;
 }
 
+/**
+ * Parses the raw JSON response from a proxy exit probe.
+ *
+ * @param raw - The raw string response from the proxy.
+ * @returns A result containing the parsed payload or an error message.
+ */
 export function parseProxyExitPayload(
   raw: string,
 ):

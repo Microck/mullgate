@@ -244,10 +244,20 @@ export type RegionGroup = {
   readonly countryCodes: readonly string[];
 };
 
+/**
+ * Returns the list of available region group names (americas, europe, asia-pacific, middle-east-africa).
+ *
+ * @returns A frozen array of region group names sorted alphabetically.
+ */
 export function listRegionGroupNames(): readonly RegionGroupName[] {
   return Object.freeze(Object.keys(REGION_GROUPS).sort() as RegionGroupName[]);
 }
 
+/**
+ * Returns a list of all available region groups with their names and country codes.
+ *
+ * @returns A frozen array of RegionGroup objects sorted by name.
+ */
 export function listRegionGroups(): readonly RegionGroup[] {
   return Object.freeze(
     listRegionGroupNames().map((name) => ({
@@ -257,6 +267,12 @@ export function listRegionGroups(): readonly RegionGroup[] {
   );
 }
 
+/**
+ * Resolves a region name to its list of country codes.
+ *
+ * @param region - The region name to resolve (e.g., "americas", "europe", "asia-pacific").
+ * @returns A frozen array of country codes, or null if the region is not found.
+ */
 export function resolveRegionCountryCodes(region: string): readonly string[] | null {
   const normalizedRegion = normalizeLocationToken(region);
   return (REGION_GROUPS as Record<string, readonly string[]>)[normalizedRegion] ?? null;
