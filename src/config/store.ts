@@ -84,6 +84,9 @@ export type PathReport = {
 
 const DEFAULT_ROUTE_ID = 'primary';
 
+/**
+ * Persists and loads Mullgate configuration and related runtime path diagnostics.
+ */
 export class ConfigStore {
   readonly paths: MullgatePaths;
 
