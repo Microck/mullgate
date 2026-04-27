@@ -23,9 +23,21 @@ const DEFAULT_KEEPALIVE_SECONDS = 25;
 const DEFAULT_MULLVAD_DNS = '10.64.0.1';
 const DEFAULT_WIREGUARD_PORT = 51_820;
 
+/**
+ * Docker Compose service name for the shared WireGuard entry tunnel.
+ */
 export const ENTRY_TUNNEL_SERVICE = 'entry-tunnel';
+/**
+ * Docker Compose service name for the 3proxy route fan-out container.
+ */
 export const ROUTE_PROXY_SERVICE = 'route-proxy';
+/**
+ * Internal SOCKS5 listener port exposed by the entry WireProxy sidecar.
+ */
 export const ENTRY_WIREPROXY_SOCKS_PORT = 39_101;
+/**
+ * Internal HTTP listener port exposed by the entry WireProxy sidecar.
+ */
 export const ENTRY_WIREPROXY_HTTP_PORT = 39_102;
 
 export type RouteProxyIdentity = {

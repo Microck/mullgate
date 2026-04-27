@@ -1,6 +1,9 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+/**
+ * Canonical application directory prefix used across config, state, and cache paths.
+ */
 export const APP_NAME = 'mullgate';
 
 export type MullgatePlatform = 'linux' | 'macos' | 'windows';
