@@ -6,8 +6,17 @@ import path from 'node:path';
  */
 export const APP_NAME = 'mullgate';
 
+/**
+ * Supported host platform targets for Mullgate path resolution.
+ */
 export type MullgatePlatform = 'linux' | 'macos' | 'windows';
+/**
+ * Source used to determine the active Mullgate platform target.
+ */
 export type MullgatePlatformSource = 'process.platform' | 'env:MULLGATE_PLATFORM';
+/**
+ * Source annotation for each resolved Mullgate base directory.
+ */
 export type MullgatePathSource =
   | 'env:XDG_CONFIG_HOME'
   | 'env:XDG_STATE_HOME'
@@ -18,6 +27,9 @@ export type MullgatePathSource =
   | 'platform:windows-appdata'
   | 'platform:windows-localappdata';
 
+/**
+ * Canonical filesystem contract for all Mullgate config and runtime artifacts.
+ */
 export type MullgatePaths = {
   readonly platform: MullgatePlatform;
   readonly platformSource: MullgatePlatformSource;
