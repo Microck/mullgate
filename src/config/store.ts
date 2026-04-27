@@ -33,6 +33,9 @@ class UnsupportedConfigVersionError extends Error {
   }
 }
 
+/**
+ * Outcome union for reading Mullgate config state from disk.
+ */
 export type LoadConfigResult =
   | {
       readonly ok: true;
@@ -59,6 +62,9 @@ export type LoadConfigResult =
       readonly message: string;
     };
 
+/**
+ * Success payload returned after persisting a validated config snapshot.
+ */
 export type SaveConfigResult = {
   readonly ok: true;
   readonly phase: 'persist-config';
@@ -68,6 +74,9 @@ export type SaveConfigResult = {
   readonly config: MullgateConfig;
 };
 
+/**
+ * Canonical path-resolution diagnostics for config and runtime artifacts.
+ */
 export type PathReport = {
   readonly phase: 'resolve-paths';
   readonly source: 'canonical-path-contract';
