@@ -31,11 +31,17 @@ const apiErrorResponseSchema = z
   })
   .passthrough();
 
+/**
+ * Raw X25519 WireGuard keypair material encoded in base64.
+ */
 export type WireguardKeyPair = {
   publicKey: string;
   privateKey: string;
 };
 
+/**
+ * Canonical failure codes emitted by WireGuard provisioning.
+ */
 export type ProvisionWireguardFailureCode =
   | 'INVALID_ACCOUNT'
   | 'KEY_GENERATION_FAILED'
@@ -43,8 +49,14 @@ export type ProvisionWireguardFailureCode =
   | 'INVALID_RESPONSE'
   | 'NETWORK_ERROR';
 
+/**
+ * Provisioning pipeline phases used by success/failure outcomes.
+ */
 export type ProvisionWireguardFailurePhase = 'wireguard-keygen' | 'wireguard-provision';
 
+/**
+ * Failure payload returned when WireGuard provisioning cannot complete.
+ */
 export type ProvisionWireguardFailure = {
   ok: false;
   phase: ProvisionWireguardFailurePhase;
@@ -59,6 +71,9 @@ export type ProvisionWireguardFailure = {
   retryAfterMs?: number;
 };
 
+/**
+ * Redacted-safe view of a provisioned Mullvad WireGuard device.
+ */
 export type ProvisionedWireguardDeviceView = {
   readonly deviceId?: string;
   readonly deviceName?: string;
@@ -71,12 +86,18 @@ export type ProvisionedWireguardDeviceView = {
   readonly ports: readonly unknown[];
 };
 
+/**
+ * Full provisioned device model including private key handling helpers.
+ */
 export type ProvisionedWireguardDevice = ProvisionedWireguardDeviceView & {
   readonly privateKey: string;
   toConfigValue(): NonNullable<MullgateConfig['mullvad']['wireguard']>;
   toJSON(): ProvisionedWireguardDeviceView & { privateKey: '[redacted]' };
 };
 
+/**
+ * Success payload returned after a provisioning request is accepted.
+ */
 export type ProvisionWireguardSuccess = {
   ok: true;
   phase: 'wireguard-provision';
@@ -86,8 +107,14 @@ export type ProvisionWireguardSuccess = {
   value: ProvisionedWireguardDevice;
 };
 
+/**
+ * Result union returned by the WireGuard provisioning operation.
+ */
 export type ProvisionWireguardResult = ProvisionWireguardSuccess | ProvisionWireguardFailure;
 
+/**
+ * Inputs and dependency overrides for WireGuard provisioning.
+ */
 export type ProvisionWireguardOptions = {
   accountNumber: string;
   deviceName?: string;
@@ -98,6 +125,12 @@ export type ProvisionWireguardOptions = {
   generateKeyPair?: () => WireguardKeyPair;
 };
 
+/**
+ * Generates a new WireGuard X25519 key pair for local key generation.
+ *
+ * @returns A WireguardKeyPair containing the public and private keys in base64 format.
+ * @throws Error if key generation fails.
+ */
 export function generateWireguardKeyPair(): WireguardKeyPair {
   const { privateKey, publicKey } = generateKeyPairSync('x25519');
   const privateJwk = privateKey.export({ format: 'jwk' });
@@ -113,6 +146,12 @@ export function generateWireguardKeyPair(): WireguardKeyPair {
   };
 }
 
+/**
+ * Provisions a new WireGuard device with Mullvad using the given account number.
+ *
+ * @param options - Options for the provisioning operation.
+ * @returns A result containing the provisioned device or a failure with error details.
+ */
 export async function provisionWireguard(
   options: ProvisionWireguardOptions,
 ): Promise<ProvisionWireguardResult> {

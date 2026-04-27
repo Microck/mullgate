@@ -1,14 +1,26 @@
 import type { MullvadRelay } from '../mullvad/fetch-relays.js';
 
+/**
+ * Processing phases used by alias catalog creation and lookup outcomes.
+ */
 export type LocationAliasPhase = 'location-aliases' | 'location-lookup';
+/**
+ * Canonical failure codes returned by location-alias operations.
+ */
 export type LocationAliasFailureCode = 'ALIAS_COLLISION' | 'ALIAS_NOT_FOUND' | 'ALIAS_AMBIGUOUS';
 
+/**
+ * Resolved country-level alias target.
+ */
 export type CountryLocationTarget = {
   kind: 'country';
   countryCode: string;
   countryName: string;
 };
 
+/**
+ * Resolved city-level alias target within a country.
+ */
 export type CityLocationTarget = {
   kind: 'city';
   countryCode: string;
@@ -17,6 +29,9 @@ export type CityLocationTarget = {
   cityName: string;
 };
 
+/**
+ * Resolved relay-level alias target for a specific Mullvad relay hostname.
+ */
 export type RelayLocationTarget = {
   kind: 'relay';
   hostname: string;
@@ -27,14 +42,23 @@ export type RelayLocationTarget = {
   cityName: string;
 };
 
+/**
+ * Union of all alias target kinds returned by the alias index.
+ */
 export type LocationAliasTarget = CountryLocationTarget | CityLocationTarget | RelayLocationTarget;
 
+/**
+ * Country alias entry used to build searchable country aliases.
+ */
 export type CountryAliasEntry = {
   code: string;
   name: string;
   aliases: readonly string[];
 };
 
+/**
+ * City alias entry used to build searchable city aliases.
+ */
 export type CityAliasEntry = {
   countryCode: string;
   countryName: string;
@@ -43,6 +67,9 @@ export type CityAliasEntry = {
   aliases: readonly string[];
 };
 
+/**
+ * Relay alias entry used to map host-level aliases to relay targets.
+ */
 export type RelayAliasEntry = {
   hostname: string;
   fqdn: string;
@@ -53,6 +80,9 @@ export type RelayAliasEntry = {
   aliases: readonly string[];
 };
 
+/**
+ * Full alias catalog and lookup index derived from a relay catalog snapshot.
+ */
 export type LocationAliasCatalog = {
   countries: readonly CountryAliasEntry[];
   cities: readonly CityAliasEntry[];
@@ -64,6 +94,9 @@ export type LocationAliasCatalog = {
   }[];
 };
 
+/**
+ * Success payload returned when alias catalog creation completes.
+ */
 export type CreateLocationAliasCatalogSuccess = {
   ok: true;
   phase: 'location-aliases';
@@ -71,6 +104,9 @@ export type CreateLocationAliasCatalogSuccess = {
   value: LocationAliasCatalog;
 };
 
+/**
+ * Failure payload shared by catalog-creation and alias-lookup operations.
+ */
 export type LocationAliasFailure = {
   ok: false;
   phase: LocationAliasPhase;
@@ -81,9 +117,15 @@ export type LocationAliasFailure = {
   candidates?: readonly LocationAliasTarget[];
 };
 
+/**
+ * Result union for building a location alias catalog from relay data.
+ */
 export type CreateLocationAliasCatalogResult =
   | CreateLocationAliasCatalogSuccess
   | LocationAliasFailure;
+/**
+ * Result union for resolving a user-provided alias into a concrete location target.
+ */
 export type ResolveLocationAliasResult =
   | {
       ok: true;
@@ -94,6 +136,13 @@ export type ResolveLocationAliasResult =
     }
   | LocationAliasFailure;
 
+/**
+ * Creates a location alias catalog from a list of Mullvad relays.
+ * This builds searchable aliases for countries, cities, and individual relays.
+ *
+ * @param relays - The list of Mullvad relays to build the catalog from.
+ * @returns A result containing the catalog or a failure with error details.
+ */
 export function createLocationAliasCatalog(
   relays: readonly MullvadRelay[],
 ): CreateLocationAliasCatalogResult {
@@ -277,6 +326,13 @@ export function createLocationAliasCatalog(
   };
 }
 
+/**
+ * Resolves a location alias to its target location (country, city, or relay).
+ *
+ * @param catalog - The location alias catalog to search in.
+ * @param input - The alias string to resolve (e.g., "us", "us-ny", "us-ny-1001").
+ * @returns A result containing the resolved target or a failure if not found.
+ */
 export function resolveLocationAlias(
   catalog: LocationAliasCatalog,
   input: string,
@@ -314,6 +370,14 @@ export function resolveLocationAlias(
   };
 }
 
+/**
+ * Normalizes a location token for consistent matching.
+ * Converts to lowercase, removes diacritics, replaces special characters with dashes,
+ * and collapses multiple dashes.
+ *
+ * @param input - The input string to normalize.
+ * @returns The normalized token.
+ */
 export function normalizeLocationToken(input: string): string {
   return input
     .normalize('NFKD')

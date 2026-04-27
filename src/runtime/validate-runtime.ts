@@ -15,6 +15,9 @@ import { validateWireproxyConfig, type WireproxyValidationIssue } from './valida
 
 type RuntimeValidationIssue = WireproxyValidationIssue;
 
+/**
+ * Individual runtime validation check result for one artifact validator pair.
+ */
 export type RuntimeValidationCheck = {
   readonly artifact: 'entry-wireproxy' | 'route-proxy';
   readonly ok: boolean;
@@ -29,6 +32,9 @@ export type RuntimeValidationCheck = {
   readonly cause?: string;
 };
 
+/**
+ * Success payload returned when all runtime validation checks pass.
+ */
 export type ValidateRuntimeSuccess = {
   readonly ok: true;
   readonly phase: 'validation';
@@ -39,6 +45,9 @@ export type ValidateRuntimeSuccess = {
   readonly checks: readonly RuntimeValidationCheck[];
 };
 
+/**
+ * Failure payload returned when any runtime validation check fails.
+ */
 export type ValidateRuntimeFailure = {
   readonly ok: false;
   readonly phase: 'validation';
@@ -54,8 +63,14 @@ export type ValidateRuntimeFailure = {
   readonly checks: readonly RuntimeValidationCheck[];
 };
 
+/**
+ * Result union returned by runtime artifact validation.
+ */
 export type ValidateRuntimeResult = ValidateRuntimeSuccess | ValidateRuntimeFailure;
 
+/**
+ * Inputs and dependency overrides for runtime artifact validation.
+ */
 export type ValidateRuntimeOptions = {
   readonly entryWireproxyConfigPath: string;
   readonly entryWireproxyConfigText?: string;
@@ -80,6 +95,13 @@ const DEFAULT_DOCKER_BINARY = 'docker';
 const DEFAULT_ROUTE_PROXY_DOCKER_IMAGE = 'tarampampam/3proxy:latest';
 const DOCKER_ROUTE_PROXY_CONFIG_PATH = '/etc/3proxy/3proxy.cfg';
 
+/**
+ * Validates the runtime artifacts (WireProxy entry config and route proxy config) for correctness.
+ * Checks both syntax and can optionally run Docker-based startup validation.
+ *
+ * @param options - Configuration for the validation.
+ * @returns A result containing validation checks or a failure if validation failed.
+ */
 export async function validateRuntimeArtifacts(
   options: ValidateRuntimeOptions,
 ): Promise<ValidateRuntimeResult> {

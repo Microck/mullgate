@@ -2,24 +2,36 @@ import { spawn } from 'node:child_process';
 
 import type { MullvadRelay } from './fetch-relays.js';
 
+/**
+ * Captured result of an executed subprocess command.
+ */
 export type CommandExecution = {
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
 };
 
+/**
+ * Injectable command runner used by probe operations for testability.
+ */
 export type CommandRunner = (input: {
   readonly command: string;
   readonly args: readonly string[];
   readonly env?: NodeJS.ProcessEnv;
 }) => Promise<CommandExecution>;
 
+/**
+ * Successful relay-latency probe outcome.
+ */
 export type RelayProbeSuccess = {
   readonly ok: true;
   readonly relay: MullvadRelay;
   readonly latencyMs: number;
 };
 
+/**
+ * Failed relay-latency probe outcome with diagnostic cause.
+ */
 export type RelayProbeFailure = {
   readonly ok: false;
   readonly relay: MullvadRelay;
@@ -27,8 +39,14 @@ export type RelayProbeFailure = {
   readonly cause?: string;
 };
 
+/**
+ * Result union returned by relay-latency probing.
+ */
 export type RelayProbeResult = RelayProbeSuccess | RelayProbeFailure;
 
+/**
+ * JSON payload shape expected from a proxy exit information endpoint.
+ */
 export type ProxyExitPayload = {
   readonly ip?: string;
   readonly country?: string;
@@ -36,8 +54,14 @@ export type ProxyExitPayload = {
   readonly mullvad_exit_ip?: boolean;
 };
 
+/**
+ * Proxy protocols currently supported by exit probing.
+ */
 export type ProxyProtocol = 'socks5' | 'http' | 'https';
 
+/**
+ * Successful proxy-exit probe outcome.
+ */
 export type ProxyExitProbeSuccess = {
   readonly ok: true;
   readonly protocol: ProxyProtocol;
@@ -50,6 +74,9 @@ export type ProxyExitProbeSuccess = {
   };
 };
 
+/**
+ * Failed proxy-exit probe outcome with diagnostic cause.
+ */
 export type ProxyExitProbeFailure = {
   readonly ok: false;
   readonly protocol: ProxyProtocol;
@@ -58,8 +85,17 @@ export type ProxyExitProbeFailure = {
   readonly cause?: string;
 };
 
+/**
+ * Result union returned by proxy-exit probing.
+ */
 export type ProxyExitProbeResult = ProxyExitProbeSuccess | ProxyExitProbeFailure;
 
+/**
+ * Probes a Mullvad relay to measure its latency using ping.
+ *
+ * @param input - The input containing the relay to probe and optional command runner.
+ * @returns A result containing the latency in milliseconds or a failure if the relay is unreachable.
+ */
 export async function probeRelayLatency(input: {
   readonly relay: MullvadRelay;
   readonly runner?: CommandRunner;
@@ -98,6 +134,12 @@ export async function probeRelayLatency(input: {
   };
 }
 
+/**
+ * Probes a proxy exit to verify it's working and returning Mullvad exit IPs.
+ *
+ * @param input - The input containing proxy configuration and target URL.
+ * @returns A result containing the exit details or a failure if the probe fails.
+ */
 export async function probeProxyExit(input: {
   readonly protocol: ProxyProtocol;
   readonly host: string;
@@ -190,6 +232,13 @@ export async function probeProxyExit(input: {
   };
 }
 
+/**
+ * Parses ping output to extract latency in milliseconds.
+ * Supports parsing time= format, min/avg/max format, and Windows "Average =" format.
+ *
+ * @param output - The raw ping command output.
+ * @returns The latency in milliseconds, or null if parsing failed.
+ */
 export function parsePingLatencyMs(output: string): number | null {
   const timeMatch = /time[=<]\s*([0-9.]+)\s*ms/i.exec(output);
 
@@ -212,6 +261,12 @@ export function parsePingLatencyMs(output: string): number | null {
   return null;
 }
 
+/**
+ * Parses the raw JSON response from a proxy exit probe.
+ *
+ * @param raw - The raw string response from the proxy.
+ * @returns A result containing the parsed payload or an error message.
+ */
 export function parseProxyExitPayload(
   raw: string,
 ):

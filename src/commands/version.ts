@@ -6,10 +6,19 @@ import packageJson from '../../package.json' with { type: 'json' };
 import { type WritableTextSink, writeCliReport } from '../cli-output.js';
 import { CONFIG_VERSION } from '../config/schema.js';
 
+/**
+ * Optional I/O overrides for the `mullgate version` command.
+ */
 export type VersionCommandDependencies = {
   readonly stdout?: WritableTextSink;
 };
 
+/**
+ * Registers the `version` command that prints CLI and runtime support metadata.
+ *
+ * @param program - Root CLI program to extend.
+ * @param dependencies - Optional command dependencies for output control.
+ */
 export function registerVersionCommand(
   program: Command,
   dependencies: VersionCommandDependencies = {},

@@ -42,6 +42,9 @@ const HOST_NETWORK_MODE = 'host';
 
 type RuntimeProtocol = 'socks5' | 'http' | 'https';
 
+/**
+ * Published endpoint contract for a rendered runtime route/protocol listener.
+ */
 export type RuntimeEndpoint = {
   readonly routeId: string;
   readonly hostname: string;
@@ -61,6 +64,9 @@ export type RuntimeEndpoint = {
   readonly redactedBindUrl: string;
 };
 
+/**
+ * Canonical manifest describing rendered runtime topology and published endpoints.
+ */
 export type RuntimeBundleManifest = {
   readonly generatedAt: string;
   readonly source: 'canonical-config';
@@ -142,6 +148,9 @@ export type RuntimeBundleManifest = {
   readonly publishedEndpoints: readonly RuntimeEndpoint[];
 };
 
+/**
+ * Filesystem locations for persisted runtime bundle artifacts.
+ */
 export type RenderedRuntimeBundleArtifacts = {
   readonly bundleDir: string;
   readonly dockerComposePath: string;
@@ -149,6 +158,9 @@ export type RenderedRuntimeBundleArtifacts = {
   readonly manifestPath: string;
 };
 
+/**
+ * Success payload returned when runtime bundle rendering completes.
+ */
 export type RenderRuntimeBundleSuccess = {
   readonly ok: true;
   readonly phase: 'artifact-render';
@@ -160,6 +172,9 @@ export type RenderRuntimeBundleSuccess = {
   readonly artifactPaths: RenderedRuntimeBundleArtifacts;
 };
 
+/**
+ * Failure payload returned when runtime bundle rendering cannot complete.
+ */
 export type RenderRuntimeBundleFailure = {
   readonly ok: false;
   readonly phase: 'artifact-render';
@@ -171,14 +186,27 @@ export type RenderRuntimeBundleFailure = {
   readonly artifactPath?: string;
 };
 
+/**
+ * Result union returned by runtime bundle planning and rendering flows.
+ */
 export type RenderRuntimeBundleResult = RenderRuntimeBundleSuccess | RenderRuntimeBundleFailure;
 
+/**
+ * Inputs required to plan or render runtime bundle artifacts.
+ */
 export type RenderRuntimeBundleOptions = {
   readonly config: MullgateConfig;
   readonly paths: MullgatePaths;
   readonly generatedAt?: string;
 };
 
+/**
+ * Plans the runtime bundle artifacts without writing them to disk.
+ * Validates the config and returns the planned compose, HAProxy config, and manifest.
+ *
+ * @param options - Configuration for the bundle planning.
+ * @returns A result containing the planned artifacts or a failure with error details.
+ */
 export function planRuntimeBundle(options: RenderRuntimeBundleOptions): RenderRuntimeBundleResult {
   const checkedAt = options.generatedAt ?? new Date().toISOString();
   const https = resolveHttpsRuntime(options.config);
@@ -223,6 +251,13 @@ export function planRuntimeBundle(options: RenderRuntimeBundleOptions): RenderRu
   };
 }
 
+/**
+ * Renders and persists the runtime bundle artifacts to disk.
+ * Writes docker-compose.yml, HAProxy config, and the manifest JSON.
+ *
+ * @param options - Configuration for the bundle rendering.
+ * @returns A result containing the rendered artifacts or a failure with error details.
+ */
 export async function renderRuntimeBundle(
   options: RenderRuntimeBundleOptions,
 ): Promise<RenderRuntimeBundleResult> {

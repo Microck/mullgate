@@ -23,11 +23,26 @@ const DEFAULT_KEEPALIVE_SECONDS = 25;
 const DEFAULT_MULLVAD_DNS = '10.64.0.1';
 const DEFAULT_WIREGUARD_PORT = 51_820;
 
+/**
+ * Docker Compose service name for the shared WireGuard entry tunnel.
+ */
 export const ENTRY_TUNNEL_SERVICE = 'entry-tunnel';
+/**
+ * Docker Compose service name for the 3proxy route fan-out container.
+ */
 export const ROUTE_PROXY_SERVICE = 'route-proxy';
+/**
+ * Internal SOCKS5 listener port exposed by the entry WireProxy sidecar.
+ */
 export const ENTRY_WIREPROXY_SOCKS_PORT = 39_101;
+/**
+ * Internal HTTP listener port exposed by the entry WireProxy sidecar.
+ */
 export const ENTRY_WIREPROXY_HTTP_PORT = 39_102;
 
+/**
+ * Stable identity fields computed for each rendered runtime route.
+ */
 export type RouteProxyIdentity = {
   readonly routeIndex: number;
   readonly routeId: string;
@@ -40,6 +55,9 @@ export type RouteProxyIdentity = {
   readonly httpsBackendName: string;
 };
 
+/**
+ * Fully resolved route record rendered into the route proxy configuration.
+ */
 export type RenderedRouteProxyRoute = RouteProxyIdentity & {
   readonly exitRelayHostname: string;
   readonly exitRelayFqdn: string;
@@ -51,12 +69,18 @@ export type RenderedRouteProxyRoute = RouteProxyIdentity & {
   };
 };
 
+/**
+ * Filesystem paths for generated runtime proxy artifacts.
+ */
 export type RenderedRuntimeProxyArtifacts = {
   readonly entryWireproxyConfigPath: string;
   readonly routeProxyConfigPath: string;
   readonly relayCachePath: string;
 };
 
+/**
+ * Inline selector mapping resolved against the alias catalog and relay cache.
+ */
 export type InlineSelectorMapping = {
   readonly selector: string;
   readonly target: LocationAliasTarget;
@@ -65,6 +89,9 @@ export type InlineSelectorMapping = {
   readonly exitSocksPort: number;
 };
 
+/**
+ * Successful runtime proxy planning payload with rendered config content and metadata.
+ */
 export type RenderRuntimeProxySuccess = {
   readonly ok: true;
   readonly phase: 'artifact-render';
@@ -80,6 +107,9 @@ export type RenderRuntimeProxySuccess = {
   readonly artifactPaths: RenderedRuntimeProxyArtifacts;
 };
 
+/**
+ * Failure result returned when runtime proxy planning cannot produce valid artifacts.
+ */
 export type RenderRuntimeProxyFailure = {
   readonly ok: false;
   readonly phase: 'artifact-render';
@@ -101,8 +131,14 @@ export type RenderRuntimeProxyFailure = {
   readonly serviceName?: string;
 };
 
+/**
+ * Discriminated result union for runtime proxy artifact planning/rendering.
+ */
 export type RenderRuntimeProxyResult = RenderRuntimeProxySuccess | RenderRuntimeProxyFailure;
 
+/**
+ * Inputs required to plan and render runtime proxy artifacts from canonical config.
+ */
 export type RenderRuntimeProxyOptions = {
   readonly config: MullgateConfig;
   readonly relayCatalog: MullvadRelayCatalog;
@@ -110,6 +146,13 @@ export type RenderRuntimeProxyOptions = {
   readonly generatedAt?: string;
 };
 
+/**
+ * Plans the runtime proxy artifacts (WireProxy entry config and 3proxy config) without writing to disk.
+ * Validates the config and resolves relay selections.
+ *
+ * @param options - Configuration for the proxy artifact planning.
+ * @returns A result containing the planned configs or a failure with error details.
+ */
 export function planRuntimeProxyArtifacts(
   options: RenderRuntimeProxyOptions,
 ): RenderRuntimeProxyResult {
@@ -291,6 +334,13 @@ export function planRuntimeProxyArtifacts(
   };
 }
 
+/**
+ * Renders and persists the runtime proxy artifacts to disk.
+ * Writes the WireProxy entry config, 3proxy config, and relay cache.
+ *
+ * @param options - Configuration for the proxy artifact rendering.
+ * @returns A result containing the rendered configs or a failure with error details.
+ */
 export async function renderRuntimeProxyArtifacts(
   options: RenderRuntimeProxyOptions,
 ): Promise<RenderRuntimeProxyResult> {

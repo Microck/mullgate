@@ -1,10 +1,22 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+/**
+ * Canonical application directory prefix used across config, state, and cache paths.
+ */
 export const APP_NAME = 'mullgate';
 
+/**
+ * Supported host platform targets for Mullgate path resolution.
+ */
 export type MullgatePlatform = 'linux' | 'macos' | 'windows';
+/**
+ * Source used to determine the active Mullgate platform target.
+ */
 export type MullgatePlatformSource = 'process.platform' | 'env:MULLGATE_PLATFORM';
+/**
+ * Source annotation for each resolved Mullgate base directory.
+ */
 export type MullgatePathSource =
   | 'env:XDG_CONFIG_HOME'
   | 'env:XDG_STATE_HOME'
@@ -15,6 +27,9 @@ export type MullgatePathSource =
   | 'platform:windows-appdata'
   | 'platform:windows-localappdata';
 
+/**
+ * Canonical filesystem contract for all Mullgate config and runtime artifacts.
+ */
 export type MullgatePaths = {
   readonly platform: MullgatePlatform;
   readonly platformSource: MullgatePlatformSource;
@@ -50,6 +65,12 @@ type ResolvedBaseDir = {
   readonly source: MullgatePathSource;
 };
 
+/**
+ * Resolves all Mullgate path locations based on the platform and environment variables.
+ *
+ * @param env - Optional environment variables (defaults to process.env).
+ * @returns An object containing all resolved paths for config, state, cache, and runtime directories.
+ */
 export function resolveMullgatePaths(env: NodeJS.ProcessEnv = process.env): MullgatePaths {
   const platformResolution = resolveTargetPlatform(env);
   const pathModule = selectPathModule(platformResolution.platform);

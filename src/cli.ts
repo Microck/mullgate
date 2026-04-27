@@ -9,6 +9,9 @@ import { registerProxyCommand } from './commands/proxy.js';
 import { registerSetupCommand } from './commands/setup.js';
 import { registerVersionCommand } from './commands/version.js';
 
+/**
+ * Builds the Mullgate CLI command tree with all top-level subcommands registered.
+ */
 export function createCli(): Command {
   const program = new Command();
 

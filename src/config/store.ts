@@ -33,6 +33,9 @@ class UnsupportedConfigVersionError extends Error {
   }
 }
 
+/**
+ * Outcome union for reading Mullgate config state from disk.
+ */
 export type LoadConfigResult =
   | {
       readonly ok: true;
@@ -59,6 +62,9 @@ export type LoadConfigResult =
       readonly message: string;
     };
 
+/**
+ * Success payload returned after persisting a validated config snapshot.
+ */
 export type SaveConfigResult = {
   readonly ok: true;
   readonly phase: 'persist-config';
@@ -68,6 +74,9 @@ export type SaveConfigResult = {
   readonly config: MullgateConfig;
 };
 
+/**
+ * Canonical path-resolution diagnostics for config and runtime artifacts.
+ */
 export type PathReport = {
   readonly phase: 'resolve-paths';
   readonly source: 'canonical-path-contract';
@@ -84,6 +93,9 @@ export type PathReport = {
 
 const DEFAULT_ROUTE_ID = 'primary';
 
+/**
+ * Persists and loads Mullgate configuration and related runtime path diagnostics.
+ */
 export class ConfigStore {
   readonly paths: MullgatePaths;
 
@@ -203,6 +215,15 @@ export class ConfigStore {
   }
 }
 
+/**
+ * Normalizes a raw config input into a validated MullgateConfig.
+ * Handles legacy config versions and applies default values.
+ *
+ * @param input - The raw config input to normalize.
+ * @returns A validated MullgateConfig object.
+ * @throws UnsupportedConfigVersionError if the config version is not supported.
+ * @throws ZodError if the config fails schema validation.
+ */
 export function normalizeMullgateConfig(input: unknown): MullgateConfig {
   const version = readConfigVersion(input);
 
@@ -470,6 +491,13 @@ function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
 
+/**
+ * Lists temporary artifact files in the given directory.
+ * Used for cleanup operations to find stale temporary files.
+ *
+ * @param directoryPath - The directory to scan for temporary files.
+ * @returns A sorted array of temporary file names.
+ */
 export async function listTemporaryArtifacts(directoryPath: string): Promise<string[]> {
   const entries = await readdir(directoryPath, { withFileTypes: true }).catch(() => []);
   return entries
