@@ -40,6 +40,9 @@ export const ENTRY_WIREPROXY_SOCKS_PORT = 39_101;
  */
 export const ENTRY_WIREPROXY_HTTP_PORT = 39_102;
 
+/**
+ * Stable identity fields computed for each rendered runtime route.
+ */
 export type RouteProxyIdentity = {
   readonly routeIndex: number;
   readonly routeId: string;
@@ -52,6 +55,9 @@ export type RouteProxyIdentity = {
   readonly httpsBackendName: string;
 };
 
+/**
+ * Fully resolved route record rendered into the route proxy configuration.
+ */
 export type RenderedRouteProxyRoute = RouteProxyIdentity & {
   readonly exitRelayHostname: string;
   readonly exitRelayFqdn: string;
@@ -63,12 +69,18 @@ export type RenderedRouteProxyRoute = RouteProxyIdentity & {
   };
 };
 
+/**
+ * Filesystem paths for generated runtime proxy artifacts.
+ */
 export type RenderedRuntimeProxyArtifacts = {
   readonly entryWireproxyConfigPath: string;
   readonly routeProxyConfigPath: string;
   readonly relayCachePath: string;
 };
 
+/**
+ * Inline selector mapping resolved against the alias catalog and relay cache.
+ */
 export type InlineSelectorMapping = {
   readonly selector: string;
   readonly target: LocationAliasTarget;
@@ -77,6 +89,9 @@ export type InlineSelectorMapping = {
   readonly exitSocksPort: number;
 };
 
+/**
+ * Successful runtime proxy planning payload with rendered config content and metadata.
+ */
 export type RenderRuntimeProxySuccess = {
   readonly ok: true;
   readonly phase: 'artifact-render';
@@ -92,6 +107,9 @@ export type RenderRuntimeProxySuccess = {
   readonly artifactPaths: RenderedRuntimeProxyArtifacts;
 };
 
+/**
+ * Failure result returned when runtime proxy planning cannot produce valid artifacts.
+ */
 export type RenderRuntimeProxyFailure = {
   readonly ok: false;
   readonly phase: 'artifact-render';
@@ -113,8 +131,14 @@ export type RenderRuntimeProxyFailure = {
   readonly serviceName?: string;
 };
 
+/**
+ * Discriminated result union for runtime proxy artifact planning/rendering.
+ */
 export type RenderRuntimeProxyResult = RenderRuntimeProxySuccess | RenderRuntimeProxyFailure;
 
+/**
+ * Inputs required to plan and render runtime proxy artifacts from canonical config.
+ */
 export type RenderRuntimeProxyOptions = {
   readonly config: MullgateConfig;
   readonly relayCatalog: MullvadRelayCatalog;
