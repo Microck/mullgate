@@ -6,6 +6,9 @@ import { ConfigStore } from '../config/store.js';
 import { type StopDockerRuntimeOptions, stopDockerRuntime } from '../runtime/docker-runtime.js';
 import { renderLoadConfigError, renderMissingConfigError } from './config.js';
 
+/**
+ * Dependency overrides for the `mullgate stop` command and stop flow.
+ */
 export type StopCommandDependencies = {
   readonly store?: ConfigStore;
   readonly checkedAt?: string;
@@ -16,6 +19,9 @@ export type StopCommandDependencies = {
   readonly stderr?: WritableTextSink;
 };
 
+/**
+ * Result contract returned by {@link runStopFlow}.
+ */
 export type StopFlowResult =
   | {
       readonly ok: true;
@@ -28,6 +34,12 @@ export type StopFlowResult =
       readonly summary: string;
     };
 
+/**
+ * Registers the `stop` command and wires it to the shared stop action.
+ *
+ * @param program - Root CLI program to extend.
+ * @param dependencies - Optional stop flow dependency overrides.
+ */
 export function registerStopCommand(
   program: Command,
   dependencies: StopCommandDependencies = {},
@@ -38,6 +50,12 @@ export function registerStopCommand(
     .action(createStopCommandAction(dependencies));
 }
 
+/**
+ * Creates the async action used by the `stop` command.
+ *
+ * @param dependencies - Optional stop flow dependency overrides.
+ * @returns A command action that reports stop flow output and sets the process exit code.
+ */
 export function createStopCommandAction(
   dependencies: StopCommandDependencies = {},
 ): () => Promise<void> {
@@ -56,6 +74,12 @@ export function createStopCommandAction(
   };
 }
 
+/**
+ * Stops the saved runtime bundle and persists the resulting runtime status.
+ *
+ * @param dependencies - Optional store/runtime dependency overrides.
+ * @returns A success or failure summary suitable for CLI reporting.
+ */
 export async function runStopFlow(
   dependencies: Omit<StopCommandDependencies, 'stdout' | 'stderr'> = {},
 ): Promise<StopFlowResult> {

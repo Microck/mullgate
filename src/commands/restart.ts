@@ -5,6 +5,9 @@ import { ConfigStore } from '../config/store.js';
 import { runStartFlow, type StartCommandDependencies } from './start.js';
 import { runStopFlow, type StopCommandDependencies } from './stop.js';
 
+/**
+ * Dependency overrides for composing the `mullgate restart` stop-then-start flow.
+ */
 export type RestartCommandDependencies = {
   readonly store?: ConfigStore;
   readonly checkedAt?: string;
@@ -20,6 +23,12 @@ export type RestartCommandDependencies = {
   >;
 };
 
+/**
+ * Registers the `restart` command and wires it to the shared restart action.
+ *
+ * @param program - Root CLI program to extend.
+ * @param dependencies - Optional restart flow dependency overrides.
+ */
 export function registerRestartCommand(
   program: Command,
   dependencies: RestartCommandDependencies = {},
@@ -30,6 +39,12 @@ export function registerRestartCommand(
     .action(createRestartCommandAction(dependencies));
 }
 
+/**
+ * Creates the async action used by the `restart` command.
+ *
+ * @param dependencies - Optional restart flow dependency overrides.
+ * @returns A command action that stops the active runtime and then starts it again.
+ */
 export function createRestartCommandAction(
   dependencies: RestartCommandDependencies = {},
 ): () => Promise<void> {

@@ -13,6 +13,9 @@ type LogsCommandOptions = {
   readonly follow?: boolean;
 };
 
+/**
+ * Dependency overrides for the `mullgate logs` command and log-reading flow.
+ */
 export type LogsCommandDependencies = {
   readonly store?: ConfigStore;
   readonly checkedAt?: string;
@@ -23,6 +26,9 @@ export type LogsCommandDependencies = {
   readonly stderr?: WritableTextSink;
 };
 
+/**
+ * Result contract returned by {@link runLogsFlow}.
+ */
 export type LogsFlowResult =
   | {
       readonly ok: true;
@@ -35,6 +41,12 @@ export type LogsFlowResult =
       readonly summary: string;
     };
 
+/**
+ * Registers the `logs` command and its CLI options.
+ *
+ * @param program - Root CLI program to extend.
+ * @param dependencies - Optional log flow dependency overrides.
+ */
 export function registerLogsCommand(
   program: Command,
   dependencies: LogsCommandDependencies = {},
@@ -47,6 +59,12 @@ export function registerLogsCommand(
     .action(createLogsCommandAction(dependencies));
 }
 
+/**
+ * Creates the async action used by the `logs` command.
+ *
+ * @param dependencies - Optional log flow dependency overrides.
+ * @returns A command action that writes runtime logs or an error report.
+ */
 export function createLogsCommandAction(
   dependencies: LogsCommandDependencies = {},
 ): (options: LogsCommandOptions) => Promise<void> {
@@ -65,6 +83,13 @@ export function createLogsCommandAction(
   };
 }
 
+/**
+ * Loads the saved runtime bundle metadata and reads docker compose logs for it.
+ *
+ * @param options - Parsed command options controlling log tail/follow behavior.
+ * @param dependencies - Optional store/runtime dependency overrides.
+ * @returns Log output on success, or a structured CLI-facing failure summary.
+ */
 export async function runLogsFlow(
   options: LogsCommandOptions,
   dependencies: Omit<LogsCommandDependencies, 'stdout' | 'stderr'> = {},
