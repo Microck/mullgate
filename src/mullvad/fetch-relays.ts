@@ -65,14 +65,26 @@ const legacyRelaySchema = z
 
 const legacyRelayPayloadSchema = z.array(legacyRelaySchema);
 
+/**
+ * Source channel used to populate the normalized Mullvad relay catalog.
+ */
 export type MullvadRelaySource = 'app-wireguard-v1' | 'www-relays-all';
+/**
+ * Processing phases used by relay fetch/normalize outcomes.
+ */
 export type FetchRelaysPhase = 'relay-fetch' | 'relay-normalize';
+/**
+ * Canonical failure codes for relay catalog fetch and normalization.
+ */
 export type FetchRelaysFailureCode =
   | 'NETWORK_ERROR'
   | 'HTTP_ERROR'
   | 'INVALID_RESPONSE'
   | 'UNSUPPORTED_PAYLOAD';
 
+/**
+ * Canonical relay record normalized from Mullvad relay payloads.
+ */
 export type MullvadRelay = {
   readonly hostname: string;
   readonly fqdn: string;
@@ -99,6 +111,9 @@ export type MullvadRelay = {
   };
 };
 
+/**
+ * Country-level summary entry in a normalized relay catalog.
+ */
 export type MullvadRelayCountry = {
   readonly code: string;
   readonly name: string;
@@ -111,6 +126,9 @@ export type MullvadRelayCountry = {
   }[];
 };
 
+/**
+ * Normalized relay catalog payload returned by successful fetch operations.
+ */
 export type MullvadRelayCatalog = {
   readonly source: MullvadRelaySource;
   readonly fetchedAt: string;
@@ -120,6 +138,9 @@ export type MullvadRelayCatalog = {
   readonly relays: readonly MullvadRelay[];
 };
 
+/**
+ * Success payload for relay catalog fetch and normalization.
+ */
 export type FetchRelaysSuccess = {
   ok: true;
   phase: 'relay-normalize';
@@ -128,6 +149,9 @@ export type FetchRelaysSuccess = {
   value: MullvadRelayCatalog;
 };
 
+/**
+ * Failure payload for relay catalog fetch and normalization.
+ */
 export type FetchRelaysFailure = {
   ok: false;
   phase: FetchRelaysPhase;
@@ -139,8 +163,14 @@ export type FetchRelaysFailure = {
   statusCode?: number;
 };
 
+/**
+ * Result union returned by relay catalog fetch operations.
+ */
 export type FetchRelaysResult = FetchRelaysSuccess | FetchRelaysFailure;
 
+/**
+ * Optional controls for relay fetching and normalization.
+ */
 export type FetchRelaysOptions = {
   url?: string | URL;
   fetch?: typeof globalThis.fetch;

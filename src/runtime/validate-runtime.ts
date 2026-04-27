@@ -15,6 +15,9 @@ import { validateWireproxyConfig, type WireproxyValidationIssue } from './valida
 
 type RuntimeValidationIssue = WireproxyValidationIssue;
 
+/**
+ * Individual runtime validation check result for one artifact validator pair.
+ */
 export type RuntimeValidationCheck = {
   readonly artifact: 'entry-wireproxy' | 'route-proxy';
   readonly ok: boolean;
@@ -29,6 +32,9 @@ export type RuntimeValidationCheck = {
   readonly cause?: string;
 };
 
+/**
+ * Success payload returned when all runtime validation checks pass.
+ */
 export type ValidateRuntimeSuccess = {
   readonly ok: true;
   readonly phase: 'validation';
@@ -39,6 +45,9 @@ export type ValidateRuntimeSuccess = {
   readonly checks: readonly RuntimeValidationCheck[];
 };
 
+/**
+ * Failure payload returned when any runtime validation check fails.
+ */
 export type ValidateRuntimeFailure = {
   readonly ok: false;
   readonly phase: 'validation';
@@ -54,8 +63,14 @@ export type ValidateRuntimeFailure = {
   readonly checks: readonly RuntimeValidationCheck[];
 };
 
+/**
+ * Result union returned by runtime artifact validation.
+ */
 export type ValidateRuntimeResult = ValidateRuntimeSuccess | ValidateRuntimeFailure;
 
+/**
+ * Inputs and dependency overrides for runtime artifact validation.
+ */
 export type ValidateRuntimeOptions = {
   readonly entryWireproxyConfigPath: string;
   readonly entryWireproxyConfigText?: string;

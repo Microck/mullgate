@@ -237,8 +237,14 @@ const REGION_GROUPS = {
   ],
 } as const satisfies Record<string, readonly string[]>;
 
+/**
+ * Valid region-group identifier keys supported by the canonical region map.
+ */
 export type RegionGroupName = keyof typeof REGION_GROUPS;
 
+/**
+ * Runtime view of one named region and its normalized country-code membership.
+ */
 export type RegionGroup = {
   readonly name: RegionGroupName;
   readonly countryCodes: readonly string[];

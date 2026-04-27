@@ -2,24 +2,36 @@ import { spawn } from 'node:child_process';
 
 import type { MullvadRelay } from './fetch-relays.js';
 
+/**
+ * Captured result of an executed subprocess command.
+ */
 export type CommandExecution = {
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
 };
 
+/**
+ * Injectable command runner used by probe operations for testability.
+ */
 export type CommandRunner = (input: {
   readonly command: string;
   readonly args: readonly string[];
   readonly env?: NodeJS.ProcessEnv;
 }) => Promise<CommandExecution>;
 
+/**
+ * Successful relay-latency probe outcome.
+ */
 export type RelayProbeSuccess = {
   readonly ok: true;
   readonly relay: MullvadRelay;
   readonly latencyMs: number;
 };
 
+/**
+ * Failed relay-latency probe outcome with diagnostic cause.
+ */
 export type RelayProbeFailure = {
   readonly ok: false;
   readonly relay: MullvadRelay;
@@ -27,8 +39,14 @@ export type RelayProbeFailure = {
   readonly cause?: string;
 };
 
+/**
+ * Result union returned by relay-latency probing.
+ */
 export type RelayProbeResult = RelayProbeSuccess | RelayProbeFailure;
 
+/**
+ * JSON payload shape expected from a proxy exit information endpoint.
+ */
 export type ProxyExitPayload = {
   readonly ip?: string;
   readonly country?: string;
@@ -36,8 +54,14 @@ export type ProxyExitPayload = {
   readonly mullvad_exit_ip?: boolean;
 };
 
+/**
+ * Proxy protocols currently supported by exit probing.
+ */
 export type ProxyProtocol = 'socks5' | 'http' | 'https';
 
+/**
+ * Successful proxy-exit probe outcome.
+ */
 export type ProxyExitProbeSuccess = {
   readonly ok: true;
   readonly protocol: ProxyProtocol;
@@ -50,6 +74,9 @@ export type ProxyExitProbeSuccess = {
   };
 };
 
+/**
+ * Failed proxy-exit probe outcome with diagnostic cause.
+ */
 export type ProxyExitProbeFailure = {
   readonly ok: false;
   readonly protocol: ProxyProtocol;
@@ -58,6 +85,9 @@ export type ProxyExitProbeFailure = {
   readonly cause?: string;
 };
 
+/**
+ * Result union returned by proxy-exit probing.
+ */
 export type ProxyExitProbeResult = ProxyExitProbeSuccess | ProxyExitProbeFailure;
 
 /**
