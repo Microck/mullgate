@@ -15,6 +15,9 @@ type ExposurePort = {
   readonly port: number;
 };
 
+/**
+ * Describes a validation failure returned while checking exposure input.
+ */
 export type ExposureValidationFailure = {
   readonly ok: false;
   readonly phase: 'setup-validation';
@@ -25,6 +28,9 @@ export type ExposureValidationFailure = {
   readonly artifactPath: string;
 };
 
+/**
+ * Describes the validated exposure settings that are safe to persist.
+ */
 export type ExposureValidationSuccess = {
   readonly ok: true;
   readonly mode: ExposureMode;
@@ -33,8 +39,14 @@ export type ExposureValidationSuccess = {
   readonly routeBindIps: readonly [string, ...string[]];
 };
 
+/**
+ * Union result for exposure settings validation.
+ */
 export type ExposureValidationResult = ExposureValidationSuccess | ExposureValidationFailure;
 
+/**
+ * One concrete proxy endpoint for a hostname/bind-ip route target.
+ */
 export type ExposureEndpoint = {
   readonly protocol: ExposureProtocol;
   readonly port: number;
@@ -45,6 +57,9 @@ export type ExposureEndpoint = {
   readonly authRequired: true;
 };
 
+/**
+ * Per-route contract consumed by runtime renderers and operator guidance.
+ */
 export type ExposureRouteContract = {
   readonly index: number;
   readonly alias: string;
@@ -55,6 +70,9 @@ export type ExposureRouteContract = {
   readonly endpoints: readonly ExposureEndpoint[];
 };
 
+/**
+ * Example selector strings that operators can paste into proxy clients.
+ */
 export type InlineSelectorExample = {
   readonly selector: string;
   readonly targetLabel: string;
@@ -63,6 +81,9 @@ export type InlineSelectorExample = {
   readonly bestEffortUrl: string;
 };
 
+/**
+ * Non-fatal exposure warning that should be surfaced to operators.
+ */
 export type ExposureWarning = {
   readonly code:
     | 'LOOPBACK_ONLY'
@@ -75,6 +96,9 @@ export type ExposureWarning = {
   readonly message: string;
 };
 
+/**
+ * Canonical runtime-facing exposure contract derived from saved config.
+ */
 export type ExposureContract = {
   readonly mode: ExposureMode;
   readonly accessMode: AccessMode;
@@ -113,8 +137,14 @@ export type ExposureContract = {
   };
 };
 
+/**
+ * Union result for access-specific validation checks.
+ */
 export type AccessValidationResult = { readonly ok: true } | ExposureValidationFailure;
 
+/**
+ * Computes the externally published listener port for a route index.
+ */
 export function computePublishedPort(
   exposureMode: ExposureMode,
   basePort: number,
@@ -123,14 +153,23 @@ export function computePublishedPort(
   return exposureMode === 'private-network' ? basePort + routeIndex : basePort;
 }
 
+/**
+ * Returns whether config is using shared inline-selector access mode.
+ */
 export function usesInlineSelectorAccess(config: Pick<MullgateConfig, 'setup'>): boolean {
   return config.setup.access.mode === 'inline-selector';
 }
 
+/**
+ * Resolves the shared bind host used for inline-selector listeners.
+ */
 export function deriveInlineSelectorBindHost(config: Pick<MullgateConfig, 'setup'>): string {
   return config.setup.bind.host;
 }
 
+/**
+ * Validates access-mode constraints that depend on exposure posture.
+ */
 export function validateAccessSettings(input: {
   readonly exposureMode: ExposureMode;
   readonly accessMode: AccessMode;
@@ -170,14 +209,23 @@ export function validateAccessSettings(input: {
   return { ok: true };
 }
 
+/**
+ * Maps config bind IPs to listener hosts used inside runtime artifacts.
+ */
 export function deriveRuntimeListenerHost(exposureMode: ExposureMode, bindIp: string): string {
   return exposureMode === 'private-network' ? PRIVATE_NETWORK_LISTEN_HOST : bindIp;
 }
 
+/**
+ * Maps config bind IPs to backend hosts used by runtime proxy containers.
+ */
 export function deriveRuntimeBackendHost(exposureMode: ExposureMode, bindIp: string): string {
   return exposureMode === 'private-network' ? PRIVATE_NETWORK_BACKEND_HOST : bindIp;
 }
 
+/**
+ * Builds the exposure contract and guidance bundle shown to operators.
+ */
 export function buildExposureContract(config: MullgateConfig): ExposureContract {
   const ports = collectExposurePorts(config);
   const inlineSelectorEnabled = usesInlineSelectorAccess(config);
@@ -282,6 +330,9 @@ export function buildExposureContract(config: MullgateConfig): ExposureContract 
   };
 }
 
+/**
+ * Validates route bind hosts and base-domain rules for the selected mode.
+ */
 export function validateExposureSettings(input: {
   readonly routeCount: number;
   readonly exposureMode: ExposureMode;
@@ -482,11 +533,17 @@ export function validateExposureSettings(input: {
   };
 }
 
+/**
+ * Normalizes optional base-domain input into a canonical stored value.
+ */
 export function normalizeExposureBaseDomain(value: string | null | undefined): string | null {
   const trimmed = value?.trim().toLowerCase().replace(/\.+$/, '');
   return trimmed ? trimmed : null;
 }
 
+/**
+ * Derives the route hostname used in rendered proxy URLs and DNS guidance.
+ */
 export function deriveExposureHostname(
   alias: string,
   bindIp: string,
@@ -500,6 +557,9 @@ export function deriveExposureHostname(
   return exposureMode === 'loopback' ? alias : bindIp;
 }
 
+/**
+ * Produces a deterministic loopback bind IP for a route index.
+ */
 export function deriveLoopbackBindIp(index: number): string {
   const thirdOctet = Math.floor(index / 254);
   const fourthOctet = (index % 254) + 1;
