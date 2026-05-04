@@ -44,7 +44,7 @@ jobs:
 
       - name: Install pnpm
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
-        uses: pnpm/action-setup@v6.0.3
+        uses: pnpm/action-setup@v6.0.5
         with:
           version: 10.18.3
 
