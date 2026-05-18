@@ -21,8 +21,8 @@ This guide expands on the consumer-facing repository `README`. It keeps the deep
 
 Mullgate has two operator-facing install forms:
 
-1. **Installed `mullgate` command** — the published npm package installed via `npm`, `pnpm`, `bun`, or the convenience installer scripts
-2. **Packed release asset** — the GitHub release `.tgz` artifact or extracted standalone binary
+1. **Installed `mullgate` command** -- the published npm package installed via `npm`, `pnpm`, `bun`, or the convenience installer scripts
+2. **Packed release asset** -- the GitHub release `.tgz` artifact or extracted standalone binary
 
 This guide uses installed `mullgate ...` commands by default. If you are using a release artifact instead, invoke the extracted `mullgate` binary with the same flags and subcommands shown here.
 
@@ -33,8 +33,8 @@ Mullgate reports platform support truthfully on Linux, macOS, and Windows.
 | Platform | `path` | `status` / `doctor` | Current runtime execution |
 | --- | --- | --- | --- |
 | Linux | Supported | Supported | **Fully supported** |
-| macOS | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
-| Windows | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
+| macOS | Supported | Supported | **Limited** -- Docker Desktop host networking does not match Linux |
+| Windows | Supported | Supported | **Limited** -- Docker Desktop host networking does not match Linux |
 
 Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat the CLI and runtime manifest as supported config and diagnostic surfaces, but use a Linux host or Linux VM when you need the shipped multi-route Docker runtime to behave truthfully end to end.
 
@@ -345,8 +345,8 @@ Use it when:
 
 Mullgate exposes proxy entrypoints in two access models:
 
-- **published-routes** — route-aware hostnames or per-route ports such as `sweden-gothenburg.proxy.example.com:1080` or `100.124.44.113:1081`
-- **inline-selector** — one shared listener per protocol, with the selector in the username such as `socks5://se:@100.124.44.113:1080`
+- **published-routes** -- route-aware hostnames or per-route ports such as `sweden-gothenburg.proxy.example.com:1080` or `100.124.44.113:1081`
+- **inline-selector** -- one shared listener per protocol, with the selector in the username such as `socks5://se:@100.124.44.113:1080`
 
 For the full selector syntax and supported selector families, see [Inline Selector Reference](/docs/guides/inline-selector-selectors).
 

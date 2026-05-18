@@ -935,7 +935,7 @@ describe('mullgate doctor command', () => {
          remediation: Run \`mullgate proxy validate\` or \`mullgate proxy start\` to generate the shared runtime validation report before relying on the saved validation metadata.
 
       4. relay-cache: degraded
-         summary: Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.
+         summary: Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad's current catalog.
          detail: relay-cache=/tmp/mullgate-home/cache/mullgate/relays.json
          detail: source=app-wireguard-v1
          detail: endpoint=https://api.mullvad.net/public/relays/wireguard/v1/

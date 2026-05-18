@@ -348,7 +348,7 @@ describe('m004 compatibility contract', () => {
           phase: 'summary',
           stopReason: 'distinct-exits-confirmed',
           summary:
-            'The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged.',
+            'The single-entry feasibility probe observed 2-3 distinct exits while the host route baseline remained unchanged.',
         },
         summary: {
           requestedLogicalExitCount: 2,
@@ -706,7 +706,7 @@ describe('m004 compatibility contract', () => {
       '"explicitFailure": "Hostname-selected routing fails under the one-entry topology because the shared entry collapses to one bind IP and SOCKS5 does not preserve the requested proxy hostname for destination-bind-IP selection."',
     );
     expect(summaryText).toContain(
-      'headline: SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate’s current truthful contract',
+      'headline: SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate's current truthful contract',
     );
     expect(summaryText).toContain(
       'hostname-selected routing: not-truthful (one-bind-ip-plus-socks5-hostname-loss)',

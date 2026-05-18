@@ -181,7 +181,7 @@ export function renderMilestoneDecisionText(bundle: MilestoneDecisionBundle): st
     `question: ${bundle.question}`,
     `recommendation: ${bundle.recommendation.summary}`,
     `next action: ${bundle.recommendation.nextAction}`,
-    `R028: ${bundle.requirement.advancement} — ${bundle.requirement.summary}`,
+    `R028: ${bundle.requirement.advancement} -- ${bundle.requirement.summary}`,
     `compatibility headline: ${bundle.compatibility.headline}`,
     `compatibility posture: ${bundle.compatibility.recommendationPosture}`,
     `hostname routing: ${bundle.compatibility.hostnameRoutingStatus}`,
@@ -193,13 +193,13 @@ export function renderMilestoneDecisionText(bundle: MilestoneDecisionBundle): st
 
   lines.push('supporting requirements:');
   bundle.supportingRequirements.forEach((requirement) => {
-    lines.push(`- ${requirement.requirementId}: ${requirement.status} — ${requirement.summary}`);
+    lines.push(`- ${requirement.requirementId}: ${requirement.status} -- ${requirement.summary}`);
   });
 
   lines.push('protocol matrix:');
   bundle.compatibility.protocolMatrix.forEach((protocol) => {
     lines.push(
-      `- ${protocol.protocol}: ${protocol.outcome} (${protocol.reason}) — ${protocol.summary}`,
+      `- ${protocol.protocol}: ${protocol.outcome} (${protocol.reason}) -- ${protocol.summary}`,
     );
   });
 

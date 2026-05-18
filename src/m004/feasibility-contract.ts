@@ -461,7 +461,7 @@ function classifyFeasibilityVerdict(input: {
     phase: 'summary',
     stopReason: 'distinct-exits-confirmed',
     summary:
-      'The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged.',
+      'The single-entry feasibility probe observed 2-3 distinct exits while the host route baseline remained unchanged.',
   };
 }
 

@@ -19,8 +19,8 @@ This guide expands on the consumer-facing repository [README](../README.md). It 
 
 Mullgate has two operator-facing install forms:
 
-1. **Installed `mullgate` command** — the published npm package installed via `npm`, `pnpm`, `bun`, or the convenience installer scripts
-2. **Packed release asset** — the GitHub release `.tgz` artifact or extracted standalone binary
+1. **Installed `mullgate` command** -- the published npm package installed via `npm`, `pnpm`, `bun`, or the convenience installer scripts
+2. **Packed release asset** -- the GitHub release `.tgz` artifact or extracted standalone binary
 
 This guide uses installed `mullgate ...` commands by default. If you are using a release artifact instead, invoke the extracted `mullgate` binary with the same flags and subcommands shown here.
 
@@ -31,8 +31,8 @@ Mullgate now reports platform support truthfully on Linux, macOS, and Windows.
 | Platform | `path` | `status` / `doctor` | Current runtime execution |
 | --- | --- | --- | --- |
 | Linux | Supported | Supported | **Fully supported** |
-| macOS | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
-| Windows | Supported | Supported | **Limited** — Docker Desktop host networking does not match Linux |
+| macOS | Supported | Supported | **Limited** -- Docker Desktop host networking does not match Linux |
+| Windows | Supported | Supported | **Limited** -- Docker Desktop host networking does not match Linux |
 
 Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat the CLI and runtime manifest as supported config/diagnostic surfaces, but use a Linux host or Linux VM when you need the shipped multi-route Docker runtime to behave truthfully end to end.
 
@@ -295,8 +295,8 @@ Use it when:
 
 Mullgate exposes the same per-route listeners in two parallel forms:
 
-- **hostname entrypoints** — route-aware names such as `sweden-gothenburg`, `austria-vienna`, or `sweden-gothenburg.proxy.example.com`
-- **direct-IP entrypoints** — the bind IP for each route, such as `127.0.0.1`, `127.0.0.2`, or `192.168.10.10`
+- **hostname entrypoints** -- route-aware names such as `sweden-gothenburg`, `austria-vienna`, or `sweden-gothenburg.proxy.example.com`
+- **direct-IP entrypoints** -- the bind IP for each route, such as `127.0.0.1`, `127.0.0.2`, or `192.168.10.10`
 
 ### When hostname access works
 

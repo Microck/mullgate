@@ -733,7 +733,7 @@ export function renderCompatibilitySummary(input: {
   lines.push('protocol matrix:');
   input.bundle.summary.protocolMatrix.forEach((protocol) => {
     lines.push(
-      `- ${protocol.protocol}: ${protocol.outcome} / ${protocol.contractStatus} (${protocol.reason}) — ${protocol.summary}`,
+      `- ${protocol.protocol}: ${protocol.outcome} / ${protocol.contractStatus} (${protocol.reason}) -- ${protocol.summary}`,
     );
     lines.push(`  observed: ${protocol.observedCapabilitySummary}`);
   });
@@ -749,7 +749,7 @@ export function renderCompatibilitySummary(input: {
   lines.push('requirement deltas:');
   input.bundle.summary.requirementDeltas.forEach((requirement) => {
     lines.push(
-      `- ${requirement.requirementId} ${requirement.title}: ${requirement.status} — ${requirement.summary}`,
+      `- ${requirement.requirementId} ${requirement.title}: ${requirement.status} -- ${requirement.summary}`,
     );
   });
 
@@ -793,7 +793,7 @@ function summarizeHeadline(input: {
   }
 
   if (input.hostnameRoutingFailure) {
-    return `SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate’s current truthful contract: ${input.hostnameRoutingFailure}`;
+    return `SOCKS5 chaining can still work with explicit relay selection, but hostname-selected routing fails and HTTP/HTTPS cannot keep Mullgate's current truthful contract: ${input.hostnameRoutingFailure}`;
   }
 
   return 'The shared-entry topology fails one or more tracked contracts and is not truthful enough to recommend as-is.';

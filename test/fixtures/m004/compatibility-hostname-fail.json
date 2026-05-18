@@ -127,7 +127,7 @@
       "reason": "distinct-exits-confirmed",
       "phase": "summary",
       "stopReason": "distinct-exits-confirmed",
-      "summary": "The single-entry feasibility probe observed 2–3 distinct exits while the host route baseline remained unchanged."
+      "summary": "The single-entry feasibility probe observed 2-3 distinct exits while the host route baseline remained unchanged."
     }
   },
   "hostnameRouting": {

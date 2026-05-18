@@ -505,7 +505,7 @@ function buildRelayCacheCheck(
       name: 'relay-cache',
       outcome: 'degraded',
       summary:
-        'Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad’s current catalog.',
+        'Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad's current catalog.',
       details,
       remediation:
         'Refresh the saved relay catalog with `mullgate setup`, then rerun `mullgate proxy validate` or `mullgate proxy start` so runtime artifacts use the fresh relay data.',
