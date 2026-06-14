@@ -30,6 +30,7 @@ import {
   fetchRelays,
   type MullvadRelay,
   type MullvadRelayCatalog,
+  resolveRelaySocksInternalIps,
 } from '../mullvad/fetch-relays.js';
 import {
   type ProvisionWireguardResult,
@@ -51,9 +52,14 @@ const DEFAULT_EXPOSURE_MODE: ExposureMode = 'loopback';
 const PROVISION_RETRY_LIMIT = 3;
 const PROVISION_RETRY_FALLBACK_DELAY_MS = 1_500;
 const PROMPT_CANCELLED = Symbol('setup-prompt-cancelled');
+type ExitSource = NonNullable<MullgateConfig['mullvad']['exitSource']>;
 
 export type SetupInputValues = {
+  readonly exitSource: ExitSource;
   readonly accountNumber: string;
+  readonly tailscaleTailnet: string | null;
+  readonly tailscaleAuthKey: string | null;
+  readonly tailscalePinnedExitNode: string | null;
   readonly bindHost: string;
   readonly routeBindIps: readonly [string, ...string[]];
   readonly exposureMode: ExposureMode;
@@ -72,11 +78,12 @@ export type SetupInputValues = {
 
 export type RawSetupInputValues = Omit<
   SetupInputValues,
-  'routeBindIps' | 'exposureMode' | 'exposureBaseDomain'
+  'routeBindIps' | 'exposureMode' | 'exposureBaseDomain' | 'exitSource'
 > & {
   readonly routeBindIps?: readonly string[];
   readonly exposureMode?: ExposureMode;
   readonly exposureBaseDomain?: string | null;
+  readonly exitSource?: ExitSource;
 };
 
 export type SetupRouteMetadata = {
@@ -176,6 +183,9 @@ export type RunSetupFlowOptions = {
   readonly provisioningBaseUrl?: string | URL;
   readonly relayCatalogUrl?: string | URL;
   readonly fetch?: typeof globalThis.fetch;
+  readonly relaySocksResolver?: {
+    readonly resolve4: (hostname: string) => Promise<string[]>;
+  };
   readonly validateOptions?: Pick<
     ValidateRuntimeOptions,
     'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'routeProxyDockerImage' | 'spawn'
@@ -265,22 +275,44 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     };
   }
 
-  const relayResult = await fetchRelays({
+  const fetchedRelayResult = await fetchRelays({
     ...(options.relayCatalogUrl ? { url: options.relayCatalogUrl } : {}),
     ...(options.fetch ? { fetch: options.fetch } : {}),
     fetchedAt: options.checkedAt,
   });
 
+  if (!fetchedRelayResult.ok) {
+    return {
+      ok: false,
+      phase: fetchedRelayResult.phase,
+      source: fetchedRelayResult.source,
+      exitCode: 1,
+      paths: store.paths,
+      endpoint: fetchedRelayResult.endpoint,
+      message: fetchedRelayResult.message,
+      ...(fetchedRelayResult.cause ? { cause: fetchedRelayResult.cause } : {}),
+    };
+  }
+
+  const relayResult =
+    setupInputs.exitSource === 'tailscale-exit'
+      ? await resolveRelaySocksInternalIps(fetchedRelayResult.value, {
+          checkedAt: options.checkedAt,
+          ...(options.relaySocksResolver ? { resolver: options.relaySocksResolver } : {}),
+        })
+      : fetchedRelayResult;
+
   if (!relayResult.ok) {
     return {
       ok: false,
-      phase: relayResult.phase,
-      source: relayResult.source,
+      phase: 'relay-normalize',
+      source: 'relay-catalog',
       exitCode: 1,
       paths: store.paths,
-      endpoint: relayResult.endpoint,
+      code: relayResult.code,
       message: relayResult.message,
       ...(relayResult.cause ? { cause: relayResult.cause } : {}),
+      ...(relayResult.socksHostname ? { artifactPath: relayResult.socksHostname } : {}),
     };
   }
 
@@ -323,15 +355,18 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     };
   }
 
-  const provisionResult = await provisionRouteWithRetries({
-    accountNumber: setupInputs.accountNumber,
-    route: plannedRoutesResult.value[0],
-    provisioningBaseUrl: options.provisioningBaseUrl,
-    fetch: options.fetch,
-    checkedAt: options.checkedAt,
-  });
+  const provisionResult =
+    setupInputs.exitSource === 'mullvad-wireguard-socks'
+      ? await provisionRouteWithRetries({
+          accountNumber: setupInputs.accountNumber,
+          route: plannedRoutesResult.value[0],
+          provisioningBaseUrl: options.provisioningBaseUrl,
+          fetch: options.fetch,
+          checkedAt: options.checkedAt,
+        })
+      : null;
 
-  if (!provisionResult.ok) {
+  if (provisionResult && !provisionResult.ok) {
     return {
       ok: false,
       phase: provisionResult.phase,
@@ -351,6 +386,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
   const resolvedRoutesResult = resolveSetupRouteExits({
     routes: plannedRoutesResult.value,
     relayCatalog: relayResult.value,
+    requireSocksInternalIp: setupInputs.exitSource === 'tailscale-exit',
   });
 
   if (!resolvedRoutesResult.ok) {
@@ -429,6 +465,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
       httpPort: setupInputs.httpPort,
     },
     reportPath: store.paths.runtimeValidationReportFile,
+    validateEntryWireproxy: setupInputs.exitSource === 'mullvad-wireguard-socks',
     checkedAt: options.checkedAt,
     ...options.validateOptions,
   });
@@ -462,6 +499,9 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     };
   }
 
+  const selectedRelayHostname =
+    renderResult.entryRelay?.hostname ?? setupInputs.tailscalePinnedExitNode ?? 'n/a';
+
   return {
     ok: true,
     phase: 'setup-complete',
@@ -474,7 +514,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
       renderResult.entryTarget ??
       requireDefined(resolvedRoutesResult.value[0], 'Expected one resolved setup route.')
         .resolvedLocation,
-    selectedRelayHostname: renderResult.entryRelay.hostname,
+    selectedRelayHostname,
     relayCatalog: relayResult.value,
     configPath: store.paths.configFile,
     relayCachePath: renderResult.artifactPaths.relayCachePath,
@@ -493,8 +533,13 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
       `relay cache: ${renderResult.artifactPaths.relayCachePath}`,
       `docker compose: ${store.paths.runtimeComposeFile}`,
       `validation report: ${store.paths.runtimeValidationReportFile}`,
-      `entry relay: ${renderResult.entryRelay.hostname}`,
-      `shared device: ${setupInputs.deviceName ?? defaultDeviceName()}`,
+      `exit source: ${setupInputs.exitSource}`,
+      `entry relay: ${selectedRelayHostname}`,
+      `shared device: ${
+        setupInputs.exitSource === 'tailscale-exit'
+          ? 'tailscale-sidecar'
+          : (setupInputs.deviceName ?? defaultDeviceName())
+      }`,
       `location: ${resolvedRoutesResult.value[0]?.alias}`,
       `exposure: ${setupInputs.exposureMode}`,
       `base domain: ${setupInputs.exposureBaseDomain ?? 'n/a'}`,
@@ -506,7 +551,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
         `   exit relay: ${route.exitRelay.hostname}`,
         `   exit socks: ${route.exitRelay.socksName ?? 'n/a'}:${route.exitRelay.socksPort ?? 'n/a'}`,
       ]),
-      `tunnel ipv4: ${provisionResult.value.ipv4Address}`,
+      `tunnel ipv4: ${provisionResult?.ok ? provisionResult.value.ipv4Address : 'tailscale'}`,
       `validation: ${summarizeValidationSource(validationResult)}`,
     ].join('\n'),
   };
@@ -605,6 +650,7 @@ export function planSetupRoutes(input: {
 function resolveSetupRouteExits(input: {
   readonly routes: readonly PlannedSetupRoute[];
   readonly relayCatalog: MullvadRelayCatalog;
+  readonly requireSocksInternalIp?: boolean;
 }):
   | {
       readonly ok: true;
@@ -626,6 +672,7 @@ function resolveSetupRouteExits(input: {
     const exitRelay = selectSetupRouteExit({
       route,
       relayCatalog: input.relayCatalog,
+      requireSocksInternalIp: input.requireSocksInternalIp ?? false,
     });
 
     if (!exitRelay.ok) {
@@ -656,6 +703,7 @@ function resolveSetupRouteExits(input: {
 function selectSetupRouteExit(input: {
   readonly route: PlannedSetupRoute;
   readonly relayCatalog: MullvadRelayCatalog;
+  readonly requireSocksInternalIp: boolean;
 }):
   | {
       readonly ok: true;
@@ -708,6 +756,17 @@ function selectSetupRouteExit(input: {
     };
   }
 
+  if (input.requireSocksInternalIp && !selectedRelay.socksInternalIp) {
+    return {
+      ok: false,
+      source: 'relay-catalog',
+      code: 'MISSING_SOCKS_METADATA',
+      message: `Relay ${selectedRelay.hostname} did not include a cached internal SOCKS IP required for Tailscale exit routing.`,
+      artifactPath: input.route.relayPreference.requested,
+      cause: 'Resolve Mullvad public SOCKS hostnames before creating tailscale-exit routed exits.',
+    };
+  }
+
   return {
     ok: true,
     relay: selectedRelay,
@@ -739,6 +798,7 @@ function createRouteExitMetadata(
       relay.socksPort,
       `Expected relay ${relay.hostname} to include a SOCKS port.`,
     ),
+    ...(relay.socksInternalIp ? { socksInternalIp: relay.socksInternalIp } : {}),
     countryCode: relay.location.countryCode,
     cityCode: relay.location.cityCode,
   };
@@ -942,7 +1002,7 @@ export async function loadStoredRelayCatalog(relayCachePath: string): Promise<
 
 function createCanonicalConfig(input: {
   inputs: SetupInputValues;
-  provisioning: Extract<ProvisionWireguardResult, { ok: true }>;
+  provisioning: Extract<ProvisionWireguardResult, { ok: true }> | null;
   routes: readonly ResolvedSetupRoute[];
   relayCatalog: MullvadRelayCatalog;
   paths: MullgatePaths;
@@ -1006,19 +1066,38 @@ function createCanonicalConfig(input: {
       },
     },
     mullvad: {
+      exitSource: input.inputs.exitSource,
       accountNumber: input.inputs.accountNumber,
       ...(input.inputs.deviceName ? { deviceName: input.inputs.deviceName } : {}),
-      lastProvisionedAt: input.provisioning.checkedAt,
+      lastProvisionedAt: input.provisioning?.checkedAt ?? timestamp,
       relayConstraints: {
         providers: [],
       },
-      wireguard: input.provisioning.value.toConfigValue(),
+      wireguard: input.provisioning?.value.toConfigValue() ?? {
+        publicKey: null,
+        privateKey: null,
+        ipv4Address: null,
+        ipv6Address: null,
+        gatewayIpv4: null,
+        gatewayIpv6: null,
+        dnsServers: [],
+        peerPublicKey: null,
+        peerEndpoint: null,
+      },
+      tailscale: {
+        tailnet: input.inputs.tailscaleTailnet,
+        authKey: input.inputs.tailscaleAuthKey,
+        pinnedExitNode: input.inputs.tailscalePinnedExitNode,
+      },
     },
     routing: {
       locations: routingLocations,
     },
     runtime: {
-      backend: 'shared-entry-wireguard-route-proxy',
+      backend:
+        input.inputs.exitSource === 'tailscale-exit'
+          ? 'tailscale-exit-route-proxy'
+          : 'shared-entry-wireguard-route-proxy',
       sourceConfigPath: input.paths.configFile,
       entryWireproxyConfigPath: input.paths.entryWireproxyConfigFile,
       routeProxyConfigPath: input.paths.routeProxyConfigFile,
@@ -1062,8 +1141,15 @@ async function collectSetupInputs(input: {
   const configuredLocations = values.locations ?? ['se-gothenburg'];
 
   if (!input.interactive) {
+    const exitSource = values.exitSource ?? 'mullvad-wireguard-socks';
     const missing = [
-      ['account number', values.accountNumber],
+      ...(exitSource === 'mullvad-wireguard-socks'
+        ? [['account number', values.accountNumber] as const]
+        : [
+            ['tailscale tailnet', values.tailscaleTailnet] as const,
+            ['tailscale auth key', values.tailscaleAuthKey] as const,
+            ['tailscale pinned exit node', values.tailscalePinnedExitNode] as const,
+          ]),
       ['proxy username', values.username],
       ['proxy password', values.password],
       [
@@ -1333,6 +1419,7 @@ function normalizeInitialSetupValues(
   initialValues: Partial<RawSetupInputValues> | undefined,
 ): Partial<RawSetupInputValues> {
   const exposureMode = initialValues?.exposureMode ?? DEFAULT_EXPOSURE_MODE;
+  const exitSource = initialValues?.exitSource ?? 'mullvad-wireguard-socks';
   const normalizedLocations = parseLocationList(
     initialValues?.locations ?? initialValues?.location,
   );
@@ -1343,7 +1430,13 @@ function normalizeInitialSetupValues(
   const routeBindIps = parseBindIpList(initialValues?.routeBindIps ?? initialValues?.bindHost);
 
   return {
+    exitSource,
     accountNumber: initialValues?.accountNumber?.trim(),
+    tailscaleTailnet: initialValues?.tailscaleTailnet?.trim(),
+    tailscaleAuthKey: initialValues?.tailscaleAuthKey?.trim(),
+    tailscalePinnedExitNode: stripMullvadTailnetSuffix(
+      initialValues?.tailscalePinnedExitNode?.trim(),
+    ),
     bindHost:
       initialValues?.bindHost?.trim() || routeBindIps[0] || deriveDefaultBindHost(exposureMode),
     routeBindIps,
@@ -1363,6 +1456,7 @@ function normalizeInitialSetupValues(
 }
 
 function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputValues {
+  const exitSource = values.exitSource ?? 'mullvad-wireguard-socks';
   const exposureMode = values.exposureMode ?? DEFAULT_EXPOSURE_MODE;
   const bindHost = values.bindHost?.trim() || deriveDefaultBindHost(exposureMode);
   const parsedLocations = parseLocationList(values.locations ?? values.location);
@@ -1372,12 +1466,20 @@ function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputVa
   ];
   const routeBindIps = parseBindIpList(values.routeBindIps ?? bindHost);
   const accountNumber = values.accountNumber?.trim();
+  const tailscaleTailnet = values.tailscaleTailnet?.trim() ?? null;
+  const tailscaleAuthKey = values.tailscaleAuthKey?.trim() ?? null;
+  const tailscalePinnedExitNode = stripMullvadTailnetSuffix(values.tailscalePinnedExitNode?.trim());
   const socksPort = values.socksPort;
   const httpPort = values.httpPort;
   const username = values.username?.trim();
   const password = values.password?.trim();
   const missingFields = [
-    ...(accountNumber ? [] : ['account-number']),
+    ...(exitSource === 'mullvad-wireguard-socks' && !accountNumber ? ['account-number'] : []),
+    ...(exitSource === 'tailscale-exit' && !tailscaleTailnet ? ['tailscale-tailnet'] : []),
+    ...(exitSource === 'tailscale-exit' && !tailscaleAuthKey ? ['tailscale-auth-key'] : []),
+    ...(exitSource === 'tailscale-exit' && !tailscalePinnedExitNode
+      ? ['tailscale-pinned-exit-node']
+      : []),
     ...(bindHost ? [] : ['bind-host']),
     ...(socksPort === undefined ? ['socks-port'] : []),
     ...(httpPort === undefined ? ['http-port'] : []),
@@ -1394,10 +1496,10 @@ function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputVa
     string,
     ...string[],
   ];
-  const finalizedAccountNumber = requireDefined(
-    accountNumber,
-    'Expected account number after setup input validation.',
-  );
+  const finalizedAccountNumber =
+    exitSource === 'mullvad-wireguard-socks'
+      ? requireDefined(accountNumber, 'Expected account number after setup input validation.')
+      : '000000';
   const finalizedSocksPort = requireDefined(
     socksPort,
     'Expected SOCKS port after setup input validation.',
@@ -1412,7 +1514,11 @@ function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputVa
   );
 
   return {
+    exitSource,
     accountNumber: finalizedAccountNumber,
+    tailscaleTailnet,
+    tailscaleAuthKey,
+    tailscalePinnedExitNode,
     bindHost,
     routeBindIps: finalizedRouteBindIps,
     exposureMode,
@@ -1428,6 +1534,18 @@ function finalizeSetupValues(values: Partial<RawSetupInputValues>): SetupInputVa
     ...(values.httpsKeyPath ? { httpsKeyPath: values.httpsKeyPath.trim() } : {}),
     ...(values.deviceName ? { deviceName: values.deviceName.trim() } : {}),
   };
+}
+
+function stripMullvadTailnetSuffix(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.endsWith('.mullvad.ts.net')
+    ? trimmed.slice(0, -'.mullvad.ts.net'.length)
+    : trimmed;
 }
 
 function parseLocationList(value: readonly string[] | string | undefined): string[] {

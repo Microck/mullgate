@@ -58,7 +58,18 @@ export const wireguardCredentialSchema = z.object({
   peerEndpoint: nonEmptyString.nullable(),
 });
 
+export const exitSourceSchema = z
+  .enum(['mullvad-wireguard-socks', 'tailscale-exit'])
+  .default('mullvad-wireguard-socks');
+
+export const tailscaleCredentialSchema = z.object({
+  tailnet: nonEmptyString.nullable().default(null),
+  authKey: nonEmptyString.nullable().default(null),
+  pinnedExitNode: nonEmptyString.nullable().default(null),
+});
+
 export const mullvadProvisioningSchema = z.object({
+  exitSource: exitSourceSchema.optional(),
   accountNumber: z
     .string()
     .trim()
@@ -70,6 +81,7 @@ export const mullvadProvisioningSchema = z.object({
     providers: z.array(nonEmptyString).default([]),
   }),
   wireguard: wireguardCredentialSchema,
+  tailscale: tailscaleCredentialSchema.optional(),
 });
 
 export const routedLocationExitSchema = z.object({
@@ -77,6 +89,7 @@ export const routedLocationExitSchema = z.object({
   relayFqdn: nonEmptyString,
   socksHostname: nonEmptyString,
   socksPort: z.number().int().min(1).max(65_535),
+  socksInternalIp: nonEmptyString.optional(),
   countryCode: nonEmptyString,
   cityCode: nonEmptyString,
 });
@@ -132,7 +145,7 @@ export const runtimeBundleArtifactSchema = z.object({
 });
 
 export const runtimeArtifactSchema = z.object({
-  backend: z.literal('shared-entry-wireguard-route-proxy'),
+  backend: z.enum(['shared-entry-wireguard-route-proxy', 'tailscale-exit-route-proxy']),
   sourceConfigPath: nonEmptyString,
   entryWireproxyConfigPath: nonEmptyString,
   routeProxyConfigPath: nonEmptyString,
@@ -200,6 +213,7 @@ export const sensitiveConfigFieldPaths = [
   'setup.auth.password',
   'mullvad.accountNumber',
   'mullvad.wireguard.privateKey',
+  'mullvad.tailscale.authKey',
 ] as const;
 
 export type SensitiveConfigFieldPath = (typeof sensitiveConfigFieldPaths)[number];

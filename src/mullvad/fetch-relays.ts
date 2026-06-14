@@ -1,3 +1,5 @@
+import { Resolver } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 import { requireDefined } from '../required.js';
@@ -98,6 +100,7 @@ export type MullvadRelay = {
   readonly multihopPort?: number;
   readonly socksName?: string;
   readonly socksPort?: number;
+  readonly socksInternalIp?: string;
   readonly networkPortSpeed?: number;
   readonly stboot?: boolean;
   readonly daita?: boolean;
@@ -110,6 +113,24 @@ export type MullvadRelay = {
     readonly longitude?: number;
   };
 };
+
+export type ResolveRelaySocksIpsResult =
+  | {
+      readonly ok: true;
+      readonly phase: 'relay-socks-ip-resolve';
+      readonly checkedAt: string;
+      readonly value: MullvadRelayCatalog;
+    }
+  | {
+      readonly ok: false;
+      readonly phase: 'relay-socks-ip-resolve';
+      readonly checkedAt: string;
+      readonly code: 'DNS_ERROR' | 'MISSING_SOCKS_HOSTNAME' | 'NO_INTERNAL_IP';
+      readonly message: string;
+      readonly cause?: string;
+      readonly relayHostname?: string;
+      readonly socksHostname?: string;
+    };
 
 /**
  * Country-level summary entry in a normalized relay catalog.
@@ -366,6 +387,81 @@ export function normalizeRelayPayload(
     code: 'UNSUPPORTED_PAYLOAD',
     message: 'Mullvad relay metadata did not match the app or legacy relay formats.',
   });
+}
+
+export async function resolveRelaySocksInternalIps(
+  catalog: MullvadRelayCatalog,
+  options: {
+    readonly resolver?: {
+      readonly resolve4: (hostname: string) => Promise<string[]>;
+    };
+    readonly checkedAt?: string;
+  } = {},
+): Promise<ResolveRelaySocksIpsResult> {
+  const checkedAt = options.checkedAt ?? new Date().toISOString();
+  const resolver = options.resolver ?? new Resolver();
+  const resolvedRelays: MullvadRelay[] = [];
+
+  for (const relay of catalog.relays) {
+    if (!relay.socksName) {
+      resolvedRelays.push(relay);
+      continue;
+    }
+
+    const socksHostname = relay.socksName.includes('.')
+      ? relay.socksName
+      : `${relay.socksName}.relays.mullvad.net`;
+
+    let addresses: string[];
+
+    try {
+      addresses = await resolver.resolve4(socksHostname);
+    } catch (error) {
+      return {
+        ok: false,
+        phase: 'relay-socks-ip-resolve',
+        checkedAt,
+        code: 'DNS_ERROR',
+        message: `Failed to resolve Mullvad SOCKS hostname ${socksHostname}.`,
+        cause: formatUnknownError(error),
+        relayHostname: relay.hostname,
+        socksHostname,
+      };
+    }
+
+    const internalIp = addresses.find(
+      (address) => isIP(address) === 4 && address.startsWith('10.'),
+    );
+
+    if (!internalIp) {
+      return {
+        ok: false,
+        phase: 'relay-socks-ip-resolve',
+        checkedAt,
+        code: 'NO_INTERNAL_IP',
+        message: `Mullvad SOCKS hostname ${socksHostname} did not resolve to a 10.x internal IPv4 address.`,
+        cause: addresses.join(', '),
+        relayHostname: relay.hostname,
+        socksHostname,
+      };
+    }
+
+    resolvedRelays.push({
+      ...relay,
+      socksInternalIp: internalIp,
+    });
+  }
+
+  return {
+    ok: true,
+    phase: 'relay-socks-ip-resolve',
+    checkedAt,
+    value: {
+      ...catalog,
+      fetchedAt: checkedAt,
+      relays: resolvedRelays,
+    },
+  };
 }
 
 function createSuccess(input: {

@@ -89,6 +89,7 @@ function redactOptionalText(value: string | null, config: MullgateConfig): strin
  * - `setup.auth.password`
  * - `mullvad.accountNumber`
  * - `mullvad.wireguard.privateKey`
+ * - `mullvad.tailscale.authKey`
  */
 export function collectKnownSecrets(config: MullgateConfig): string[] {
   return sensitiveConfigFieldPaths
@@ -107,6 +108,8 @@ function readSensitiveConfigField(
       return config.mullvad.accountNumber;
     case 'mullvad.wireguard.privateKey':
       return config.mullvad.wireguard.privateKey;
+    case 'mullvad.tailscale.authKey':
+      return config.mullvad.tailscale?.authKey ?? null;
   }
 }
 

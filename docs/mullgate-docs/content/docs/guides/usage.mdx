@@ -42,11 +42,24 @@ Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat
 
 `mullgate setup --non-interactive` fails instead of prompting when required inputs are missing. You can supply values with flags, environment variables, or a mix of both.
 
-### Required for a normal non-interactive run
+### Required for the default non-interactive run
 
 | Purpose | Flag | Environment variable |
 | --- | --- | --- |
 | Mullvad account number | `--account-number <digits>` | `MULLGATE_ACCOUNT_NUMBER` |
+| Proxy username | `--username <name>` | `MULLGATE_PROXY_USERNAME` |
+| One or more routed locations | `--location <alias>` (repeatable) | `MULLGATE_LOCATION` or `MULLGATE_LOCATIONS` |
+
+### Required for `tailscale-exit`
+
+Set `MULLGATE_EXIT_SOURCE=tailscale-exit` when you want one Tailscale sidecar pinned to a Mullvad exit instead of the default Mullvad WireGuard entry device.
+
+| Purpose | Flag | Environment variable |
+| --- | --- | --- |
+| Exit source | `--exit-source tailscale-exit` | `MULLGATE_EXIT_SOURCE` |
+| Tailscale tailnet | `--tailscale-tailnet <name>` | `MULLGATE_TAILSCALE_TAILNET` |
+| Tailscale auth key | `--tailscale-auth-key <key>` | `MULLGATE_TAILSCALE_AUTH_KEY` |
+| Pinned Mullvad exit node | `--tailscale-pinned-exit-node <exit-node>` | `MULLGATE_TAILSCALE_PINNED_EXIT_NODE` |
 | Proxy username | `--username <name>` | `MULLGATE_PROXY_USERNAME` |
 | One or more routed locations | `--location <alias>` (repeatable) | `MULLGATE_LOCATION` or `MULLGATE_LOCATIONS` |
 
@@ -74,6 +87,8 @@ Notes:
 - `MULLGATE_LOCATIONS` is the ordered, comma-separated form for multi-route setup.
 - `MULLGATE_ROUTE_BIND_IPS` is also ordered and comma-separated.
 - If you omit `MULLGATE_PROXY_PASSWORD`, setup saves an empty password.
+- `MULLGATE_EXIT_SOURCE` defaults to `mullvad-wireguard-socks`.
+- For `MULLGATE_TAILSCALE_PINNED_EXIT_NODE`, prefer the Tailscale IP printed by `tailscale exit-node list`.
 - `private-network` uses one shared trusted-network host IP. If Tailscale is available during setup and you do not override it, Mullgate should default to the host's `100.x` address.
 - `public` plus the default `published-routes` access mode still requires one explicit bind IP per routed location, and multi-route public exposure still requires **distinct** bind IPs.
 - `inline-selector` uses one shared host IP in every exposure mode because route selection moves to the proxy username.
@@ -129,6 +144,26 @@ What to expect:
 - route 1 keeps the base ports, route 2 moves to the next ports (`1081`, `8081`, `8444` when HTTPS is enabled)
 - `mullgate proxy access` prints the DNS A records operators must publish
 - each hostname must resolve to that shared host IP before hostname-based routing proof can work remotely
+
+### Example: Tailscale-backed exit source
+
+Use this when your tailnet has the Tailscale Mullvad add-on enabled and you want one sidecar device to reach multiple Mullvad internal SOCKS exits:
+
+```bash
+export MULLGATE_EXIT_SOURCE=tailscale-exit
+export MULLGATE_TAILSCALE_TAILNET=example.ts.net
+export MULLGATE_TAILSCALE_AUTH_KEY=tskey-auth-example
+export MULLGATE_TAILSCALE_PINNED_EXIT_NODE=100.120.246.18
+export MULLGATE_PROXY_USERNAME=alice
+export MULLGATE_PROXY_PASSWORD='replace-me'
+export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna,usa-new-york-ny
+
+mullgate setup --non-interactive
+mullgate proxy start --dry-run
+mullgate proxy doctor
+```
+
+The pinned exit node is only the carrier path into Mullvad's internal network. Each route still resolves and connects to its own `10.124.x.x:1080` Mullvad SOCKS endpoint.
 
 ### Example: direct-IP exposure with no base domain
 
@@ -582,3 +617,31 @@ A fresh verifier run needs one free Mullvad WireGuard device slot total because 
 The built-in `pnpm verify:s06` path still keeps its end-to-end probe contract to the first two saved routes so the default proof stays fast and inspectable.
 
 That does not mean Mullgate consumes one Mullvad slot per route. The current shared-entry runtime still uses one shared Mullvad device for the saved route set.
+
+## Tailscale feasibility verifier
+
+Use `pnpm verify:tailscale-feasibility` before depending on `tailscale-exit` in a new environment. The verifier starts a temporary Tailscale sidecar container, pins it to one Mullvad exit node, resolves internal Mullvad SOCKS IPs through public DNS, and probes three direct `10.124.x.x:1080` SOCKS endpoints concurrently.
+
+Required live inputs:
+
+| Purpose | Environment variable |
+| --- | --- |
+| Tailscale tailnet | `MULLGATE_TAILSCALE_TAILNET` |
+| Tailscale auth key | `MULLGATE_TAILSCALE_AUTH_KEY` |
+| Pinned Mullvad exit node | `MULLGATE_TAILSCALE_PINNED_EXIT_NODE` |
+
+For the pinned exit node, prefer the Tailscale IP from `tailscale exit-node list`.
+
+```bash
+export MULLGATE_TAILSCALE_TAILNET=example.ts.net
+export MULLGATE_TAILSCALE_AUTH_KEY=tskey-auth-example
+export MULLGATE_TAILSCALE_PINNED_EXIT_NODE=100.120.246.18
+
+pnpm verify:tailscale-feasibility
+```
+
+Fixture replay is available for deterministic review:
+
+```bash
+pnpm verify:tailscale-feasibility -- --fixture path/to/summary.json
+```

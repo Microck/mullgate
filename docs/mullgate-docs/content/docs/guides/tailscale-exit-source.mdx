@@ -1,0 +1,129 @@
+---
+title: Tailscale Exit Source
+description: Run Mullgate through one Tailscale sidecar pinned to a Mullvad exit.
+---
+
+`tailscale-exit` is an opt-in exit-source mode for operators who have a Tailscale tailnet with the Mullvad add-on enabled.
+
+In this mode, Mullgate keeps the same local listener, access, hostname, HTTPS, status, and doctor surfaces. The upstream entry transport changes from a Mullvad WireGuard device plus WireProxy to one `tailscaled` sidecar pinned to any Mullvad exit node.
+
+## When to use it
+
+Use `tailscale-exit` when:
+
+- your host runs Docker on Linux
+- your tailnet has the Mullvad add-on enabled
+- you can create a Tailscale auth key for the sidecar
+- you want one sidecar device to reach multiple named Mullvad SOCKS5 exits
+
+Stay on the default `mullvad-wireguard-socks` mode when you do not want Tailscale involved or when the host cannot run the sidecar with the required container privileges.
+
+## How routing works
+
+The sidecar joins the configured tailnet and pins itself to one Mullvad exit node. That pinned node acts as the carrier path into Mullvad's internal network.
+
+Mullgate resolves each selected Mullvad SOCKS5 hostname through public DNS and stores the resolved `10.124.x.x` internal SOCKS IP on the route. The route proxy then connects directly to that IP:
+
+```text
+client -> mullgate listener -> route-proxy -> 10.124.x.x:1080 -> destination
+```
+
+There is no WireProxy entry hop in this mode. The route proxy shares the sidecar's network namespace, so direct connections to `10.124.x.x:1080` use the Tailscale-routed path.
+
+## Non-interactive setup
+
+The required Tailscale-specific inputs are:
+
+- `MULLGATE_EXIT_SOURCE=tailscale-exit`
+- `MULLGATE_TAILSCALE_TAILNET`
+- `MULLGATE_TAILSCALE_AUTH_KEY`
+- `MULLGATE_TAILSCALE_PINNED_EXIT_NODE`
+
+The proxy credentials and route locations are still normal Mullgate inputs.
+
+For `MULLGATE_TAILSCALE_PINNED_EXIT_NODE`, prefer the Tailscale IP printed by `tailscale exit-node list`. The sidecar passes this value directly to `tailscale up --exit-node`, and IPs are the most reliable form across Tailscale Docker image versions.
+
+Example:
+
+```bash
+export MULLGATE_EXIT_SOURCE=tailscale-exit
+export MULLGATE_TAILSCALE_TAILNET=example.ts.net
+export MULLGATE_TAILSCALE_AUTH_KEY=tskey-auth-example
+export MULLGATE_TAILSCALE_PINNED_EXIT_NODE=100.120.246.18
+export MULLGATE_PROXY_USERNAME=proxy
+export MULLGATE_PROXY_PASSWORD=change-me
+export MULLGATE_LOCATIONS=se-got,at-vie,us-nyc
+
+mullgate setup --non-interactive
+mullgate proxy start --dry-run
+mullgate proxy start
+mullgate proxy status
+mullgate proxy doctor
+```
+
+The setup flow bypasses Mullvad WireGuard device provisioning in this mode. It still fetches relay metadata, resolves route SOCKS internal IPs, writes canonical config, renders runtime artifacts, and validates the Tailscale topology.
+
+## CLI flags
+
+The same inputs can be passed as setup flags:
+
+```bash
+mullgate setup --non-interactive \
+  --exit-source tailscale-exit \
+  --tailscale-tailnet example.ts.net \
+  --tailscale-auth-key tskey-auth-example \
+  --tailscale-pinned-exit-node 100.120.246.18
+```
+
+## Runtime topology
+
+`tailscale-exit` renders:
+
+- `tailscale-sidecar` - joins the tailnet and persists state in the `tailscale-state` Docker volume
+- `route-proxy` - shares the sidecar network namespace and connects to resolved `10.124.x.x:1080` SOCKS endpoints
+- `routing-layer` - unchanged HAProxy layer for the existing HTTPS and routing surfaces
+
+The auth key is needed for first boot or after the persisted state volume is lost. If the volume remains intact, later starts reuse the sidecar identity.
+
+## Feasibility verifier
+
+Before relying on a new environment, run the isolated verifier:
+
+```bash
+export MULLGATE_TAILSCALE_TAILNET=example.ts.net
+export MULLGATE_TAILSCALE_AUTH_KEY=tskey-auth-example
+export MULLGATE_TAILSCALE_PINNED_EXIT_NODE=100.120.246.18
+
+pnpm verify:tailscale-feasibility
+```
+
+The live verifier starts a temporary `tailscaled` sidecar container, pins it to the configured Mullvad exit, resolves distinct Mullvad SOCKS internal IPs through public DNS, then probes those endpoints concurrently. It passes only when the observed exits are distinct.
+
+Fixture replay is available for deterministic test and review loops:
+
+```bash
+pnpm verify:tailscale-feasibility -- --fixture path/to/summary.json
+```
+
+## Diagnostics
+
+Use the normal operator loop:
+
+```bash
+mullgate proxy status
+mullgate proxy doctor
+```
+
+In `tailscale-exit` mode, status reports the exit source, tailnet, pinned exit node, and `tailscale-sidecar` runtime state. Doctor checks that Tailscale credentials are complete, the rendered manifest uses the sidecar topology, and every configured route has a resolved internal SOCKS IP.
+
+If doctor reports missing internal SOCKS IPs, refresh derived state:
+
+```bash
+mullgate proxy validate --refresh
+```
+
+## See also
+
+- [Setup and Exposure](/docs/guides/setup-and-exposure)
+- [Troubleshooting](/docs/guides/troubleshooting)
+- [Configuration](/docs/reference/configuration)

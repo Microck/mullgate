@@ -31,3 +31,4 @@ tmp/
 pnpm-publish-summary.json
 AGENTS.md
 .vercel
+.residue/

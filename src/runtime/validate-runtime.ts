@@ -6,11 +6,7 @@ import path from 'node:path';
 import { deriveRuntimeListenerHost } from '../config/exposure-contract.js';
 import type { MullgateConfig } from '../config/schema.js';
 import { createDockerValidationStage } from './docker-validation-stage.js';
-import {
-  ENTRY_WIREPROXY_SOCKS_PORT,
-  type InlineSelectorMapping,
-  type RenderedRouteProxyRoute,
-} from './render-runtime-proxies.js';
+import type { InlineSelectorMapping, RenderedRouteProxyRoute } from './render-runtime-proxies.js';
 import { validateWireproxyConfig, type WireproxyValidationIssue } from './validate-wireproxy.js';
 
 type RuntimeValidationIssue = WireproxyValidationIssue;
@@ -74,6 +70,7 @@ export type ValidateRuntimeResult = ValidateRuntimeSuccess | ValidateRuntimeFail
 export type ValidateRuntimeOptions = {
   readonly entryWireproxyConfigPath: string;
   readonly entryWireproxyConfigText?: string;
+  readonly validateEntryWireproxy?: boolean;
   readonly routeProxyConfigPath: string;
   readonly routeProxyConfigText?: string;
   readonly routes: readonly RenderedRouteProxyRoute[];
@@ -106,15 +103,18 @@ export async function validateRuntimeArtifacts(
   options: ValidateRuntimeOptions,
 ): Promise<ValidateRuntimeResult> {
   const checkedAt = options.checkedAt ?? new Date().toISOString();
-  const wireproxyResult = await validateWireproxyConfig({
-    configPath: options.entryWireproxyConfigPath,
-    configText: options.entryWireproxyConfigText,
-    checkedAt,
-    wireproxyBinary: options.wireproxyBinary,
-    dockerBinary: options.dockerBinary,
-    dockerImage: options.dockerImage,
-    spawn: options.spawn,
-  });
+  const validateEntryWireproxy = options.validateEntryWireproxy ?? true;
+  const wireproxyResult = validateEntryWireproxy
+    ? await validateWireproxyConfig({
+        configPath: options.entryWireproxyConfigPath,
+        configText: options.entryWireproxyConfigText,
+        checkedAt,
+        wireproxyBinary: options.wireproxyBinary,
+        dockerBinary: options.dockerBinary,
+        dockerImage: options.dockerImage,
+        spawn: options.spawn,
+      })
+    : null;
   const routeProxyResult = validateRouteProxyConfig({
     configPath: options.routeProxyConfigPath,
     configText: options.routeProxyConfigText,
@@ -130,15 +130,19 @@ export async function validateRuntimeArtifacts(
     spawn: options.spawn,
   });
   const checks: RuntimeValidationCheck[] = [
-    {
-      artifact: 'entry-wireproxy',
-      ok: wireproxyResult.ok,
-      source: wireproxyResult.source,
-      validator: wireproxyResult.validator,
-      target: wireproxyResult.target,
-      issues: wireproxyResult.issues,
-      ...(wireproxyResult.ok ? {} : { cause: wireproxyResult.cause }),
-    },
+    ...(wireproxyResult
+      ? [
+          {
+            artifact: 'entry-wireproxy' as const,
+            ok: wireproxyResult.ok,
+            source: wireproxyResult.source,
+            validator: wireproxyResult.validator,
+            target: wireproxyResult.target,
+            issues: wireproxyResult.issues,
+            ...(wireproxyResult.ok ? {} : { cause: wireproxyResult.cause }),
+          },
+        ]
+      : []),
     routeProxyResult,
   ];
   const failedCheck = checks.find((check) => !check.ok);
@@ -408,11 +412,9 @@ function validateRouteProxySyntax(input: {
         });
       }
 
-      if (
-        !lines.includes(
-          `parent 1000 socks5+ ${selector.exitSocksHostname} ${selector.exitSocksPort}`,
-        )
-      ) {
+      const expectedParentHost = selector.exitSocksInternalIp ?? selector.exitSocksHostname;
+
+      if (!lines.includes(`parent 1000 socks5+ ${expectedParentHost} ${selector.exitSocksPort}`)) {
         issues.push({
           target: input.configPath,
           message: `Inline-selector config is missing an upstream parent for selector ${selector.selector}.`,
@@ -426,8 +428,10 @@ function validateRouteProxySyntax(input: {
   for (const route of input.routes) {
     const expectedSocks = `socks -p${route.routeSocksPort} -i${route.routeListenHost} -e${route.routeBindIp}`;
     const expectedHttp = `proxy -p${route.routeHttpPort} -i${route.routeListenHost} -e${route.routeBindIp}`;
-    const expectedEntryParent = `parent 1000 socks5+ 127.0.0.1 ${ENTRY_WIREPROXY_SOCKS_PORT}`;
-    const expectedExitParent = `parent 1000 socks5+ ${route.exitSocksHostname} ${route.exitSocksPort}`;
+    const expectedEntryParent = route.entryParent
+      ? `parent 1000 socks5+ ${route.entryParent.host} ${route.entryParent.port}`
+      : null;
+    const expectedExitParent = `parent 1000 socks5+ ${route.exitSocksInternalIp ?? route.exitSocksHostname} ${route.exitSocksPort}`;
 
     if (!lines.includes(expectedSocks)) {
       issues.push({
@@ -443,7 +447,9 @@ function validateRouteProxySyntax(input: {
       });
     }
 
-    const entryParentCount = lines.filter((line) => line === expectedEntryParent).length;
+    const entryParentCount = expectedEntryParent
+      ? lines.filter((line) => line === expectedEntryParent).length
+      : 2;
     const exitParentCount = lines.filter((line) => line === expectedExitParent).length;
 
     if (entryParentCount < 2) {

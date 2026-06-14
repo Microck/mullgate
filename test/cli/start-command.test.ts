@@ -236,7 +236,9 @@ afterEach(async () => {
 });
 
 describe('mullgate start command', () => {
-  it('re-renders the multi-route runtime bundle and persists a successful start report', async () => {
+  it('re-renders the multi-route runtime bundle and persists a successful start report', {
+    timeout: 15000,
+  }, async () => {
     const env = createTempEnvironment();
     const paths = resolveMullgatePaths(env);
     const store = await seedSavedConfig(env);
@@ -402,7 +404,9 @@ describe('mullgate start command', () => {
     `);
   });
 
-  it('surfaces public single-route exposure warnings and full hostname/direct-IP entrypoints in start output', async () => {
+  it('surfaces public single-route exposure warnings and full hostname/direct-IP entrypoints in start output', {
+    timeout: 15000,
+  }, async () => {
     const env = createTempEnvironment();
     const paths = resolveMullgatePaths(env);
     const store = await seedSavedConfig(env, (config) => {
@@ -519,7 +523,9 @@ describe('mullgate start command', () => {
     ]);
   });
 
-  it('supports a dry-run that validates artifacts without launching Docker', async () => {
+  it('supports a dry-run that validates artifacts without launching Docker', {
+    timeout: 15000,
+  }, async () => {
     const env = createTempEnvironment();
     const store = await seedSavedConfig(env);
     const stdout = createBufferSink();

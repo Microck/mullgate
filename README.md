@@ -43,6 +43,8 @@ the goal is not "replace mullvad's proxy page with another set of manual steps."
 
 mullgate solves mullvad's device cap by provisioning one shared wireguard entry device and fanning out to exact mullvad socks5 exits per route.
 
+for operators with the Tailscale Mullvad add-on, mullgate also supports an opt-in `tailscale-exit` source. this replaces the Mullvad WireGuard entry container with one Tailscale sidecar pinned to a Mullvad exit, then connects route proxies directly to resolved Mullvad internal SOCKS IPs such as `10.124.x.x:1080`. see [Tailscale Exit Source](docs/mullgate-docs/content/docs/guides/tailscale-exit-source.mdx) for setup details and the live feasibility verifier.
+
 ## architecture
 
 ```mermaid
@@ -248,7 +250,7 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 
 | command | key flags | purpose |
 | --- | --- | --- |
-| `mullgate setup` | `--non-interactive`, `--location`, `--exposure-mode`, `--bind-host`, `--route-bind-ip`, `--base-domain`, `--socks-port`, `--http-port`, `--https-port` | create or update canonical config and derived runtime artifacts |
+| `mullgate setup` | `--non-interactive`, `--exit-source`, `--location`, `--exposure-mode`, `--bind-host`, `--route-bind-ip`, `--base-domain`, `--socks-port`, `--http-port`, `--https-port` | create or update canonical config and derived runtime artifacts |
 | `mullgate proxy access` | `--mode`, `--access-mode`, `--base-domain`, `--clear-base-domain`, `--route-bind-ip`, `--unsafe-public-empty-password` | inspect or update exposure posture, access mode, shared-host planning, DNS guidance, selector examples, and direct-IP entrypoints |
 | `mullgate proxy list` | none | list configured routed proxies, hostnames, bind IPs, and runtime IDs |
 | `mullgate proxy export` | `--protocol`, `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories for `published-routes` mode |
@@ -285,6 +287,27 @@ export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
 
 mullgate setup --non-interactive
 mullgate proxy access
+```
+
+use the Tailscale-backed exit source when your tailnet has the Mullvad add-on enabled. for the pinned exit node, prefer the Tailscale IP shown by `tailscale exit-node list`:
+
+```bash
+export MULLGATE_EXIT_SOURCE=tailscale-exit
+export MULLGATE_TAILSCALE_TAILNET=example.ts.net
+export MULLGATE_TAILSCALE_AUTH_KEY=tskey-auth-example
+export MULLGATE_TAILSCALE_PINNED_EXIT_NODE=100.120.246.18
+export MULLGATE_PROXY_USERNAME=alice
+export MULLGATE_PROXY_PASSWORD='replace-me'
+export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna,usa-new-york-ny
+
+mullgate setup --non-interactive
+mullgate proxy start --dry-run
+```
+
+before depending on a new Tailscale environment, run the isolated proof:
+
+```bash
+pnpm verify:tailscale-feasibility
 ```
 
 set up private-network exposure for other Tailscale devices. if Tailscale is running, Mullgate defaults to the host's `100.x` address; otherwise it falls back to `0.0.0.0` until you override the shared host:

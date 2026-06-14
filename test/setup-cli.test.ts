@@ -436,30 +436,31 @@ describe('mullgate setup CLI flow', () => {
         expect(setupResult.status).toBe(0);
         expect(setupResult.stderr).toBe('');
         expect(`\n${normalizeOutput(setupResult.stdout, env)}`).toMatchInlineSnapshot(`
-            "
-            Mullgate setup completed.
-            phase: setup-complete
-            source: guided-setup
-            config: /tmp/mullgate-home/config/mullgate/config.json
-            entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
-            route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
-            relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-            docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
-            validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
-            entry relay: se-got-wg-101
-            shared device: mullgate-single
-            location: sweden-gothenburg
-            exposure: loopback
-            base domain: n/a
-            routes: 1
-            1. sweden-gothenburg
-               hostname: sweden-gothenburg
-               bind ip: 127.0.0.1
-               exit relay: se-got-wg-101
-               exit socks: se-got-wg-socks5-101.relays.mullvad.net:1080
-            tunnel ipv4: 10.64.12.34/32
-            validation: wireproxy-binary/configtest + docker/3proxy-startup"
-          `);
+          "
+          Mullgate setup completed.
+          phase: setup-complete
+          source: guided-setup
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+          route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+          relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+          docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+          validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+          exit source: mullvad-wireguard-socks
+          entry relay: se-got-wg-101
+          shared device: mullgate-single
+          location: sweden-gothenburg
+          exposure: loopback
+          base domain: n/a
+          routes: 1
+          1. sweden-gothenburg
+             hostname: sweden-gothenburg
+             bind ip: 127.0.0.1
+             exit relay: se-got-wg-101
+             exit socks: se-got-wg-socks5-101.relays.mullvad.net:1080
+          tunnel ipv4: 10.64.12.34/32
+          validation: wireproxy-binary/configtest + docker/3proxy-startup"
+        `);
 
         const [
           pathResult,
@@ -681,35 +682,36 @@ describe('mullgate setup CLI flow', () => {
         expect(setupResult.stderr).toBe('');
         expect(provisionedNames).toEqual(['mullgate-lab']);
         expect(`\n${normalizeOutput(setupResult.stdout, env)}`).toMatchInlineSnapshot(`
-            "
-            Mullgate setup completed.
-            phase: setup-complete
-            source: guided-setup
-            config: /tmp/mullgate-home/config/mullgate/config.json
-            entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
-            route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
-            relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-            docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
-            validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
-            entry relay: se-got-wg-101
-            shared device: mullgate-lab
-            location: sweden-gothenburg
-            exposure: loopback
-            base domain: n/a
-            routes: 2
-            1. sweden-gothenburg
-               hostname: sweden-gothenburg
-               bind ip: 127.0.0.1
-               exit relay: se-got-wg-101
-               exit socks: se-got-wg-socks5-101.relays.mullvad.net:1080
-            2. austria-vienna
-               hostname: austria-vienna
-               bind ip: 127.0.0.2
-               exit relay: at-vie-wg-001
-               exit socks: at-vie-wg-socks5-001.relays.mullvad.net:1080
-            tunnel ipv4: 10.64.12.34/32
-            validation: wireproxy-binary/configtest + docker/3proxy-startup"
-          `);
+          "
+          Mullgate setup completed.
+          phase: setup-complete
+          source: guided-setup
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+          route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+          relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+          docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+          validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+          exit source: mullvad-wireguard-socks
+          entry relay: se-got-wg-101
+          shared device: mullgate-lab
+          location: sweden-gothenburg
+          exposure: loopback
+          base domain: n/a
+          routes: 2
+          1. sweden-gothenburg
+             hostname: sweden-gothenburg
+             bind ip: 127.0.0.1
+             exit relay: se-got-wg-101
+             exit socks: se-got-wg-socks5-101.relays.mullvad.net:1080
+          2. austria-vienna
+             hostname: austria-vienna
+             bind ip: 127.0.0.2
+             exit relay: at-vie-wg-001
+             exit socks: at-vie-wg-socks5-001.relays.mullvad.net:1080
+          tunnel ipv4: 10.64.12.34/32
+          validation: wireproxy-binary/configtest + docker/3proxy-startup"
+        `);
 
         const savedConfig = await readSavedConfig(env);
         const [locationsResult, hostsResult] = await Promise.all([
@@ -914,35 +916,36 @@ describe('mullgate setup CLI flow', () => {
         expect(setupResult.status).toBe(0);
         expect(setupResult.stderr).toBe('');
         expect(`\n${normalizeOutput(setupResult.stdout, env)}`).toMatchInlineSnapshot(`
-            "
-            Mullgate setup completed.
-            phase: setup-complete
-            source: guided-setup
-            config: /tmp/mullgate-home/config/mullgate/config.json
-            entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
-            route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
-            relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
-            docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
-            validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
-            entry relay: se-got-wg-101
-            shared device: mullgate-domain
-            location: sweden-gothenburg
-            exposure: private-network
-            base domain: proxy.example.com
-            routes: 2
-            1. sweden-gothenburg
-               hostname: sweden-gothenburg.proxy.example.com
-               bind ip: 192.168.10.10
-               exit relay: se-got-wg-101
-               exit socks: se-got-wg-socks5-101.relays.mullvad.net:1080
-            2. austria-vienna
-               hostname: austria-vienna.proxy.example.com
-               bind ip: 192.168.10.10
-               exit relay: at-vie-wg-001
-               exit socks: at-vie-wg-socks5-001.relays.mullvad.net:1080
-            tunnel ipv4: 10.64.22.21/32
-            validation: wireproxy-binary/configtest + docker/3proxy-startup"
-          `);
+          "
+          Mullgate setup completed.
+          phase: setup-complete
+          source: guided-setup
+          config: /tmp/mullgate-home/config/mullgate/config.json
+          entry wireproxy config: /tmp/mullgate-home/state/mullgate/runtime/entry-wireproxy.conf
+          route proxy config: /tmp/mullgate-home/state/mullgate/runtime/route-proxy.cfg
+          relay cache: /tmp/mullgate-home/cache/mullgate/relays.json
+          docker compose: /tmp/mullgate-home/state/mullgate/runtime/docker-compose.yml
+          validation report: /tmp/mullgate-home/state/mullgate/runtime/runtime-validation.json
+          exit source: mullvad-wireguard-socks
+          entry relay: se-got-wg-101
+          shared device: mullgate-domain
+          location: sweden-gothenburg
+          exposure: private-network
+          base domain: proxy.example.com
+          routes: 2
+          1. sweden-gothenburg
+             hostname: sweden-gothenburg.proxy.example.com
+             bind ip: 192.168.10.10
+             exit relay: se-got-wg-101
+             exit socks: se-got-wg-socks5-101.relays.mullvad.net:1080
+          2. austria-vienna
+             hostname: austria-vienna.proxy.example.com
+             bind ip: 192.168.10.10
+             exit relay: at-vie-wg-001
+             exit socks: at-vie-wg-socks5-001.relays.mullvad.net:1080
+          tunnel ipv4: 10.64.22.21/32
+          validation: wireproxy-binary/configtest + docker/3proxy-startup"
+        `);
 
         const savedConfig = await readSavedConfig(env);
         const [showResult, hostsResult] = await Promise.all([
