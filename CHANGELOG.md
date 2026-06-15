@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [2.0.1] - 2026-06-15
+
+### Changed
+
+- refreshed README and docs-site guidance for the `tailscale-exit` source, Tailscale private-network access, and non-interactive proxy password setup
+- setup, config, and Tailscale feasibility failures now include clearer recovery guidance, including preserved-state reassurance and next commands to run
+
+### Fixed
+
+- corrected docs that implied non-interactive setup could omit the proxy password input entirely
+
 ## [2.0.0] - 2026-06-15
 
 ### Added

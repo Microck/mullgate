@@ -48,7 +48,7 @@ describe('mullgate misc command contract', () => {
     expect(`\n${normalized}`).toMatchInlineSnapshot(`
       "
       Mullgate version
-      cli version: 2.0.0
+      cli version: 2.0.1
       config schema: 2
       node: ${process.version}
       platform: ${process.platform}
