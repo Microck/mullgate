@@ -59,6 +59,7 @@ export function createFixtureRoute(input: FixtureRouteInput): RoutedLocation {
         relayFqdn: input.exit?.relayFqdn ?? `${relayHostname}.relays.mullvad.net`,
         socksHostname: input.exit?.socksHostname ?? `${relayHostname}-socks.relays.mullvad.net`,
         socksPort: input.exit?.socksPort ?? 1080,
+        ...(input.exit?.socksInternalIp ? { socksInternalIp: input.exit.socksInternalIp } : {}),
         countryCode,
         cityCode,
       },

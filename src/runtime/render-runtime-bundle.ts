@@ -28,9 +28,11 @@ import {
 
 const CONTAINER_BIND_HOST = '0.0.0.0';
 const WIREPROXY_IMAGE = 'backplane/wireproxy:20260320';
+const TAILSCALE_IMAGE = 'tailscale/tailscale:v1.88.3';
 const ROUTE_PROXY_IMAGE = 'tarampampam/3proxy:latest';
 const HAPROXY_IMAGE = 'haproxytech/haproxy-alpine:3.0.19';
 const ROUTING_LAYER_SERVICE = 'routing-layer';
+const TAILSCALE_SIDECAR_SERVICE = 'tailscale-sidecar';
 const HAPROXY_CONFIG_CONTAINER_PATH = '/usr/local/etc/haproxy/haproxy.cfg';
 const HAPROXY_CERT_INPUT_PATH = '/run/mullgate-cert.pem';
 const HAPROXY_KEY_INPUT_PATH = '/run/mullgate-key.pem';
@@ -70,10 +72,13 @@ export type RuntimeEndpoint = {
 export type RuntimeBundleManifest = {
   readonly generatedAt: string;
   readonly source: 'canonical-config';
-  readonly topology: 'shared-entry-wireguard-route-proxy-haproxy';
+  readonly topology:
+    | 'shared-entry-wireguard-route-proxy-haproxy'
+    | 'tailscale-exit-route-proxy-haproxy';
   readonly relayCachePath: string;
   readonly images: {
     readonly wireproxy: string;
+    readonly tailscale: string | null;
     readonly routeProxy: string;
     readonly routingLayer: string;
   };
@@ -84,18 +89,24 @@ export type RuntimeBundleManifest = {
         readonly socks5: string;
         readonly http: string;
       };
-      readonly networkMode: 'host';
+      readonly networkMode: 'host' | `service:${string}`;
       readonly mountPaths: {
         readonly entryWireproxyConfigPath: string;
       };
-    };
+    } | null;
+    readonly tailscaleSidecar: {
+      readonly name: string;
+      readonly pinnedExitNode: string;
+      readonly tailnet: string;
+      readonly stateVolume: string;
+    } | null;
     readonly routeProxy: {
       readonly name: string;
       readonly listeners: {
         readonly socks5: string;
         readonly http: string;
       };
-      readonly networkMode: 'host';
+      readonly networkMode: 'host' | `service:${string}`;
       readonly mountPaths: {
         readonly routeProxyConfigPath: string;
       };
@@ -127,6 +138,7 @@ export type RuntimeBundleManifest = {
       readonly relayFqdn: string;
       readonly socksHostname: string;
       readonly socksPort: number;
+      readonly socksInternalIp: string | null;
       readonly countryCode: string;
       readonly cityCode: string;
     };
@@ -415,6 +427,7 @@ function buildRuntimeBundleManifest(
   publishedEndpoints: readonly RuntimeEndpoint[],
 ): RuntimeBundleManifest {
   const inlineSelectorEnabled = usesInlineSelectorAccess(config);
+  const usesTailscaleExit = getExitSource(config) === 'tailscale-exit';
   const routeManifests = config.routing.locations.map((route, index) => {
     const routeEndpoints = publishedEndpoints.filter(
       (endpoint) => endpoint.routeId === route.runtime.routeId,
@@ -442,6 +455,7 @@ function buildRuntimeBundleManifest(
         relayFqdn: route.mullvad.exit.relayFqdn,
         socksHostname: route.mullvad.exit.socksHostname,
         socksPort: route.mullvad.exit.socksPort,
+        socksInternalIp: route.mullvad.exit.socksInternalIp ?? null,
         countryCode: route.mullvad.exit.countryCode,
         cityCode: route.mullvad.exit.cityCode,
       },
@@ -468,25 +482,38 @@ function buildRuntimeBundleManifest(
   return {
     generatedAt,
     source: 'canonical-config',
-    topology: 'shared-entry-wireguard-route-proxy-haproxy',
+    topology: usesTailscaleExit
+      ? 'tailscale-exit-route-proxy-haproxy'
+      : 'shared-entry-wireguard-route-proxy-haproxy',
     relayCachePath: paths.provisioningCacheFile,
     images: {
       wireproxy: WIREPROXY_IMAGE,
+      tailscale: usesTailscaleExit ? TAILSCALE_IMAGE : null,
       routeProxy: ROUTE_PROXY_IMAGE,
       routingLayer: HAPROXY_IMAGE,
     },
     services: {
-      entryTunnel: {
-        name: ENTRY_TUNNEL_SERVICE,
-        internalListeners: {
-          socks5: `127.0.0.1:${ENTRY_WIREPROXY_SOCKS_PORT}`,
-          http: `127.0.0.1:${ENTRY_WIREPROXY_HTTP_PORT}`,
-        },
-        networkMode: HOST_NETWORK_MODE,
-        mountPaths: {
-          entryWireproxyConfigPath: paths.entryWireproxyConfigFile,
-        },
-      },
+      entryTunnel: usesTailscaleExit
+        ? null
+        : {
+            name: ENTRY_TUNNEL_SERVICE,
+            internalListeners: {
+              socks5: `127.0.0.1:${ENTRY_WIREPROXY_SOCKS_PORT}`,
+              http: `127.0.0.1:${ENTRY_WIREPROXY_HTTP_PORT}`,
+            },
+            networkMode: HOST_NETWORK_MODE,
+            mountPaths: {
+              entryWireproxyConfigPath: paths.entryWireproxyConfigFile,
+            },
+          },
+      tailscaleSidecar: usesTailscaleExit
+        ? {
+            name: TAILSCALE_SIDECAR_SERVICE,
+            pinnedExitNode: config.mullvad.tailscale?.pinnedExitNode ?? '',
+            tailnet: config.mullvad.tailscale?.tailnet ?? '',
+            stateVolume: 'tailscale-state',
+          }
+        : null,
       routeProxy: {
         name: ROUTE_PROXY_SERVICE,
         listeners: {
@@ -501,7 +528,7 @@ function buildRuntimeBundleManifest(
               ? `shared host ${CONTAINER_BIND_HOST} with per-route ports starting at ${config.setup.bind.httpPort}`
               : `per-route bind IPs on port ${config.setup.bind.httpPort}`,
         },
-        networkMode: HOST_NETWORK_MODE,
+        networkMode: usesTailscaleExit ? `service:${TAILSCALE_SIDECAR_SERVICE}` : HOST_NETWORK_MODE,
         mountPaths: {
           routeProxyConfigPath: paths.routeProxyConfigFile,
         },
@@ -535,31 +562,62 @@ function buildRuntimeBundleManifest(
 }
 
 function buildDockerCompose(
-  _config: MullgateConfig,
+  config: MullgateConfig,
   paths: MullgatePaths,
   https: Extract<ResolvedHttpsRuntime, { ok: true }>,
 ): string {
+  const usesTailscaleExit = getExitSource(config) === 'tailscale-exit';
   const lines = [
     '# Generated by Mullgate. Derived artifact; edit canonical config instead.',
     'name: mullgate',
     'services:',
-    `  ${ENTRY_TUNNEL_SERVICE}:`,
-    `    image: ${WIREPROXY_IMAGE}`,
-    '    user: "0:0"',
-    '    network_mode: host',
-    '    restart: unless-stopped',
-    '    command:',
-    '      - --config',
-    `      - ${ENTRY_WIREPROXY_CONFIG_CONTAINER_PATH}`,
-    '    volumes:',
-    `      - ${paths.entryWireproxyConfigFile}:${ENTRY_WIREPROXY_CONFIG_CONTAINER_PATH}:ro`,
+  ];
+
+  if (usesTailscaleExit) {
+    const tailscale = config.mullvad.tailscale;
+
+    lines.push(
+      `  ${TAILSCALE_SIDECAR_SERVICE}:`,
+      `    image: ${TAILSCALE_IMAGE}`,
+      '    hostname: mullgate-tailscale-exit',
+      '    restart: unless-stopped',
+      '    cap_add:',
+      '      - NET_ADMIN',
+      '      - SYS_MODULE',
+      '    devices:',
+      '      - /dev/net/tun:/dev/net/tun',
+      '    environment:',
+      `      TS_AUTHKEY: ${tailscale?.authKey ?? ''}`,
+      `      TS_EXTRA_ARGS: --exit-node=${tailscale?.pinnedExitNode ?? ''} --exit-node-allow-lan-access=true`,
+      '      TS_STATE_DIR: /var/lib/tailscale',
+      '    volumes:',
+      '      - tailscale-state:/var/lib/tailscale',
+    );
+  } else {
+    lines.push(
+      `  ${ENTRY_TUNNEL_SERVICE}:`,
+      `    image: ${WIREPROXY_IMAGE}`,
+      '    user: "0:0"',
+      '    network_mode: host',
+      '    restart: unless-stopped',
+      '    command:',
+      '      - --config',
+      `      - ${ENTRY_WIREPROXY_CONFIG_CONTAINER_PATH}`,
+      '    volumes:',
+      `      - ${paths.entryWireproxyConfigFile}:${ENTRY_WIREPROXY_CONFIG_CONTAINER_PATH}:ro`,
+    );
+  }
+
+  lines.push(
     `  ${ROUTE_PROXY_SERVICE}:`,
     `    image: ${ROUTE_PROXY_IMAGE}`,
     '    user: "0:0"',
-    '    network_mode: host',
+    usesTailscaleExit
+      ? `    network_mode: service:${TAILSCALE_SIDECAR_SERVICE}`
+      : '    network_mode: host',
     '    restart: unless-stopped',
     '    depends_on:',
-    `      - ${ENTRY_TUNNEL_SERVICE}`,
+    usesTailscaleExit ? `      - ${TAILSCALE_SIDECAR_SERVICE}` : `      - ${ENTRY_TUNNEL_SERVICE}`,
     '    entrypoint:',
     '      - /bin/3proxy',
     `      - ${ROUTE_PROXY_CONFIG_CONTAINER_PATH}`,
@@ -570,7 +628,7 @@ function buildDockerCompose(
     '    restart: unless-stopped',
     '    depends_on:',
     `      - ${ROUTE_PROXY_SERVICE}`,
-  ];
+  );
 
   if (https.enabled) {
     lines.push(
@@ -605,7 +663,17 @@ function buildDockerCompose(
     );
   }
 
+  if (usesTailscaleExit) {
+    lines.push('', 'volumes:', '  tailscale-state:');
+  }
+
   return `${lines.join('\n')}\n`;
+}
+
+function getExitSource(
+  config: MullgateConfig,
+): NonNullable<MullgateConfig['mullvad']['exitSource']> {
+  return config.mullvad.exitSource ?? 'mullvad-wireguard-socks';
 }
 
 function buildHttpsSidecarConfig(

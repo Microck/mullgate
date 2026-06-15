@@ -38,6 +38,7 @@ import {
 } from './runtime-diagnostics.js';
 
 const ROUTING_LAYER_SERVICE = 'routing-layer';
+const TAILSCALE_SIDECAR_SERVICE = 'tailscale-sidecar';
 const RELAY_CACHE_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 
 type DoctorOutcome = 'pass' | 'degraded' | 'fail';
@@ -159,6 +160,7 @@ export async function runDoctorFlow(
 
   const checks = await Promise.all([
     Promise.resolve(buildConfigCheck(config, store.paths.configFile)),
+    Promise.resolve(buildTailscaleExitCheck(config, manifest)),
     Promise.resolve(buildPlatformCheck(platform)),
     Promise.resolve(
       buildValidationCheck({
@@ -282,7 +284,86 @@ function buildConfigCheck(config: MullgateConfig, configPath: string): DoctorChe
       `routes=${config.routing.locations.length}`,
       `saved-runtime-phase=${config.runtime.status.phase}`,
       `exposure-mode=${config.setup.exposure.mode}`,
+      `exit-source=${config.mullvad.exitSource ?? 'mullvad-wireguard-socks'}`,
     ],
+  };
+}
+
+function buildTailscaleExitCheck(
+  config: MullgateConfig,
+  manifest: RuntimeBundleManifest | null,
+): DoctorCheck {
+  if (config.mullvad.exitSource !== 'tailscale-exit') {
+    return {
+      name: 'exit-source',
+      outcome: 'pass',
+      summary: 'Config uses the standard Mullvad WireGuard SOCKS exit source.',
+      details: ['exit-source=mullvad-wireguard-socks'],
+    };
+  }
+
+  const missing: string[] = [];
+  if (!config.mullvad.tailscale?.tailnet) {
+    missing.push('mullvad.tailscale.tailnet');
+  }
+  if (!config.mullvad.tailscale?.authKey) {
+    missing.push('mullvad.tailscale.authKey');
+  }
+  if (!config.mullvad.tailscale?.pinnedExitNode) {
+    missing.push('mullvad.tailscale.pinnedExitNode');
+  }
+
+  const missingInternalIpRoutes = config.routing.locations
+    .filter((route) => !route.mullvad.exit.socksInternalIp)
+    .map((route) => route.runtime.routeId);
+  const details = [
+    'exit-source=tailscale-exit',
+    `tailnet=${config.mullvad.tailscale?.tailnet ?? 'n/a'}`,
+    `pinned-exit-node=${config.mullvad.tailscale?.pinnedExitNode ?? 'n/a'}`,
+    `manifest-topology=${manifest?.topology ?? 'n/a'}`,
+    `tailscale-sidecar=${manifest?.services.tailscaleSidecar?.name ?? 'n/a'}`,
+    ...config.routing.locations.map(
+      (route) =>
+        `route ${route.runtime.routeId} socks-internal-ip=${route.mullvad.exit.socksInternalIp ?? 'missing'}`,
+    ),
+  ];
+
+  if (missing.length > 0 || missingInternalIpRoutes.length > 0) {
+    return {
+      name: 'exit-source',
+      outcome: 'fail',
+      summary:
+        'Tailscale exit mode is configured, but required Tailscale credentials or Mullvad internal SOCKS IP mappings are missing.',
+      details: [
+        ...details,
+        ...(missing.length > 0 ? [`missing=${missing.join(', ')}`] : []),
+        ...(missingInternalIpRoutes.length > 0
+          ? [`missing-socks-internal-ip-routes=${missingInternalIpRoutes.join(', ')}`]
+          : []),
+      ],
+      remediation:
+        'Rerun `mullgate setup --exit-source tailscale-exit ...` or refresh relay metadata so every route has a cached 10.124.x SOCKS IP and the Tailscale sidecar credentials are complete.',
+    };
+  }
+
+  if (manifest && manifest.topology !== 'tailscale-exit-route-proxy-haproxy') {
+    return {
+      name: 'exit-source',
+      outcome: 'degraded',
+      summary:
+        'Config uses tailscale-exit, but the rendered runtime manifest still describes a different topology.',
+      details,
+      remediation:
+        'Run `mullgate proxy validate` or `mullgate proxy start` to regenerate the Tailscale runtime bundle.',
+    };
+  }
+
+  return {
+    name: 'exit-source',
+    outcome: 'pass',
+    summary:
+      'Tailscale exit source credentials, pinned carrier exit, sidecar topology, and per-route internal SOCKS IPs are present.',
+    details,
   };
 }
 
@@ -505,7 +586,7 @@ function buildRelayCacheCheck(
       name: 'relay-cache',
       outcome: 'degraded',
       summary:
-        'Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad's current catalog.',
+        "Saved relay metadata is stale, so location and relay-selection diagnostics may lag behind Mullvad's current catalog.",
       details,
       remediation:
         'Refresh the saved relay catalog with `mullgate setup`, then rerun `mullgate proxy validate` or `mullgate proxy start` so runtime artifacts use the fresh relay data.',
@@ -752,26 +833,10 @@ function buildRuntimeCheck(
     };
   }
 
-  const sharedServiceStates = [
-    {
-      serviceName: ENTRY_TUNNEL_SERVICE,
-      state: classifyContainerState(
-        findContainerForService(composeStatus.containers, ENTRY_TUNNEL_SERVICE),
-      ),
-    },
-    {
-      serviceName: ROUTE_PROXY_SERVICE,
-      state: classifyContainerState(
-        findContainerForService(composeStatus.containers, ROUTE_PROXY_SERVICE),
-      ),
-    },
-    {
-      serviceName: ROUTING_LAYER_SERVICE,
-      state: classifyContainerState(
-        findContainerForService(composeStatus.containers, ROUTING_LAYER_SERVICE),
-      ),
-    },
-  ];
+  const sharedServiceStates = getExpectedSharedServices(config).map((serviceName) => ({
+    serviceName,
+    state: classifyContainerState(findContainerForService(composeStatus.containers, serviceName)),
+  }));
   const unhealthyServices = sharedServiceStates.filter(
     (service) => service.state.liveState !== 'running',
   );
@@ -821,10 +886,19 @@ function buildRuntimeCheck(
   return {
     name: 'runtime',
     outcome: 'pass',
-    summary:
-      'Live Docker Compose status matches the expected shared entry-tunnel, route-proxy, and routing-layer services.',
+    summary: 'Live Docker Compose status matches the expected shared Mullgate runtime services.',
     details,
   };
+}
+
+function getExpectedSharedServices(config: MullgateConfig): readonly string[] {
+  return [
+    config.mullvad.exitSource === 'tailscale-exit'
+      ? TAILSCALE_SIDECAR_SERVICE
+      : ENTRY_TUNNEL_SERVICE,
+    ROUTE_PROXY_SERVICE,
+    ROUTING_LAYER_SERVICE,
+  ];
 }
 
 function buildLastStartCheck(

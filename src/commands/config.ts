@@ -3111,6 +3111,7 @@ export async function ensureProxyExportRoutes(input: {
       socksPort: pendingConfig.setup.bind.socksPort,
       httpPort: pendingConfig.setup.bind.httpPort,
     },
+    validateEntryWireproxy: pendingConfig.mullvad.exitSource !== 'tailscale-exit',
     reportPath: input.store.paths.runtimeValidationReportFile,
   });
 
@@ -4178,6 +4179,7 @@ async function validateSavedConfig(input: {
       socksPort: loadResult.config.setup.bind.socksPort,
       httpPort: loadResult.config.setup.bind.httpPort,
     },
+    validateEntryWireproxy: loadResult.config.mullvad.exitSource !== 'tailscale-exit',
     reportPath: input.store.paths.runtimeValidationReportFile,
   });
 
@@ -4242,10 +4244,14 @@ function buildRuntimeValidationRoutes(config: MullgateConfig) {
     exitRelayFqdn: route.mullvad.exit.relayFqdn,
     exitSocksHostname: route.mullvad.exit.socksHostname,
     exitSocksPort: route.mullvad.exit.socksPort,
-    entryParent: {
-      host: '127.0.0.1' as const,
-      port: ENTRY_WIREPROXY_SOCKS_PORT,
-    },
+    exitSocksInternalIp: route.mullvad.exit.socksInternalIp ?? null,
+    entryParent:
+      config.mullvad.exitSource === 'tailscale-exit'
+        ? null
+        : {
+            host: '127.0.0.1' as const,
+            port: ENTRY_WIREPROXY_SOCKS_PORT,
+          },
   }));
 }
 

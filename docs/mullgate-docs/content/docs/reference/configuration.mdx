@@ -11,7 +11,8 @@ This page summarizes the configuration model that appears throughout the usage a
 
 Required non-interactive setup inputs include:
 
-- Mullvad account number
+- Mullvad account number for the default `mullvad-wireguard-socks` exit source
+- Tailscale tailnet, auth key, and pinned exit node for the `tailscale-exit` exit source
 - proxy username
 - one or more route locations
 
@@ -62,6 +63,10 @@ Optional setup inputs include:
 The usage guide documents these variables:
 
 - `MULLGATE_ACCOUNT_NUMBER`
+- `MULLGATE_EXIT_SOURCE`
+- `MULLGATE_TAILSCALE_TAILNET`
+- `MULLGATE_TAILSCALE_AUTH_KEY`
+- `MULLGATE_TAILSCALE_PINNED_EXIT_NODE`
 - `MULLGATE_PROXY_USERNAME`
 - `MULLGATE_PROXY_PASSWORD`
 - `MULLGATE_LOCATION`
@@ -81,6 +86,9 @@ The usage guide documents these variables:
 
 ## Rules worth remembering
 
+- `MULLGATE_EXIT_SOURCE` defaults to `mullvad-wireguard-socks`
+- `tailscale-exit` uses Tailscale credentials instead of a Mullvad account number
+- for `mullvad.tailscale.pinnedExitNode`, prefer the Tailscale IP printed by `tailscale exit-node list`
 - `MULLGATE_LOCATION` is shorthand for route 1
 - `MULLGATE_LOCATIONS` is ordered and comma-separated
 - `MULLGATE_ROUTE_BIND_IPS` is ordered and comma-separated
@@ -102,3 +110,5 @@ For operators, the important validation loop is:
 4. confirm runtime with `mullgate proxy status` and `mullgate proxy doctor`
 
 For selector syntax and supported selector families, see [Inline Selector Reference](/docs/guides/inline-selector-selectors).
+
+For the Tailscale-backed exit source, see [Tailscale Exit Source](/docs/guides/tailscale-exit-source).

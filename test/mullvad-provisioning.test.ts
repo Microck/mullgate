@@ -14,7 +14,11 @@ import {
   createLocationAliasCatalog,
   resolveLocationAlias,
 } from '../src/domain/location-aliases.js';
-import { fetchRelays, normalizeRelayPayload } from '../src/mullvad/fetch-relays.js';
+import {
+  fetchRelays,
+  normalizeRelayPayload,
+  resolveRelaySocksInternalIps,
+} from '../src/mullvad/fetch-relays.js';
 import { provisionWireguard } from '../src/mullvad/provision-wireguard.js';
 import { requireDefined } from '../src/required.js';
 import { renderRuntimeBundle } from '../src/runtime/render-runtime-bundle.js';
@@ -256,6 +260,58 @@ afterEach(async () => {
 });
 
 describe('Mullvad relay normalization and alias discovery', () => {
+  it('resolves public SOCKS hostnames to cached Mullvad internal IPs', async () => {
+    const legacyPayload = await readJsonFixture<unknown>('www-relays-all.json');
+    const legacyResult = normalizeRelayPayload(legacyPayload, {
+      fetchedAt: '2026-03-20T18:30:00.000Z',
+      endpoint: 'fixture://www-relays-all.json',
+    });
+
+    expect(legacyResult.ok).toBe(true);
+
+    if (!legacyResult.ok) {
+      return;
+    }
+
+    const result = await resolveRelaySocksInternalIps(legacyResult.value, {
+      checkedAt: '2026-03-20T18:31:00.000Z',
+      resolver: {
+        resolve4: async (hostname) => {
+          if (hostname === 'se-got-wg-socks5-101.relays.mullvad.net') {
+            return ['10.124.0.20'];
+          }
+
+          if (hostname === 'se-sto-wg-socks5-001.relays.mullvad.net') {
+            return ['10.124.0.21'];
+          }
+
+          if (hostname === 'at-vie-wg-socks5-001.relays.mullvad.net') {
+            return ['10.124.0.22'];
+          }
+
+          return ['203.0.113.10'];
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(
+      result.value.relays.map((relay) => ({
+        hostname: relay.hostname,
+        socksInternalIp: relay.socksInternalIp,
+      })),
+    ).toEqual([
+      { hostname: 'at-vie-wg-001', socksInternalIp: '10.124.0.22' },
+      { hostname: 'se-got-wg-101', socksInternalIp: '10.124.0.20' },
+      { hostname: 'se-sto-wg-001', socksInternalIp: '10.124.0.21' },
+    ]);
+  });
+
   it('normalizes app and legacy relay payloads into stable aliasable relay catalogs', async () => {
     const appPayload = await readJsonFixture<unknown>('app-relays.json');
     const legacyPayload = await readJsonFixture<unknown>('www-relays-all.json');
@@ -956,6 +1012,102 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
         expect(savedConfig.setup.location.requested).toBe('sweden-gothenburg');
         expect(savedConfig.setup.location.resolvedAlias).toBe('sweden-gothenburg');
         expect(savedConfig.mullvad.deviceName).toBeTruthy();
+      },
+    );
+  });
+
+  it('persists tailscale-exit setup state without provisioning a Mullvad WireGuard device', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const store = new ConfigStore(paths);
+    const relayFixture = await readJsonFixture<unknown>('www-relays-all.json');
+    const dockerCommands: string[][] = [];
+
+    await withJsonServer(
+      {
+        '/relays': () => ({
+          body: JSON.stringify(relayFixture),
+        }),
+      },
+      async (baseUrl) => {
+        const result = await runSetupFlow({
+          store,
+          interactive: false,
+          initialValues: {
+            exitSource: 'tailscale-exit',
+            tailscaleTailnet: 'example.ts.net',
+            tailscaleAuthKey: 'tskey-auth-test',
+            tailscalePinnedExitNode: 'fr-par-wg-001',
+            username: 'alice',
+            password: 'tailscale-secret',
+            locations: ['sweden-gothenburg', 'austria-vienna'] as [string, ...string[]],
+          },
+          relayCatalogUrl: new URL('/relays', baseUrl),
+          relaySocksResolver: {
+            resolve4: async (hostname) => {
+              if (hostname === 'se-got-wg-socks5-101.relays.mullvad.net') {
+                return ['10.124.0.20'];
+              }
+
+              if (hostname === 'at-vie-wg-socks5-001.relays.mullvad.net') {
+                return ['10.124.0.22'];
+              }
+
+              if (hostname === 'se-sto-wg-socks5-001.relays.mullvad.net') {
+                return ['10.124.0.21'];
+              }
+
+              return ['10.124.0.99'];
+            },
+          },
+          checkedAt: '2026-06-14T00:00:00.000Z',
+          validateOptions: {
+            spawn: createSpawnStub({
+              docker: (args) => {
+                dockerCommands.push([...args]);
+                return {
+                  status: 0,
+                  stdout: 'docker 3proxy startup ok\n',
+                };
+              },
+            }),
+          },
+        });
+
+        expect(result.ok).toBe(true);
+
+        if (!result.ok) {
+          return;
+        }
+
+        const savedConfig = JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
+        const routeProxyConfig = await readFile(paths.routeProxyConfigFile, 'utf8');
+        const entryWireproxyConfig = await readFile(paths.entryWireproxyConfigFile, 'utf8');
+
+        expect(savedConfig.mullvad.exitSource).toBe('tailscale-exit');
+        expect(savedConfig.mullvad.tailscale).toEqual({
+          tailnet: 'example.ts.net',
+          authKey: 'tskey-auth-test',
+          pinnedExitNode: 'fr-par-wg-001',
+        });
+        expect(savedConfig.mullvad.wireguard.privateKey).toBeNull();
+        expect(savedConfig.runtime.backend).toBe('tailscale-exit-route-proxy');
+        expect(
+          savedConfig.routing.locations.map((route) => route.mullvad.exit.socksInternalIp),
+        ).toEqual(['10.124.0.20', '10.124.0.22']);
+        expect(entryWireproxyConfig).toContain(
+          'tailscale-exit mode does not use a WireProxy entry tunnel.',
+        );
+        expect(routeProxyConfig).toContain('parent 1000 socks5+ 10.124.0.20 1080');
+        expect(routeProxyConfig).toContain('parent 1000 socks5+ 10.124.0.22 1080');
+        expect(routeProxyConfig).not.toContain('parent 1000 socks5+ 127.0.0.1 39101');
+        expect(result.summary).toContain('exit source: tailscale-exit');
+
+        if (process.platform === 'win32') {
+          expect(dockerCommands).toHaveLength(0);
+        } else {
+          expect(dockerCommands).toHaveLength(1);
+        }
       },
     );
   });

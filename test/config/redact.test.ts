@@ -7,6 +7,7 @@ function createMinimalConfig(overrides?: {
   accountNumber?: string;
   password?: string;
   privateKey?: string;
+  tailscaleAuthKey?: string;
 }): MullgateConfig {
   return {
     version: 2,
@@ -36,6 +37,11 @@ function createMinimalConfig(overrides?: {
         dnsServers: [],
         peerPublicKey: null,
         peerEndpoint: null,
+      },
+      tailscale: {
+        tailnet: 'example.ts.net',
+        authKey: overrides?.tailscaleAuthKey ?? 'tailscale-auth-key-data',
+        pinnedExitNode: 'fr-par-wg-001',
       },
     },
     routing: {
@@ -195,6 +201,7 @@ describe('collectKnownSecrets schema sync', () => {
       accountNumber: '11112222',
       password: 'test-password',
       privateKey: 'test-private-key',
+      tailscaleAuthKey: 'test-tailscale-auth-key',
     });
 
     const collected = new Set(collectKnownSecrets(config));
@@ -210,6 +217,9 @@ describe('collectKnownSecrets schema sync', () => {
           break;
         case 'mullvad.wireguard.privateKey':
           secret = config.mullvad.wireguard.privateKey;
+          break;
+        case 'mullvad.tailscale.authKey':
+          secret = config.mullvad.tailscale?.authKey;
           break;
       }
       expect(secret, `${path} should be non-empty in fixture`).toBeTruthy();

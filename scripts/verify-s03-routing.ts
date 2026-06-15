@@ -345,9 +345,9 @@ function assertManifestTopology(manifest: RuntimeBundleManifest, config: Mullgat
     );
   }
 
-  if (manifest.services.entryTunnel.name !== 'entry-tunnel') {
+  if (!manifest.services.entryTunnel || manifest.services.entryTunnel.name !== 'entry-tunnel') {
     throw new Error(
-      `Expected runtime manifest entry tunnel service to be entry-tunnel, got ${manifest.services.entryTunnel.name}.`,
+      `Expected runtime manifest entry tunnel service to be entry-tunnel, got ${manifest.services.entryTunnel?.name ?? 'none'}.`,
     );
   }
 

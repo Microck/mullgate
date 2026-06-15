@@ -664,6 +664,7 @@ async function validateRenderedRuntime(
       socksPort: input.bind.socksPort,
       httpPort: input.bind.httpPort,
     },
+    validateEntryWireproxy: input.config.mullvad.exitSource !== 'tailscale-exit',
     reportPath: input.reportPath,
     checkedAt,
     ...validateOptions,
@@ -735,12 +736,15 @@ function inferRouteDiagnosticContext(
         : null;
 
   if (!selected) {
+    const entryTunnel = manifest.services.entryTunnel;
+
     if (
+      entryTunnel &&
       [
         ENTRY_TUNNEL_SERVICE,
-        manifest.services.entryTunnel.mountPaths.entryWireproxyConfigPath,
-        manifest.services.entryTunnel.internalListeners.socks5,
-        manifest.services.entryTunnel.internalListeners.http,
+        entryTunnel.mountPaths.entryWireproxyConfigPath,
+        entryTunnel.internalListeners.socks5,
+        entryTunnel.internalListeners.http,
       ].some((candidate) => haystack.includes(candidate))
     ) {
       return { serviceName: ENTRY_TUNNEL_SERVICE };

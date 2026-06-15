@@ -25,9 +25,17 @@ const HTTPS_KEY_ENV = 'MULLGATE_HTTPS_KEY_PATH';
 const DEVICE_NAME_ENV = 'MULLGATE_DEVICE_NAME';
 const PROVISIONING_URL_ENV = 'MULLGATE_MULLVAD_WG_URL';
 const RELAYS_URL_ENV = 'MULLGATE_MULLVAD_RELAYS_URL';
+const EXIT_SOURCE_ENV = 'MULLGATE_EXIT_SOURCE';
+const TAILSCALE_TAILNET_ENV = 'MULLGATE_TAILSCALE_TAILNET';
+const TAILSCALE_AUTH_KEY_ENV = 'MULLGATE_TAILSCALE_AUTH_KEY';
+const TAILSCALE_PINNED_EXIT_NODE_ENV = 'MULLGATE_TAILSCALE_PINNED_EXIT_NODE';
 
 type SetupCommandOptions = {
+  readonly exitSource?: string;
   readonly accountNumber?: string;
+  readonly tailscaleTailnet?: string;
+  readonly tailscaleAuthKey?: string;
+  readonly tailscalePinnedExitNode?: string;
   readonly bindHost?: string;
   readonly routeBindIp?: string[];
   readonly exposureMode?: string;
@@ -53,8 +61,18 @@ export function registerSetupCommand(program: Command): void {
       'Run the guided Mullvad-backed setup flow and persist config plus derived runtime artifacts.',
     )
     .option(
+      `--exit-source <mode>`,
+      `Override ${EXIT_SOURCE_ENV} with mullvad-wireguard-socks or tailscale-exit.`,
+    )
+    .option(
       `--account-number <digits>`,
       `Override ${ACCOUNT_NUMBER_ENV} or prompt for the Mullvad account number.`,
+    )
+    .option(`--tailscale-tailnet <name>`, `Override ${TAILSCALE_TAILNET_ENV}.`)
+    .option(`--tailscale-auth-key <key>`, `Override ${TAILSCALE_AUTH_KEY_ENV}.`)
+    .option(
+      `--tailscale-pinned-exit-node <exit-node>`,
+      `Override ${TAILSCALE_PINNED_EXIT_NODE_ENV} with a Mullvad exit node name or Tailscale IP.`,
     )
     .option(`--bind-host <host>`, `Override ${BIND_HOST_ENV} or prompt for the bind host.`)
     .option(
@@ -116,8 +134,32 @@ function buildRunOptions(
   const configuredLocations = readLocationInputs(options.location, env);
   const configuredRouteBindIps = readRouteBindIpInputs(options.routeBindIp, env);
   const initialValues: Partial<RawSetupInputValues> = {
+    ...(readOptionalExitSource(options.exitSource ?? env[EXIT_SOURCE_ENV])
+      ? { exitSource: readOptionalExitSource(options.exitSource ?? env[EXIT_SOURCE_ENV]) }
+      : {}),
     ...(readOptionalString(options.accountNumber ?? env[ACCOUNT_NUMBER_ENV])
       ? { accountNumber: readOptionalString(options.accountNumber ?? env[ACCOUNT_NUMBER_ENV]) }
+      : {}),
+    ...(readOptionalString(options.tailscaleTailnet ?? env[TAILSCALE_TAILNET_ENV])
+      ? {
+          tailscaleTailnet: readOptionalString(
+            options.tailscaleTailnet ?? env[TAILSCALE_TAILNET_ENV],
+          ),
+        }
+      : {}),
+    ...(readOptionalString(options.tailscaleAuthKey ?? env[TAILSCALE_AUTH_KEY_ENV])
+      ? {
+          tailscaleAuthKey: readOptionalString(
+            options.tailscaleAuthKey ?? env[TAILSCALE_AUTH_KEY_ENV],
+          ),
+        }
+      : {}),
+    ...(readOptionalString(options.tailscalePinnedExitNode ?? env[TAILSCALE_PINNED_EXIT_NODE_ENV])
+      ? {
+          tailscalePinnedExitNode: readOptionalString(
+            options.tailscalePinnedExitNode ?? env[TAILSCALE_PINNED_EXIT_NODE_ENV],
+          ),
+        }
       : {}),
     ...(readOptionalString(options.bindHost ?? env[BIND_HOST_ENV])
       ? { bindHost: readOptionalString(options.bindHost ?? env[BIND_HOST_ENV]) }
@@ -257,6 +299,16 @@ function parseLocationEntries(value: string | undefined): string[] {
 function readOptionalString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function readOptionalExitSource(value: string | undefined): RawSetupInputValues['exitSource'] {
+  const trimmed = value?.trim();
+
+  if (trimmed === 'mullvad-wireguard-socks' || trimmed === 'tailscale-exit') {
+    return trimmed;
+  }
+
+  return undefined;
 }
 
 function readOptionalExposureMode(

@@ -19,6 +19,7 @@ describe('collectKnownSecrets', () => {
       'setup.auth.password',
       'mullvad.accountNumber',
       'mullvad.wireguard.privateKey',
+      'mullvad.tailscale.authKey',
     ]);
 
     for (const path of sensitiveConfigFieldPaths) {
@@ -38,6 +39,8 @@ function readConfigValue(
       return config.mullvad.accountNumber;
     case 'mullvad.wireguard.privateKey':
       return config.mullvad.wireguard.privateKey ?? '';
+    case 'mullvad.tailscale.authKey':
+      return config.mullvad.tailscale?.authKey ?? '';
   }
 }
 
@@ -105,6 +108,11 @@ function createFixtureConfig(): MullgateConfig {
         dnsServers: ['10.64.0.1'],
         peerPublicKey: null,
         peerEndpoint: null,
+      },
+      tailscale: {
+        tailnet: 'example.ts.net',
+        authKey: 'schema-sync-tailscale-auth-key',
+        pinnedExitNode: 'fr-par-wg-001',
       },
     },
     routing: {

@@ -128,45 +128,28 @@ describe('mullgate help command contract', () => {
       artifacts.
 
       Options:
-        --account-number <digits>   Override MULLGATE_ACCOUNT_NUMBER or prompt for the
-                                    Mullvad account number.
-        --bind-host <host>          Override MULLGATE_BIND_HOST or prompt for the bind
-                                    host.
-        --route-bind-ip <ip>        Append an explicit route bind IPv4 address. Repeat
-                                    or comma-separate values for multiple routes.
-                                    MULLGATE_ROUTE_BIND_IPS accepts a comma-separated
-                                    ordered list. (default: [])
-        --exposure-mode <mode>      Override MULLGATE_EXPOSURE_MODE with loopback,
-                                    private-network, or public.
-        --base-domain <domain>      Override MULLGATE_EXPOSURE_BASE_DOMAIN for derived
-                                    route hostnames like route.example.com.
-        --socks-port <port>         Override MULLGATE_SOCKS_PORT or prompt for the
-                                    SOCKS5 port.
-        --http-port <port>          Override MULLGATE_HTTP_PORT or prompt for the HTTP
-                                    port.
-        --https-port <port>         Override MULLGATE_HTTPS_PORT for optional HTTPS
-                                    proxy support.
-        --username <name>           Override MULLGATE_PROXY_USERNAME or prompt for the
-                                    proxy username.
-        --password <secret>         Override MULLGATE_PROXY_PASSWORD or prompt for the
-                                    proxy password.
-        --location <alias>          Append a routed Mullvad location alias. Repeat or
-                                    comma-separate values for multiple routes.
-                                    MULLGATE_LOCATION stays shorthand for route 1;
-                                    MULLGATE_LOCATIONS accepts a comma-separated
-                                    ordered list. (default: [])
-        --https-cert-path <path>    Override MULLGATE_HTTPS_CERT_PATH for optional
-                                    HTTPS certificate validation.
-        --https-key-path <path>     Override MULLGATE_HTTPS_KEY_PATH for optional
-                                    HTTPS key validation.
-        --device-name <name>        Override MULLGATE_DEVICE_NAME for the Mullvad
-                                    device label.
-        --non-interactive           Fail instead of prompting when required setup
-                                    values are missing.
-        --mullvad-wg-url <url>      Override MULLGATE_MULLVAD_WG_URL for provisioning.
-        --mullvad-relays-url <url>  Override MULLGATE_MULLVAD_RELAYS_URL for relay
-                                    metadata.
-        -h, --help                  display help for command"
+        --exit-source <mode>                      Override MULLGATE_EXIT_SOURCE with mullvad-wireguard-socks or tailscale-exit.
+        --account-number <digits>                 Override MULLGATE_ACCOUNT_NUMBER or prompt for the Mullvad account number.
+        --tailscale-tailnet <name>                Override MULLGATE_TAILSCALE_TAILNET.
+        --tailscale-auth-key <key>                Override MULLGATE_TAILSCALE_AUTH_KEY.
+        --tailscale-pinned-exit-node <exit-node>  Override MULLGATE_TAILSCALE_PINNED_EXIT_NODE with a Mullvad exit node name or Tailscale IP.
+        --bind-host <host>                        Override MULLGATE_BIND_HOST or prompt for the bind host.
+        --route-bind-ip <ip>                      Append an explicit route bind IPv4 address. Repeat or comma-separate values for multiple routes. MULLGATE_ROUTE_BIND_IPS accepts a comma-separated ordered list. (default: [])
+        --exposure-mode <mode>                    Override MULLGATE_EXPOSURE_MODE with loopback, private-network, or public.
+        --base-domain <domain>                    Override MULLGATE_EXPOSURE_BASE_DOMAIN for derived route hostnames like route.example.com.
+        --socks-port <port>                       Override MULLGATE_SOCKS_PORT or prompt for the SOCKS5 port.
+        --http-port <port>                        Override MULLGATE_HTTP_PORT or prompt for the HTTP port.
+        --https-port <port>                       Override MULLGATE_HTTPS_PORT for optional HTTPS proxy support.
+        --username <name>                         Override MULLGATE_PROXY_USERNAME or prompt for the proxy username.
+        --password <secret>                       Override MULLGATE_PROXY_PASSWORD or prompt for the proxy password.
+        --location <alias>                        Append a routed Mullvad location alias. Repeat or comma-separate values for multiple routes. MULLGATE_LOCATION stays shorthand for route 1; MULLGATE_LOCATIONS accepts a comma-separated ordered list. (default: [])
+        --https-cert-path <path>                  Override MULLGATE_HTTPS_CERT_PATH for optional HTTPS certificate validation.
+        --https-key-path <path>                   Override MULLGATE_HTTPS_KEY_PATH for optional HTTPS key validation.
+        --device-name <name>                      Override MULLGATE_DEVICE_NAME for the Mullvad device label.
+        --non-interactive                         Fail instead of prompting when required setup values are missing.
+        --mullvad-wg-url <url>                    Override MULLGATE_MULLVAD_WG_URL for provisioning.
+        --mullvad-relays-url <url>                Override MULLGATE_MULLVAD_RELAYS_URL for relay metadata.
+        -h, --help                                display help for command"
     `);
     expect(`\n${proxyHelp}`).toMatchInlineSnapshot(`
       "

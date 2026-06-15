@@ -9,6 +9,7 @@ import { resolveMullgatePaths } from '../../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
 import { requireDefined } from '../../src/required.js';
 import { planRuntimeBundle, renderRuntimeBundle } from '../../src/runtime/render-runtime-bundle.js';
+import { planRuntimeProxyArtifacts } from '../../src/runtime/render-runtime-proxies.js';
 import { createFixtureRoute, createFixtureRuntime } from '../helpers/mullgate-fixtures.js';
 import {
   cleanupWindowsFixtureArtifacts,
@@ -600,6 +601,85 @@ describe('renderRuntimeBundle', () => {
     expect(result.httpsSidecarConfig).toContain('default_backend inline_selector_http_proxy');
     expect(result.httpsSidecarConfig).toContain('server inline-selector 127.0.0.1:8080 check');
     expect(result.httpsSidecarConfig).not.toContain('backend route-se-got-wg-101');
+  });
+
+  it('renders tailscale-exit with a sidecar and direct internal SOCKS parents', () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const config = createFixtureConfig(env);
+    config.mullvad.exitSource = 'tailscale-exit';
+    config.mullvad.tailscale = {
+      tailnet: 'example.ts.net',
+      authKey: 'tskey-auth-test',
+      pinnedExitNode: 'fr-par-wg-001',
+    };
+    config.runtime.backend = 'tailscale-exit-route-proxy';
+    config.routing.locations = [
+      createFixtureRoute({
+        alias: 'sweden-gothenburg',
+        hostname: 'se-got-wg-101',
+        bindIp: '127.0.0.1',
+        requested: 'sweden-gothenburg',
+        country: 'se',
+        city: 'got',
+        hostnameLabel: 'se-got-wg-101',
+        resolvedAlias: 'sweden-gothenburg',
+        exit: {
+          relayHostname: 'se-got-wg-101',
+          relayFqdn: 'se-got-wg-101.relays.mullvad.net',
+          socksHostname: 'se-got-wg-socks5-001.relays.mullvad.net',
+          socksInternalIp: '10.124.0.20',
+        },
+      }),
+    ];
+
+    const bundle = planRuntimeBundle({
+      config,
+      paths,
+      generatedAt: '2026-06-14T00:00:00.000Z',
+    });
+    const proxies = planRuntimeProxyArtifacts({
+      config,
+      paths,
+      relayCatalog: {
+        source: 'www-relays-all',
+        fetchedAt: '2026-06-14T00:00:00.000Z',
+        endpoint: 'fixture://relays',
+        relayCount: 0,
+        countries: [],
+        relays: [],
+      },
+      generatedAt: '2026-06-14T00:00:00.000Z',
+    });
+
+    expect(bundle.ok).toBe(true);
+    expect(proxies.ok).toBe(true);
+
+    if (!bundle.ok || !proxies.ok) {
+      return;
+    }
+
+    expect(bundle.manifest.topology).toBe('tailscale-exit-route-proxy-haproxy');
+    expect(bundle.manifest.services.entryTunnel).toBeNull();
+    expect(bundle.manifest.services.tailscaleSidecar).toEqual({
+      name: 'tailscale-sidecar',
+      pinnedExitNode: 'fr-par-wg-001',
+      tailnet: 'example.ts.net',
+      stateVolume: 'tailscale-state',
+    });
+    expect(bundle.manifest.services.routeProxy.networkMode).toBe('service:tailscale-sidecar');
+    expect(bundle.compose).toContain('tailscale-sidecar:');
+    expect(bundle.compose).toContain('network_mode: service:tailscale-sidecar');
+    expect(bundle.compose).toContain('TS_AUTHKEY: tskey-auth-test');
+    expect(bundle.compose).toContain(
+      'TS_EXTRA_ARGS: --exit-node=fr-par-wg-001 --exit-node-allow-lan-access=true',
+    );
+    expect(bundle.compose).not.toContain('entry-tunnel:');
+    expect(proxies.entryWireproxyConfig).toContain(
+      'tailscale-exit mode does not use a WireProxy entry tunnel.',
+    );
+    expect(proxies.routeProxyConfig).toContain('parent 1000 socks5+ 10.124.0.20 1080');
+    expect(proxies.routeProxyConfig).not.toContain('parent 1000 socks5+ 127.0.0.1 39101');
   });
 
   it('fails when HTTPS is requested without both TLS asset paths', async () => {

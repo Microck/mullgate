@@ -31,6 +31,7 @@ import {
 } from './runtime-diagnostics.js';
 
 const ROUTING_LAYER_SERVICE = 'routing-layer';
+const TAILSCALE_SIDECAR_SERVICE = 'tailscale-sidecar';
 
 type StatusPhase = 'unconfigured' | 'stopped' | 'starting' | 'running' | 'degraded' | 'error';
 
@@ -174,7 +175,7 @@ export async function runStatusFlow(
   const routeViews = composeStatus.ok
     ? buildRouteContainerViews(routes, composeStatus.containers)
     : routes.map((route) => createRouteContainerView(route, null));
-  const sharedServiceViews = buildSharedServiceViews(composeStatus);
+  const sharedServiceViews = buildSharedServiceViews(composeStatus, config);
   const lastStart = resolveLastStartDiagnostic(config, lastStartResult);
   const diagnostics = buildDiagnostics({
     config,
@@ -202,6 +203,13 @@ export async function runStatusFlow(
     `saved runtime status: ${config.runtime.status.phase}`,
     `saved checked at: ${config.runtime.status.lastCheckedAt ?? 'n/a'}`,
     `saved message: ${config.runtime.status.message ?? 'n/a'}`,
+    `exit source: ${config.mullvad.exitSource ?? 'mullvad-wireguard-socks'}`,
+    ...(config.mullvad.exitSource === 'tailscale-exit'
+      ? [
+          `tailscale tailnet: ${config.mullvad.tailscale?.tailnet ?? 'n/a'}`,
+          `tailscale pinned exit: ${config.mullvad.tailscale?.pinnedExitNode ?? 'n/a'}`,
+        ]
+      : []),
     `exposure source: ${manifestResult.kind === 'present' ? 'runtime-manifest' : 'canonical-config fallback'}`,
     `mode label: ${exposure.posture.modeLabel}`,
     `recommendation: ${exposure.posture.recommendation}`,
@@ -336,22 +344,24 @@ function buildRouteSurfaces(
   });
 }
 
-function buildSharedServiceViews(composeStatus: DockerComposeStatusResult): SharedServiceView[] {
+function buildSharedServiceViews(
+  composeStatus: DockerComposeStatusResult,
+  config?: MullgateConfig,
+): SharedServiceView[] {
   const containers = composeStatus.ok ? composeStatus.containers : [];
 
+  return getExpectedSharedServices(config).map((serviceName) =>
+    createSharedServiceView(serviceName, findContainerForService(containers, serviceName)),
+  );
+}
+
+function getExpectedSharedServices(config?: MullgateConfig): readonly string[] {
   return [
-    createSharedServiceView(
-      ENTRY_TUNNEL_SERVICE,
-      findContainerForService(containers, ENTRY_TUNNEL_SERVICE),
-    ),
-    createSharedServiceView(
-      ROUTE_PROXY_SERVICE,
-      findContainerForService(containers, ROUTE_PROXY_SERVICE),
-    ),
-    createSharedServiceView(
-      ROUTING_LAYER_SERVICE,
-      findContainerForService(containers, ROUTING_LAYER_SERVICE),
-    ),
+    config?.mullvad.exitSource === 'tailscale-exit'
+      ? TAILSCALE_SIDECAR_SERVICE
+      : ENTRY_TUNNEL_SERVICE,
+    ROUTE_PROXY_SERVICE,
+    ROUTING_LAYER_SERVICE,
   ];
 }
 

@@ -369,6 +369,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       saved runtime status: running
       saved checked at: 2026-03-21T07:10:00.000Z
       saved message: Runtime started successfully.
+      exit source: mullvad-wireguard-socks
       exposure source: runtime-manifest
       mode label: Loopback / local-only
       recommendation: local-default
@@ -532,6 +533,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       saved runtime status: running
       saved checked at: 2026-03-21T07:20:00.000Z
       saved message: Runtime started successfully.
+      exit source: mullvad-wireguard-socks
       exposure source: runtime-manifest
       mode label: Loopback / local-only
       recommendation: local-default
@@ -679,6 +681,7 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       saved runtime status: validated
       saved checked at: 2026-03-21T07:00:00.000Z
       saved message: Fixture config already validated.
+      exit source: mullvad-wireguard-socks
       exposure source: runtime-manifest
       mode label: Loopback / local-only
       recommendation: local-default
@@ -745,5 +748,97 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       last start diagnostics
       status: none persisted yet"
     `);
+  });
+
+  it('reports tailscale-exit sidecar state without expecting the WireGuard entry tunnel', async () => {
+    const env = createTempEnvironment();
+    const { store, paths } = await seedSavedConfig(env, {
+      configure: (config) => ({
+        ...config,
+        mullvad: {
+          ...config.mullvad,
+          exitSource: 'tailscale-exit',
+          tailscale: {
+            tailnet: 'example.ts.net',
+            authKey: 'tskey-auth-test',
+            pinnedExitNode: 'fr-par-wg-001',
+          },
+        },
+        routing: {
+          locations: config.routing.locations.map((location, index) => ({
+            ...location,
+            mullvad: {
+              ...location.mullvad,
+              exit: {
+                ...location.mullvad.exit,
+                socksInternalIp: index === 0 ? '10.124.0.20' : '10.124.0.22',
+              },
+            },
+          })),
+        },
+        runtime: {
+          ...config.runtime,
+          backend: 'tailscale-exit-route-proxy',
+          status: {
+            phase: 'running',
+            lastCheckedAt: '2026-03-21T07:10:00.000Z',
+            message: 'Tailscale runtime started successfully.',
+          },
+        },
+      }),
+    });
+    const stdout = createBufferSink();
+    const stderr = createBufferSink();
+
+    const action = createStatusCommandAction({
+      store,
+      stdout,
+      stderr,
+      inspectRuntime: async () =>
+        createComposeStatusSuccess(paths.runtimeComposeFile, [
+          {
+            name: 'mullgate-tailscale-sidecar-1',
+            service: 'tailscale-sidecar',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 10 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
+            name: 'mullgate-route-proxy-1',
+            service: 'route-proxy',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 10 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
+            name: 'mullgate-routing-layer-1',
+            service: 'routing-layer',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 10 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+        ]),
+    });
+
+    await action();
+
+    expect(process.exitCode).toBe(0);
+    expect(stderr.value.current).toBe('');
+    expect(stdout.value.current).toContain('exit source: tailscale-exit');
+    expect(stdout.value.current).toContain('tailscale tailnet: example.ts.net');
+    expect(stdout.value.current).toContain('tailscale pinned exit: fr-par-wg-001');
+    expect(stdout.value.current).toContain(
+      'tailscale-sidecar: running (status=Up 10 seconds, health=healthy, exit=0)',
+    );
+    expect(stdout.value.current).not.toContain('entry-tunnel:');
   });
 });
