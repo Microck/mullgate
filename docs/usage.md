@@ -84,7 +84,7 @@ Notes:
 - `MULLGATE_LOCATION` is shorthand for route 1.
 - `MULLGATE_LOCATIONS` is the ordered, comma-separated form for multi-route setup.
 - `MULLGATE_ROUTE_BIND_IPS` is also ordered and comma-separated.
-- If you omit `MULLGATE_PROXY_PASSWORD`, setup saves an empty password.
+- Non-interactive setup requires `MULLGATE_PROXY_PASSWORD` or `--password`. Use a real password for any shared or public listener.
 - `MULLGATE_EXIT_SOURCE` defaults to `mullvad-wireguard-socks`.
 - For `MULLGATE_TAILSCALE_PINNED_EXIT_NODE`, prefer the Tailscale IP printed by `tailscale exit-node list`.
 - `private-network` uses one shared trusted-network host IP. If Tailscale is available during setup and you do not override it, Mullgate should default to the host's `100.x` address.
@@ -185,7 +185,7 @@ Use this when trusted-network clients should connect to one shared host and sele
 ```bash
 export MULLGATE_ACCOUNT_NUMBER=123456789012
 export MULLGATE_PROXY_USERNAME=alice
-export MULLGATE_PROXY_PASSWORD=''
+export MULLGATE_PROXY_PASSWORD='replace-me'
 export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
 export MULLGATE_EXPOSURE_MODE=private-network
 export MULLGATE_BIND_HOST=100.124.44.113

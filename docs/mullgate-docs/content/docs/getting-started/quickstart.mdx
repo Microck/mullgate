@@ -58,9 +58,9 @@ mullgate proxy relay recommend --country Sweden --count 1
 
 That gives you a guided `proxies.txt` flow with real country and region pick-lists, plus a relay-inspection path when you want to preview a faster exact exit instead of guessing.
 
-If the goal is Tailscale or another trusted private network, the next step after setup is usually `mullgate proxy access --mode private-network`. If the goal is one stable host with country/city selection in the proxy URL, switch to `--access-mode inline-selector`.
+If the goal is access from other Tailscale devices or another trusted private network, the next step after setup is usually `mullgate proxy access --mode private-network`. If the goal is routing Mullgate's upstream traffic through Tailscale's Mullvad add-on, use the opt-in [`tailscale-exit` guide](/docs/guides/tailscale-exit-source). If the goal is one stable host with country/city selection in the proxy URL, switch to `--access-mode inline-selector`.
 
-See the full examples in [Usage](/docs/guides/usage), [Setup and Exposure](/docs/guides/setup-and-exposure), and [Inline Selector Reference](/docs/guides/inline-selector-selectors).
+See the full examples in [Usage](/docs/guides/usage), [Setup and Exposure](/docs/guides/setup-and-exposure), [Tailscale Exit Source](/docs/guides/tailscale-exit-source), and [Inline Selector Reference](/docs/guides/inline-selector-selectors).
 
 ## Important platform note
 
@@ -74,7 +74,8 @@ For the exact support posture, see [Platform Support](/docs/reference/platform-s
 
 1. [Usage](/docs/guides/usage)
 2. [Setup and Exposure](/docs/guides/setup-and-exposure)
-3. [Inline Selector Reference](/docs/guides/inline-selector-selectors)
-4. [Troubleshooting](/docs/guides/troubleshooting)
-5. [Commands](/docs/reference/commands)
-6. [Architecture Overview](/docs/architecture/overview)
+3. [Tailscale Exit Source](/docs/guides/tailscale-exit-source), if your tailnet uses the Mullvad add-on
+4. [Inline Selector Reference](/docs/guides/inline-selector-selectors)
+5. [Troubleshooting](/docs/guides/troubleshooting)
+6. [Commands](/docs/reference/commands)
+7. [Architecture Overview](/docs/architecture/overview)

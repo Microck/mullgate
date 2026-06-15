@@ -248,9 +248,38 @@ function writeSetupResult(result: SetupFlowResult): void {
     `reason: ${result.message}`,
     ...(result.cancelled ? [] : [`config: ${result.paths.configFile}`]),
     ...(!result.cancelled && result.cause ? [`cause: ${result.cause}`] : []),
+    `next: ${renderSetupRecovery(result)}`,
   ];
 
   writeCliReport({ sink: process.stderr, text: lines.join('\n'), tone: 'error' });
+}
+
+function renderSetupRecovery(result: Exclude<SetupFlowResult, { readonly ok: true }>): string {
+  if (result.cancelled) {
+    return 'Run `mullgate setup` again when you are ready to continue.';
+  }
+
+  if (result.phase === 'prompt') {
+    return 'Set the missing setup inputs or rerun `mullgate setup` interactively.';
+  }
+
+  if (result.phase === 'setup-validation') {
+    return 'Update the reported setup value, then rerun `mullgate setup --non-interactive` or `mullgate setup`.';
+  }
+
+  if (result.phase === 'wireguard-provision') {
+    return 'Fix the Mullvad account, endpoint, or network issue reported above, then rerun setup. No runtime was started.';
+  }
+
+  if (result.phase === 'artifact-render' || result.phase === 'validation') {
+    return 'Fix the reported artifact issue, then rerun `mullgate setup` before starting the runtime.';
+  }
+
+  if (result.phase === 'persist-config') {
+    return 'Check file permissions and free space for the reported config path, then rerun setup.';
+  }
+
+  return 'Fix the reported issue, then rerun setup. No runtime was started.';
 }
 
 function collectLocationOption(value: string, previous: string[] = []): string[] {

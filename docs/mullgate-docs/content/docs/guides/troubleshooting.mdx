@@ -110,15 +110,30 @@ Look for:
 - invalid exposure edits
 - validation failures
 - missing HTTPS material when HTTPS is enabled
+- missing `tailscale-exit` credentials or route internal SOCKS IPs when that exit source is enabled
 
 Use `mullgate proxy status` and `mullgate proxy doctor` to identify which layer failed.
+
+### `tailscale-exit` starts but routes are missing internal SOCKS IPs
+
+Likely cause:
+
+- the route artifacts were rendered before Mullgate resolved the `10.124.x.x` Mullvad SOCKS endpoints
+- relay metadata or DNS resolution was unavailable during setup
+
+What to do:
+
+1. confirm `MULLGATE_TAILSCALE_TAILNET`, `MULLGATE_TAILSCALE_AUTH_KEY`, and `MULLGATE_TAILSCALE_PINNED_EXIT_NODE` are set for setup
+2. run `mullgate proxy validate --refresh`
+3. run `mullgate proxy doctor`
+4. if the environment is new, run `pnpm verify:tailscale-feasibility` before relying on it
 
 ## Troubleshooting workflow
 
 A reliable sequence is:
 
 1. inspect configuration with `mullgate proxy access`
-2. inspect hostname guidance or selector examples with `mullgate proxy access`
+2. inspect hostname guidance or selector examples in that same report
 3. refresh derived runtime state with `mullgate proxy validate --refresh`
 4. check runtime truth with `mullgate proxy status`
 5. investigate routing or hostname drift with `mullgate proxy doctor`
@@ -140,6 +155,7 @@ If the issue remains unclear, answer these questions explicitly:
 ## See also
 
 - [Setup and Exposure](/docs/guides/setup-and-exposure)
+- [Tailscale Exit Source](/docs/guides/tailscale-exit-source)
 - [Inline Selector Reference](/docs/guides/inline-selector-selectors)
 - [Platform Support](/docs/reference/platform-support)
 - [Configuration](/docs/reference/configuration)

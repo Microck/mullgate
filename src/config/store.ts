@@ -136,7 +136,11 @@ export class ConfigStore {
           source: 'file',
           paths: this.paths,
           artifactPath: this.paths.configFile,
-          message: `Config file is not valid JSON: ${error.message}`,
+          message: [
+            `Mullgate could not read ${this.paths.configFile} because it is not valid JSON.`,
+            `Parser detail: ${error.message}`,
+            'No runtime state was changed. Fix or replace the config file, then rerun the command.',
+          ].join(' '),
         };
       }
 
@@ -162,7 +166,11 @@ export class ConfigStore {
           source: 'file',
           paths: this.paths,
           artifactPath: this.paths.configFile,
-          message: 'Config file does not match the Mullgate schema.',
+          message: [
+            `Mullgate could not use ${this.paths.configFile} because it does not match the current config schema.`,
+            'No runtime state was changed.',
+            'Run `mullgate setup` to create a fresh config, or fix the reported config file before retrying.',
+          ].join(' '),
         };
       }
 
@@ -172,7 +180,11 @@ export class ConfigStore {
         source: 'file',
         paths: this.paths,
         artifactPath: this.paths.configFile,
-        message: error instanceof Error ? error.message : 'Unknown error while reading config.',
+        message: [
+          `Mullgate could not read ${this.paths.configFile}.`,
+          `Reason: ${error instanceof Error ? error.message : 'Unknown filesystem error.'}`,
+          'No runtime state was changed. Check the path and permissions, then rerun the command.',
+        ].join(' '),
       };
     }
   }

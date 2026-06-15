@@ -1267,7 +1267,8 @@ describe('mullgate setup CLI flow', () => {
         artifact: /tmp/mullgate-home/config/mullgate/config.json
         reason: Private-network exposure requires a trusted-network IPv4 host, but received 127.0.0.1.
         config: /tmp/mullgate-home/config/mullgate/config.json
-        cause: Use an RFC1918 address, a Tailscale 100.x address, or 0.0.0.0 as the wildcard fallback when Tailscale is unavailable."
+        cause: Use an RFC1918 address, a Tailscale 100.x address, or 0.0.0.0 as the wildcard fallback when Tailscale is unavailable.
+        next: Update the reported setup value, then rerun \`mullgate setup --non-interactive\` or \`mullgate setup\`."
       `);
   });
 
@@ -1359,7 +1360,8 @@ describe('mullgate setup CLI flow', () => {
           endpoint: http://127.0.0.1:PORT/wg
           reason: Provisioning failed for the shared Mullvad WireGuard device.
           config: /tmp/mullgate-home/config/mullgate/config.json
-          cause: account 123456789012 for mullgate-lab failed upstream"
+          cause: account 123456789012 for mullgate-lab failed upstream
+          next: Fix the Mullvad account, endpoint, or network issue reported above, then rerun setup. No runtime was started."
         `);
       },
     );

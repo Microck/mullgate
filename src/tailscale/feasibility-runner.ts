@@ -242,7 +242,11 @@ export async function runTailscaleFeasibilityVerifier(
         artifact: createPrerequisiteFailureArtifact({
           targetUrl: options.targetUrl,
           requestedExitCount: options.logicalExitCount,
-          message: `Missing required live-mode environment: ${missingEnv.join(', ')}.`,
+          message: [
+            `Missing required live-mode environment: ${missingEnv.join(', ')}.`,
+            'Export those variables, then rerun `pnpm verify:tailscale-feasibility`.',
+            'No Tailscale sidecar was started.',
+          ].join(' '),
         }),
         preservedWorkspace: false,
       });

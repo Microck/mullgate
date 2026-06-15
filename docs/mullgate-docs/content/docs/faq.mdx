@@ -54,6 +54,10 @@ The CLI, config inspection, and diagnostic surfaces are supported, but the curre
 
 No. The current runtime provisions one shared Mullvad WireGuard entry device and fans out to route-specific Mullvad SOCKS5 exits from inside that tunnel.
 
+## Can Mullgate use Tailscale's Mullvad add-on instead?
+
+Yes. Use the opt-in `tailscale-exit` source when your tailnet has the Mullvad add-on enabled and you want one Tailscale sidecar to carry route-proxy traffic to Mullvad internal SOCKS endpoints. See [Tailscale Exit Source](/docs/guides/tailscale-exit-source).
+
 ## Why is there still a multi-exit architecture page?
 
 That page explains the redesign history that closed the original slot-limit problem. It is no longer an aspirational next-step document.
@@ -65,14 +69,14 @@ A good path is:
 1. [Quickstart](/docs/getting-started/quickstart)
 2. [Usage](/docs/guides/usage)
 3. [Setup and Exposure](/docs/guides/setup-and-exposure)
-4. [Current Runtime Model](/docs/architecture/current-runtime)
-5. [Multi-exit Architecture](/docs/architecture/multi-exit)
+4. [Tailscale Exit Source](/docs/guides/tailscale-exit-source), if your tailnet uses the Mullvad add-on
+5. [Current Runtime Model](/docs/architecture/current-runtime)
+6. [Multi-exit Architecture](/docs/architecture/multi-exit)
 
 ## What if hostname-based routing is not working?
 
 Check the output from:
 
-- `mullgate proxy access`
 - `mullgate proxy access`
 - `mullgate proxy doctor`
 
@@ -86,5 +90,6 @@ That combination exposes one shared public listener and is blocked by default. E
 ## See also
 
 - [Troubleshooting](/docs/guides/troubleshooting)
+- [Tailscale Exit Source](/docs/guides/tailscale-exit-source)
 - [Platform Support](/docs/reference/platform-support)
 - [Configuration](/docs/reference/configuration)

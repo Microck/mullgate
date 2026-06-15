@@ -14,9 +14,10 @@ Required non-interactive setup inputs include:
 - Mullvad account number for the default `mullvad-wireguard-socks` exit source
 - Tailscale tailnet, auth key, and pinned exit node for the `tailscale-exit` exit source
 - proxy username
+- proxy password for non-interactive setup
 - one or more route locations
 
-The proxy password is optional. If you omit it, Mullgate saves an empty password.
+Interactive setup can save an empty proxy password. Non-interactive setup requires the password input to be supplied explicitly, and public `inline-selector` exposure with an empty password still requires the unsafe override.
 
 ### Routing inventory
 
@@ -105,7 +106,7 @@ Change configuration through Mullgate CLI commands where possible instead of edi
 For operators, the important validation loop is:
 
 1. inspect with `mullgate proxy access`
-2. review hostnames or selector examples with `mullgate proxy access`
+2. review hostnames, direct-IP entrypoints, or selector examples in that same report
 3. refresh derived state with `mullgate proxy validate --refresh`
 4. confirm runtime with `mullgate proxy status` and `mullgate proxy doctor`
 

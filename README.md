@@ -12,9 +12,9 @@
 
 ---
 
-`mullgate` turns one Mullvad subscription into many authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. it is built for operators who want route-specific exits, app-level routing, and clear operator surfaces without sending the whole machine through a VPN.
+`mullgate` turns one Mullvad subscription into many authenticated SOCKS5, HTTP, and HTTPS proxies for selected apps. It is built for operators who want route-specific exits, app-level routing, and clear operator surfaces without sending the whole machine through a VPN.
 
-the main setup path is `mullgate setup`. on a real terminal it opens a guided flow that collects your Mullvad account number, proxy credentials, route aliases, bind posture, and optional HTTPS settings, then persists canonical config plus the derived runtime artifacts needed for `proxy start`, `proxy status`, and `proxy doctor`. if you prefer automation, the same surface also supports a fully non-interactive env-driven setup path.
+The main setup path is `mullgate setup`. On a real terminal it opens a guided flow that collects your Mullvad account number, proxy credentials, route aliases, bind posture, and optional HTTPS settings, then persists canonical config plus the derived runtime artifacts needed for `proxy start`, `proxy status`, and `proxy doctor`. If you prefer automation, the same surface also supports a fully non-interactive env-driven setup path.
 
 [documentation](https://mullgate.micr.dev) | [npm](https://www.npmjs.com/package/mullgate) | [github](https://github.com/Microck/mullgate)
 
@@ -23,9 +23,33 @@ the main setup path is `mullgate setup`. on a real terminal it opens a guided fl
 </p>
 
 
-## why
+## Start here
 
-if you want Mullvad-backed proxy access without replacing your computer's normal network path, `mullgate` gives you a practical path.
+`mullgate` currently requires Node.js 22+.
+
+Install from npm for the normal path, or use a GitHub release standalone binary/archive when you want a pinned platform artifact.
+
+```bash
+npm install -g mullgate
+mullgate --help
+mullgate setup
+```
+
+For a repeatable server setup, start from [`.env.example`](.env.example) and run:
+
+```bash
+mullgate setup --non-interactive
+mullgate proxy start --dry-run
+mullgate proxy start
+mullgate proxy status
+mullgate proxy doctor
+```
+
+Use Linux for the full live runtime. macOS and Windows support install, config inspection, status, and doctor surfaces, but the Docker runtime depends on Linux host-networking behavior.
+
+## Why
+
+If you want Mullvad-backed proxy access without replacing your computer's normal network path, `mullgate` gives you a practical path.
 
 - expose authenticated SOCKS5, HTTP, and HTTPS proxy endpoints from your own Mullvad subscription
 - route only the traffic you choose instead of tunneling the whole machine
@@ -33,19 +57,19 @@ if you want Mullvad-backed proxy access without replacing your computer's normal
 - keep setup, proxy operations, relay selection, and diagnostics in one CLI
 - stay in control of the host and credentials instead of depending on a hosted relay service
 
-## how mullgate differs from mullvad's socks5 proxy
+## How Mullgate differs from Mullvad's SOCKS5 proxy
 
-mullvad's socks5 proxy is a socks5 endpoint inside the mullvad vpn tunnel. you connect to mullvad first, then manually point an app or browser at that proxy.
+Mullvad's SOCKS5 proxy is a SOCKS5 endpoint inside the Mullvad VPN tunnel. You connect to Mullvad first, then manually point an app or browser at that proxy.
 
-mullgate is a local operator layer built around a mullvad subscription. it provisions named exits, exposes authenticated socks5, http, and https proxy entrypoints on your machine, and gives you one cli surface for setup, exposure control, runtime checks, and failure diagnostics.
+Mullgate is a local operator layer built around a Mullvad subscription. It provisions named exits, exposes authenticated SOCKS5, HTTP, and HTTPS proxy entrypoints on your machine, and gives you one CLI surface for setup, exposure control, runtime checks, and failure diagnostics.
 
-the goal is not "replace mullvad's proxy page with another set of manual steps." the goal is to give self-hosters a managed proxy gateway that uses mullvad exits without forcing the whole machine through the vpn.
+The goal is not "replace Mullvad's proxy page with another set of manual steps." The goal is to give self-hosters a managed proxy gateway that uses Mullvad exits without forcing the whole machine through the VPN.
 
-mullgate solves mullvad's device cap by provisioning one shared wireguard entry device and fanning out to exact mullvad socks5 exits per route.
+Mullgate solves Mullvad's device cap by provisioning one shared WireGuard entry device and fanning out to exact Mullvad SOCKS5 exits per route.
 
-for operators with the Tailscale Mullvad add-on, mullgate also supports an opt-in `tailscale-exit` source. this replaces the Mullvad WireGuard entry container with one Tailscale sidecar pinned to a Mullvad exit, then connects route proxies directly to resolved Mullvad internal SOCKS IPs such as `10.124.x.x:1080`. see [Tailscale Exit Source](docs/mullgate-docs/content/docs/guides/tailscale-exit-source.mdx) for setup details and the live feasibility verifier.
+For operators with the Tailscale Mullvad add-on, Mullgate also supports an opt-in `tailscale-exit` source. This replaces the Mullvad WireGuard entry container with one Tailscale sidecar pinned to a Mullvad exit, then connects route proxies directly to resolved Mullvad internal SOCKS IPs such as `10.124.x.x:1080`. See [Tailscale Exit Source](docs/mullgate-docs/content/docs/guides/tailscale-exit-source.mdx) for setup details and the live feasibility verifier.
 
-## architecture
+## Architecture
 
 ```mermaid
 flowchart TB
@@ -176,15 +200,13 @@ flowchart TB
     wg -.one shared Mullvad device powers many routed exits.-> selectedRelay
 ```
 
-the diagram above shows the current shipped mullgate model end to end: setup writes canonical config, exposure defines the published host and hostname truth, relay tooling can pin exact exits, `start` renders and launches the shared-entry runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces.
+The diagram above shows the current shipped Mullgate model end to end: setup writes canonical config, exposure defines the published host and hostname truth, relay tooling can pin exact exits, `start` renders and launches the shared-entry runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces.
 
-## quickstart
+## Full workflow
 
-`mullgate` currently requires Node.js 22+.
+Use these commands when you want to walk through the full operator surface.
 
-install from npm for the normal path, or use a GitHub release standalone binary/archive when you want a pinned platform artifact.
-
-### Linux or macOS
+### Linux or macOS installer
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Microck/mullgate/main/scripts/install.sh | sh
@@ -198,7 +220,7 @@ irm https://raw.githubusercontent.com/Microck/mullgate/main/scripts/install.ps1 
 mullgate --help
 ```
 
-### using a package manager
+### Package manager install
 
 ```bash
 npm install -g mullgate
@@ -206,15 +228,15 @@ pnpm add -g mullgate
 bun add -g mullgate
 ```
 
-### first run
+### First run
 
-for an interactive setup flow:
+For an interactive setup flow:
 
 ```bash
 mullgate setup
 ```
 
-for non-interactive setup, start from [`.env.example`](.env.example) and then run:
+For non-interactive setup, start from [`.env.example`](.env.example) and then run:
 
 ```bash
 mullgate setup --non-interactive
@@ -234,21 +256,21 @@ In loopback mode, the direct bind-IP entrypoints reported by `mullgate proxy sta
 
 If an installed `mullgate` command reports an unsupported config version, treat that as stale local state. Back up or remove the config/runtime paths it prints, then rerun `mullgate setup` and `mullgate proxy start` instead of trying to reuse the old runtime in place.
 
-## platform support
+## Platform support
 
 `mullgate` is currently a Linux-first runtime with truthful cross-platform install, config, and diagnostics surfaces.
 
-| platform | install | `path` / `status` / `doctor` | full runtime execution |
+| Platform | Install | `path` / `status` / `doctor` | Full runtime execution |
 | --- | --- | --- | --- |
 | Linux | Supported | Supported | **Supported** |
 | macOS | Supported | Supported | **Partial** |
 | Windows | Supported | Supported | **Partial** |
 
-macOS and Windows can install the CLI and report config/runtime state truthfully, but the current Docker-first multi-route runtime still depends on Linux host-networking behavior. use Linux for the full setup and live runtime path.
+macOS and Windows can install the CLI and report config/runtime state truthfully, but the current Docker-first multi-route runtime still depends on Linux host-networking behavior. Use Linux for the full setup and live runtime path.
 
-## command surface
+## Command surface
 
-| command | key flags | purpose |
+| Command | Key flags | Purpose |
 | --- | --- | --- |
 | `mullgate setup` | `--non-interactive`, `--exit-source`, `--location`, `--exposure-mode`, `--bind-host`, `--route-bind-ip`, `--base-domain`, `--socks-port`, `--http-port`, `--https-port` | create or update canonical config and derived runtime artifacts |
 | `mullgate proxy access` | `--mode`, `--access-mode`, `--base-domain`, `--clear-base-domain`, `--route-bind-ip`, `--unsafe-public-empty-password` | inspect or update exposure posture, access mode, shared-host planning, DNS guidance, selector examples, and direct-IP entrypoints |
@@ -273,11 +295,11 @@ macOS and Windows can install the CLI and report config/runtime state truthfully
 | `mullgate version` | none | print CLI version plus support metadata |
 | `mullgate completions <shell>` | `bash`, `zsh`, `fish` | generate shell completion scripts |
 
-for operator workflows, `mullgate proxy start --dry-run` is the safe preflight path before touching Docker, `mullgate proxy logs` is the first live-runtime evidence surface after `status`, and `mullgate proxy restart` is the canonical "rerender + bounce" shortcut once setup is already saved.
+For operator workflows, `mullgate proxy start --dry-run` is the safe preflight path before touching Docker, `mullgate proxy logs` is the first live-runtime evidence surface after `status`, and `mullgate proxy restart` is the canonical "rerender + bounce" shortcut once setup is already saved.
 
-## examples
+## Examples
 
-set up two named exits and inspect the generated hostname mappings:
+Set up two named exits and inspect the generated hostname mappings:
 
 ```bash
 export MULLGATE_ACCOUNT_NUMBER=123456789012
@@ -289,7 +311,7 @@ mullgate setup --non-interactive
 mullgate proxy access
 ```
 
-use the Tailscale-backed exit source when your tailnet has the Mullvad add-on enabled. for the pinned exit node, prefer the Tailscale IP shown by `tailscale exit-node list`:
+Use the Tailscale-backed exit source when your tailnet has the Mullvad add-on enabled. For the pinned exit node, prefer the Tailscale IP shown by `tailscale exit-node list`:
 
 ```bash
 export MULLGATE_EXIT_SOURCE=tailscale-exit
@@ -304,13 +326,13 @@ mullgate setup --non-interactive
 mullgate proxy start --dry-run
 ```
 
-before depending on a new Tailscale environment, run the isolated proof:
+Before depending on a new Tailscale environment, run the isolated proof:
 
 ```bash
 pnpm verify:tailscale-feasibility
 ```
 
-set up private-network exposure for other Tailscale devices. if Tailscale is running, Mullgate defaults to the host's `100.x` address; otherwise it falls back to `0.0.0.0` until you override the shared host:
+Set up private-network exposure for other Tailscale devices. If Tailscale is running, Mullgate defaults to the host's `100.x` address; otherwise it falls back to `0.0.0.0` until you override the shared host:
 
 ```bash
 export MULLGATE_EXPOSURE_MODE=private-network
@@ -320,7 +342,7 @@ mullgate setup --non-interactive
 mullgate proxy access
 ```
 
-switch that same trusted-network host to selector-driven access when you want one shared listener and route selection in the proxy username:
+Switch that same trusted-network host to selector-driven access when you want one shared listener and route selection in the proxy username:
 
 ```bash
 mullgate proxy access \
@@ -329,7 +351,7 @@ mullgate proxy access \
   --route-bind-ip 100.124.44.113
 ```
 
-with `inline-selector`, the guaranteed URL shape is `scheme://selector:@host:port`. for example:
+With `inline-selector`, the guaranteed URL shape is `scheme://selector:@host:port`. For example:
 
 ```text
 socks5://se:@100.124.44.113:1080
@@ -337,9 +359,9 @@ socks5://se-got:@100.124.44.113:1080
 socks5://se-got-wg-101:@100.124.44.113:1080
 ```
 
-the shorter `scheme://selector@host:port` form is best-effort only because some clients do not normalize a missing password consistently. if you expose `inline-selector` on a public host with an empty password, Mullgate blocks that by default until you opt in with `--unsafe-public-empty-password`.
+The shorter `scheme://selector@host:port` form is best-effort only because some clients do not normalize a missing password consistently. If you expose `inline-selector` on a public host with an empty password, Mullgate blocks that by default until you opt in with `--unsafe-public-empty-password`.
 
-start the runtime and inspect its current posture:
+Start the runtime and inspect its current posture:
 
 ```bash
 mullgate proxy start
@@ -347,7 +369,7 @@ mullgate proxy status
 mullgate proxy doctor
 ```
 
-use one of the exposed routes from another client or shell:
+Use one of the exposed routes from another client or shell:
 
 ```bash
 curl \
@@ -356,7 +378,7 @@ curl \
   https://am.i.mullvad.net/json
 ```
 
-generate a shareable proxy list from the saved route inventory:
+Generate a shareable proxy list from the saved route inventory:
 
 ```bash
 mullgate proxy export --regions
@@ -365,9 +387,9 @@ mullgate proxy export --country se --city got --count 1 --region europe --provid
 mullgate proxy export --dry-run --protocol http --country us --server us-nyc-wg-001 --owner rented
 ```
 
-`mullgate proxy export` currently supports `published-routes` mode only. if you switch to `inline-selector`, use `mullgate proxy access` to inspect the shared listener and selector examples instead of expecting per-route export output.
+`mullgate proxy export` currently supports `published-routes` mode only. If you switch to `inline-selector`, use `mullgate proxy access` to inspect the shared listener and selector examples instead of expecting per-route export output.
 
-inspect candidate relays, preview the fastest exact match, then verify a configured exit:
+Inspect candidate relays, preview the fastest exact match, then verify a configured exit:
 
 ```bash
 mullgate proxy relay list --country Sweden --owner mullvad --run-mode ram --min-port-speed 9000
@@ -377,7 +399,7 @@ mullgate proxy relay recommend --country Sweden --count 1 --apply
 mullgate proxy relay verify --route sweden-gothenburg
 ```
 
-enable login-time startup on Linux when you want the proxy runtime to come back automatically:
+Enable login-time startup on Linux when you want the proxy runtime to come back automatically:
 
 ```bash
 mullgate proxy autostart enable
@@ -386,20 +408,20 @@ mullgate proxy autostart status
 
 `mullgate proxy autostart enable` now ensures `loginctl` linger is enabled for the current user, because a `systemd --user` unit does not reliably come back after reboot without it.
 
-## documentation
+## Documentation
 
-- [documentation site](https://mullgate.micr.dev)
-- [quickstart](https://mullgate.micr.dev/docs/getting-started/quickstart)
-- [usage guide](https://mullgate.micr.dev/docs/guides/usage)
-- [setup and exposure](https://mullgate.micr.dev/docs/guides/setup-and-exposure)
-- [command reference](https://mullgate.micr.dev/docs/reference/commands)
-- [troubleshooting](https://mullgate.micr.dev/docs/guides/troubleshooting)
+- [Documentation site](https://mullgate.micr.dev)
+- [Quickstart](https://mullgate.micr.dev/docs/getting-started/quickstart)
+- [Usage guide](https://mullgate.micr.dev/docs/guides/usage)
+- [Setup and exposure](https://mullgate.micr.dev/docs/guides/setup-and-exposure)
+- [Command reference](https://mullgate.micr.dev/docs/reference/commands)
+- [Troubleshooting](https://mullgate.micr.dev/docs/guides/troubleshooting)
 - [`.env.example`](.env.example) - documented setup inputs for local runs
 
-## disclaimer
+## Disclaimer
 
-this project is unofficial and not affiliated with, endorsed by, or connected to Mullvad VPN AB. it is an independent, community-built tool.
+This project is unofficial and not affiliated with, endorsed by, or connected to Mullvad VPN AB. It is an independent, community-built tool.
 
-## license
+## License
 
-[mit license](LICENSE)
+[MIT license](LICENSE)
