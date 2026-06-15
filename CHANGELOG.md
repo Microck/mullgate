@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [2.0.0] - 2026-06-15
+
+### Added
+
+- `tailscale-exit` as an optional exit source that routes Mullgate traffic through Tailscale's Mullvad exit nodes without provisioning a Mullvad WireGuard device
+- setup, status, doctor, start, config, and runtime validation support for Tailscale auth keys, tailnets, pinned carrier exits, and per-route Mullvad internal SOCKS endpoints
+- `pnpm verify:tailscale-feasibility` for fixture and live proof that one Tailscale sidecar can reach distinct Mullvad exits through internal SOCKS addresses
+- operator documentation for configuring Tailscale auth keys, selecting a pinned carrier exit node, running the feasibility verifier, and understanding the sidecar route-proxy topology
+
+### Changed
+
+- runtime rendering now supports a `tailscale-sidecar` plus `route-proxy` topology for `tailscale-exit` while keeping the existing Mullvad WireGuard SOCKS path as the default exit source
+- dependency versions were refreshed to keep the release audit path green
+
 ## [1.3.0] - 2026-04-08
 
 ### Added
