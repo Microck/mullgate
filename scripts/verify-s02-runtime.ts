@@ -24,75 +24,118 @@ const CLI_TARGET_URL = 'https://am.i.mullvad.net/json';
 
 async function main(): Promise<void> {
   const store = new ConfigStore();
-  const initialConfig = await loadConfig(store);
+  await loadConfig(store);
   const routeBefore = await captureRoute();
-  const startResult = await runCommand(process.execPath, [tsxCliPath, 'src/cli.ts', 'start'], {
-    cwd: repoRoot,
-    env: process.env,
-  });
+  let startedRuntime = false;
+  let bodyError: unknown;
 
-  if (startResult.exitCode !== 0) {
-    throw new Error(
-      [
-        'mullgate start failed during live verification.',
-        startResult.stderr || startResult.stdout || 'No CLI output.',
-      ].join('\n'),
+  try {
+    const startResult = await runCommand(
+      process.execPath,
+      [tsxCliPath, 'src/cli.ts', 'proxy', 'start'],
+      {
+        cwd: repoRoot,
+        env: process.env,
+      },
     );
+
+    if (startResult.exitCode !== 0) {
+      throw new Error(
+        [
+          'mullgate proxy start failed during live verification.',
+          startResult.stderr || startResult.stdout || 'No CLI output.',
+        ].join('\n'),
+      );
+    }
+
+    startedRuntime = true;
+
+    const routeAfter = await captureRoute();
+
+    if (normalizeRoute(routeBefore) !== normalizeRoute(routeAfter)) {
+      throw new Error(
+        [
+          'Host route changed after mullgate start.',
+          `before: ${normalizeRoute(routeBefore)}`,
+          `after: ${normalizeRoute(routeAfter)}`,
+        ].join('\n'),
+      );
+    }
+
+    const config = await loadConfig(store);
+    const probes = await runProtocolProbes(config);
+    const startReport = JSON.parse(
+      await readFile(store.paths.runtimeStartDiagnosticsFile, 'utf8'),
+    ) as {
+      status: string;
+      phase: string;
+      source: string;
+      validationSource: string | null;
+    };
+
+    if (config.runtime.status.phase !== 'running') {
+      throw new Error(
+        `Expected runtime status to be running after start, got ${config.runtime.status.phase}.`,
+      );
+    }
+
+    if (startReport.status !== 'success') {
+      throw new Error(
+        `Expected persisted start report to record success, got ${startReport.status}.`,
+      );
+    }
+
+    const lines = [
+      'S02 runtime verification passed.',
+      `route before: ${normalizeRoute(routeBefore)}`,
+      `route after: ${normalizeRoute(routeAfter)}`,
+      `start phase: ${startReport.phase}`,
+      `start source: ${startReport.source}`,
+      `validation: ${startReport.validationSource ?? 'unknown'}`,
+      ...probes.map(
+        (probe) =>
+          `${probe.protocol}: ok (ip=${probe.ip}, mullvad_exit_ip=${probe.mullvadExitIp === null ? 'unknown' : String(probe.mullvadExitIp)}) via ${probe.url}`,
+      ),
+      `runtime manifest: ${config.runtime.runtimeBundle.manifestPath}`,
+      `start report: ${store.paths.runtimeStartDiagnosticsFile}`,
+    ];
+
+    process.stdout.write(`${lines.join('\n')}\n`);
+  } catch (error) {
+    bodyError = error;
+  } finally {
+    if (startedRuntime) {
+      const stopResult = await runCommand(
+        process.execPath,
+        [tsxCliPath, 'src/cli.ts', 'proxy', 'stop'],
+        {
+          cwd: repoRoot,
+          env: process.env,
+        },
+      );
+
+      if (stopResult.exitCode !== 0) {
+        const stopError = new Error(
+          [
+            'mullgate proxy stop failed during live verification cleanup.',
+            stopResult.stderr || stopResult.stdout || 'No CLI output.',
+          ].join('\n'),
+        );
+
+        if (!bodyError) {
+          bodyError = stopError;
+        } else {
+          process.stderr.write(`${stopError.message}\n`);
+        }
+      } else {
+        process.stdout.write('cleanup: proxy stop succeeded\n');
+      }
+    }
   }
 
-  const routeAfter = await captureRoute();
-
-  if (normalizeRoute(routeBefore) !== normalizeRoute(routeAfter)) {
-    throw new Error(
-      [
-        'Host route changed after mullgate start.',
-        `before: ${normalizeRoute(routeBefore)}`,
-        `after: ${normalizeRoute(routeAfter)}`,
-      ].join('\n'),
-    );
+  if (bodyError) {
+    throw bodyError;
   }
-
-  const config = await loadConfig(store);
-  const probes = await runProtocolProbes(config);
-  const startReport = JSON.parse(
-    await readFile(store.paths.runtimeStartDiagnosticsFile, 'utf8'),
-  ) as {
-    status: string;
-    phase: string;
-    source: string;
-    validationSource: string | null;
-  };
-
-  if (config.runtime.status.phase !== 'running') {
-    throw new Error(
-      `Expected runtime status to be running after start, got ${config.runtime.status.phase}.`,
-    );
-  }
-
-  if (startReport.status !== 'success') {
-    throw new Error(
-      `Expected persisted start report to record success, got ${startReport.status}.`,
-    );
-  }
-
-  const lines = [
-    'S02 runtime verification passed.',
-    `route before: ${normalizeRoute(routeBefore)}`,
-    `route after: ${normalizeRoute(routeAfter)}`,
-    `start phase: ${startReport.phase}`,
-    `start source: ${startReport.source}`,
-    `validation: ${startReport.validationSource ?? 'unknown'}`,
-    ...probes.map(
-      (probe) =>
-        `${probe.protocol}: ok (ip=${probe.ip}, mullvad_exit_ip=${probe.mullvadExitIp === null ? 'unknown' : String(probe.mullvadExitIp)}) via ${probe.url}`,
-    ),
-    `runtime manifest: ${config.runtime.runtimeBundle.manifestPath}`,
-    `start report: ${store.paths.runtimeStartDiagnosticsFile}`,
-  ];
-
-  process.stdout.write(`${lines.join('\n')}\n`);
-
-  void initialConfig;
 }
 
 async function loadConfig(store: ConfigStore): Promise<MullgateConfig> {
@@ -188,28 +231,14 @@ async function runProxyProbe(input: {
   }
 
   const proxyUrl = `${protocol === 'socks5' ? 'socks5h' : protocol}://${config.setup.bind.host}:${port}`;
-  const args = [
-    '--silent',
-    '--show-error',
-    '--fail',
-    '--location',
-    '--connect-timeout',
-    '20',
-    '--max-time',
-    '60',
-    '--proxy',
-    proxyUrl,
-    '--proxy-user',
-    `${config.setup.auth.username}:${config.setup.auth.password}`,
-  ];
-
-  if (protocol === 'https') {
-    args.push('--proxy-insecure');
-  }
-
-  args.push(CLI_TARGET_URL);
-
-  const result = await runCommand('curl', args);
+  const result = await runCommand('curl', ['--config', '-'], {
+    stdin: renderCurlConfig({
+      proxyUrl,
+      proxyUser: `${config.setup.auth.username}:${config.setup.auth.password}`,
+      proxyInsecure: protocol === 'https',
+      url: CLI_TARGET_URL,
+    }),
+  });
 
   if (result.exitCode !== 0) {
     throw new Error(
@@ -237,6 +266,7 @@ async function runCommand(
   options: {
     readonly cwd?: string;
     readonly env?: NodeJS.ProcessEnv;
+    readonly stdin?: string;
   } = {},
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
@@ -259,7 +289,36 @@ async function runCommand(
         stderr: Buffer.concat(stderrChunks).toString('utf8'),
       });
     });
+
+    if (options.stdin !== undefined) {
+      child.stdin.end(options.stdin);
+    }
   });
+}
+
+function renderCurlConfig(input: {
+  readonly proxyUrl: string;
+  readonly proxyUser: string;
+  readonly proxyInsecure: boolean;
+  readonly url: string;
+}): string {
+  return [
+    'silent',
+    'show-error',
+    'fail',
+    'location',
+    'connect-timeout = 20',
+    'max-time = 60',
+    `proxy = "${escapeCurlConfigString(input.proxyUrl)}"`,
+    `proxy-user = "${escapeCurlConfigString(input.proxyUser)}"`,
+    ...(input.proxyInsecure ? ['proxy-insecure'] : []),
+    `url = "${escapeCurlConfigString(input.url)}"`,
+    '',
+  ].join('\n');
+}
+
+function escapeCurlConfigString(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 }
 
 main().catch((error: unknown) => {

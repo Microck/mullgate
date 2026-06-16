@@ -184,7 +184,7 @@ async function verifyScenario(input: {
     if (input.scenario.mode === 'planned') {
       const planned = seeded.plannedRuntimeBundle;
 
-      if (!planned || !planned.ok) {
+      if (!planned?.ok) {
         throw new Error(`${input.scenario.id}: planned runtime bundle was not available.`);
       }
 

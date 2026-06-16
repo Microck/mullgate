@@ -151,7 +151,7 @@ export async function runStatusFlow(
   const inspectRuntime = dependencies.inspectRuntime ?? queryDockerComposeStatus;
 
   const [manifestResult, lastStartResult, composeStatus] = await Promise.all([
-    readJsonArtifact<RuntimeBundleManifest>(manifestPath),
+    readJsonArtifact<RuntimeBundleManifest>(manifestPath, isRuntimeBundleManifest),
     readJsonArtifact<RuntimeStartDiagnostic>(startReportPath),
     inspectRuntime({
       composeFilePath,
@@ -184,11 +184,13 @@ export async function runStatusFlow(
     lastStart,
     composeStatus,
     sharedServiceViews,
+    routeViews,
   });
   const phase = classifyOverallPhase({
     config,
     composeStatus,
     sharedServiceViews,
+    routeViews,
     lastStart,
   });
 
@@ -406,13 +408,23 @@ function classifyOverallPhase(input: {
   readonly config: MullgateConfig;
   readonly composeStatus: DockerComposeStatusResult;
   readonly sharedServiceViews: readonly SharedServiceView[];
+  readonly routeViews: readonly RouteContainerView[];
   readonly lastStart: RuntimeStartDiagnostic | null;
 }): StatusPhase {
   if (!input.composeStatus.ok) {
     return 'error';
   }
 
-  const liveStates = input.sharedServiceViews.map((service) => service.liveState);
+  const sharedServiceNames = new Set(
+    input.sharedServiceViews.map((service) => service.serviceName),
+  );
+  const routeSpecificViews = input.routeViews.filter(
+    (route) => !sharedServiceNames.has(route.route.serviceName),
+  );
+  const liveStates = [
+    ...input.sharedServiceViews.map((service) => service.liveState),
+    ...routeSpecificViews.map((route) => route.liveState),
+  ];
   const everyRunning = liveStates.every((state) => state === 'running');
   const someRunning = liveStates.some((state) => state === 'running');
   const someStarting = liveStates.some((state) => state === 'starting');
@@ -458,6 +470,7 @@ function buildDiagnostics(input: {
   readonly lastStart: RuntimeStartDiagnostic | null;
   readonly composeStatus: DockerComposeStatusResult;
   readonly sharedServiceViews: readonly SharedServiceView[];
+  readonly routeViews: readonly RouteContainerView[];
 }): string[] {
   const diagnostics: string[] = [];
 
@@ -490,9 +503,29 @@ function buildDiagnostics(input: {
     }
   }
 
+  const sharedServiceNames = new Set(
+    input.sharedServiceViews.map((service) => service.serviceName),
+  );
+
+  for (const route of input.routeViews) {
+    if (sharedServiceNames.has(route.route.serviceName)) {
+      continue;
+    }
+
+    if (route.liveState !== 'running') {
+      diagnostics.push(
+        `route ${route.route.routeId} (${route.route.hostname}) is not fully healthy: ${route.detail}.`,
+      );
+    }
+  }
+
   if (
     input.config.runtime.status.phase === 'running' &&
-    input.sharedServiceViews.some((service) => service.liveState !== 'running')
+    (input.sharedServiceViews.some((service) => service.liveState !== 'running') ||
+      input.routeViews.some(
+        (route) =>
+          !sharedServiceNames.has(route.route.serviceName) && route.liveState !== 'running',
+      ))
   ) {
     diagnostics.push(
       'saved runtime status says running, but live compose status shows stopped or degraded shared services. Trust live compose over the saved phase and rerun `mullgate proxy start` after fixing the failing service.',
@@ -512,6 +545,30 @@ function buildDiagnostics(input: {
   }
 
   return diagnostics;
+}
+
+function isRuntimeBundleManifest(value: unknown): value is RuntimeBundleManifest {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  const exposure = record.exposure as Record<string, unknown> | undefined;
+  const posture = exposure?.posture as Record<string, unknown> | undefined;
+  const platform = record.platform as Record<string, unknown> | undefined;
+  const services = record.services as Record<string, unknown> | undefined;
+  const routeProxy = services?.routeProxy as Record<string, unknown> | undefined;
+
+  return (
+    typeof record.generatedAt === 'string' &&
+    record.source === 'canonical-config' &&
+    Array.isArray(record.routes) &&
+    typeof posture?.modeLabel === 'string' &&
+    typeof posture?.recommendation === 'string' &&
+    typeof posture?.summary === 'string' &&
+    typeof platform?.platform === 'string' &&
+    typeof routeProxy?.name === 'string'
+  );
 }
 
 function renderLoadError(result: Extract<LoadConfigResult, { ok: false }>): string {

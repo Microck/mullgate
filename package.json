@@ -1,6 +1,6 @@
 {
   "name": "mullgate",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "author": "Microck",
   "keywords": [
     "mullvad",
@@ -46,6 +46,7 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test -- --run",
     "cli": "tsx src/cli.ts",
     "verify:s06": "tsx scripts/verify-s06-release.ts",
+    "verify:s02-runtime": "tsx scripts/verify-s02-runtime.ts",
     "verify:m004-feasibility": "tsx scripts/verify-m004-feasibility.ts",
     "verify:tailscale-feasibility": "tsx scripts/verify-tailscale-feasibility.ts",
     "verify:m004-compatibility": "tsx scripts/verify-m004-compatibility.ts",

@@ -1,10 +1,13 @@
+import { createRequire } from 'node:module';
 import os from 'node:os';
 
 import type { Command } from 'commander';
 
-import packageJson from '../../package.json' with { type: 'json' };
 import { type WritableTextSink, writeCliReport } from '../cli-output.js';
 import { CONFIG_VERSION } from '../config/schema.js';
+
+const require = createRequire(import.meta.url);
+const packageJson = require('../../package.json') as { readonly version: string };
 
 /**
  * Optional I/O overrides for the `mullgate version` command.

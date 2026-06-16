@@ -1,11 +1,13 @@
 import { mkdtempSync } from 'node:fs';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { runLogsFlow } from '../../src/commands/logs.js';
 import { createStatusCommandAction } from '../../src/commands/status.js';
+import { runStopFlow } from '../../src/commands/stop.js';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
 import {
   CONFIG_VERSION,
@@ -609,6 +611,205 @@ next step: run \`mullgate setup\` before expecting runtime artifacts or Docker c
       reason: Docker Compose failed to start the Mullgate runtime bundle for [redacted] / [redacted] / private-key-value-2.
       cause: service route-proxy crashed while reading [redacted] and account [redacted]"
     `);
+  });
+
+  it('degrades overall status when a route-specific service is missing', async () => {
+    const env = createTempEnvironment();
+    const { store, paths } = await seedSavedConfig(env, {
+      configure: (config) => ({
+        ...config,
+        runtime: {
+          ...config.runtime,
+          status: {
+            phase: 'running',
+            lastCheckedAt: '2026-03-21T07:30:00.000Z',
+            message: 'Runtime started successfully.',
+          },
+        },
+      }),
+    });
+    const manifest = JSON.parse(await readFile(paths.runtimeBundleManifestFile, 'utf8')) as {
+      routes: {
+        routeId: string;
+        services: {
+          routeProxy: {
+            name: string;
+          };
+        };
+      }[];
+    };
+    const secondRoute = manifest.routes[1];
+
+    if (!secondRoute) {
+      throw new Error('Expected a second route in the fixture manifest.');
+    }
+
+    secondRoute.services.routeProxy.name = 'route-proxy-at-vie';
+    await writeFile(paths.runtimeBundleManifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const stdout = createBufferSink();
+    const stderr = createBufferSink();
+    const action = createStatusCommandAction({
+      store,
+      stdout,
+      stderr,
+      inspectRuntime: async () =>
+        createComposeStatusSuccess(paths.runtimeComposeFile, [
+          {
+            name: 'mullgate-entry-tunnel-1',
+            service: 'entry-tunnel',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 30 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
+            name: 'mullgate-route-proxy-1',
+            service: 'route-proxy',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 30 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+          {
+            name: 'mullgate-routing-layer-1',
+            service: 'routing-layer',
+            project: 'mullgate',
+            state: 'running',
+            health: 'healthy',
+            status: 'Up 30 seconds',
+            exitCode: 0,
+            publishers: [],
+          },
+        ]),
+    });
+
+    await action();
+
+    expect(process.exitCode).toBe(0);
+    expect(stderr.value.current).toBe('');
+    expect(stdout.value.current).toContain('phase: degraded');
+    expect(stdout.value.current).toContain('shared service: route-proxy-at-vie');
+    expect(stdout.value.current).toContain(
+      'route at-vie-wg-001 (at-vie-wg-001) is not fully healthy: not present in live compose status.',
+    );
+  });
+
+  it('treats parseable malformed runtime manifests as invalid artifacts', async () => {
+    const env = createTempEnvironment();
+    const { store, paths } = await seedSavedConfig(env, { renderManifest: false });
+    await mkdir(path.dirname(paths.runtimeBundleManifestFile), { recursive: true, mode: 0o700 });
+    await writeFile(paths.runtimeBundleManifestFile, '{}\n', { mode: 0o600 });
+
+    const stdout = createBufferSink();
+    const stderr = createBufferSink();
+    const action = createStatusCommandAction({
+      store,
+      stdout,
+      stderr,
+      inspectRuntime: async () => createComposeStatusSuccess(paths.runtimeComposeFile, []),
+    });
+
+    await action();
+
+    expect(process.exitCode).toBe(0);
+    expect(stderr.value.current).toBe('');
+    expect(stdout.value.current).toContain('runtime manifest: ');
+    expect(stdout.value.current).toContain(
+      '(invalid: artifact JSON does not match the expected runtime schema)',
+    );
+    expect(stdout.value.current).toContain('exposure source: canonical-config fallback');
+  });
+
+  it('returns a structured partial failure when stop succeeds but status persistence fails', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const realStore = new ConfigStore(paths);
+    await realStore.save(createFixtureConfig(env));
+
+    class FailingSaveStore extends ConfigStore {
+      override async save(): ReturnType<ConfigStore['save']> {
+        throw new Error('permission denied by test');
+      }
+    }
+
+    const result = await runStopFlow({
+      store: new FailingSaveStore(paths),
+      checkedAt: '2026-03-21T08:00:00.000Z',
+      stopRuntime: async (options) => ({
+        ok: true,
+        phase: 'compose-down',
+        source: 'docker-compose',
+        checkedAt: options.checkedAt ?? '2026-03-21T08:00:00.000Z',
+        composeFilePath: options.composeFilePath,
+        command: {
+          binary: 'docker',
+          args: ['compose', '--file', options.composeFilePath, 'down', '--remove-orphans'],
+          cwd: path.dirname(options.composeFilePath),
+          rendered: `docker compose --file ${options.composeFilePath} down --remove-orphans`,
+        },
+        message: 'Docker Compose stopped the Mullgate runtime bundle.',
+        stdout: '',
+        stderr: '',
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.summary).toContain('Mullgate runtime stop partially completed.');
+    expect(result.summary).toContain('phase: persist-config');
+    expect(result.summary).toContain(
+      'Docker Compose stopped the runtime, but Mullgate could not persist the updated runtime status.',
+    );
+    expect(result.summary).toContain('cause: permission denied by test');
+  });
+
+  it('rejects malformed log tail values instead of parsing numeric prefixes', async () => {
+    const env = createTempEnvironment();
+    const { store } = await seedSavedConfig(env);
+    let readLogsCalled = false;
+
+    const result = await runLogsFlow(
+      { tail: '10abc' },
+      {
+        store,
+        readLogs: async (options) => {
+          readLogsCalled = true;
+          return {
+            ok: true,
+            phase: 'compose-logs',
+            source: 'docker-compose',
+            checkedAt: options.checkedAt ?? '2026-03-21T08:00:00.000Z',
+            composeFilePath: options.composeFilePath,
+            command: {
+              binary: 'docker',
+              args: [],
+              cwd: path.dirname(options.composeFilePath),
+              rendered: 'docker compose logs',
+            },
+            message: 'Docker Compose returned the requested Mullgate runtime logs.',
+            stdout: '',
+            stderr: '',
+          };
+        },
+      },
+    );
+
+    expect(readLogsCalled).toBe(false);
+    expect(result).toEqual({
+      ok: false,
+      exitCode: 1,
+      summary: [
+        'Mullgate runtime logs failed.',
+        'phase: input',
+        'source: cli',
+        'reason: Expected --tail to be a positive integer.',
+      ].join('\n'),
+    });
   });
 
   it('surfaces partial platform support from the runtime manifest on macOS-style installs', async () => {

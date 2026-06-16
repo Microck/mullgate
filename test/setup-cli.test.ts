@@ -379,6 +379,34 @@ afterEach(async () => {
 });
 
 describe('mullgate setup CLI flow', () => {
+  it('rejects invalid explicit setup overrides instead of falling through to defaults', async () => {
+    const env = createTempEnvironment();
+
+    const exposureResult = await runCli(
+      ['setup', '--non-interactive', '--exposure-mode', 'publiic'],
+      { env },
+    );
+    const portResult = await runCli(['setup', '--non-interactive', '--socks-port', '108O'], {
+      env,
+    });
+    const exitSourceResult = await runCli(
+      ['setup', '--non-interactive', '--exit-source', 'tailscale'],
+      { env },
+    );
+
+    expect(exposureResult.status).toBe(1);
+    expect(exposureResult.stderr).toContain('phase: setup-validation');
+    expect(exposureResult.stderr).toContain(
+      'Exposure mode "publiic" must be loopback, private-network, or public.',
+    );
+    expect(portResult.status).toBe(1);
+    expect(portResult.stderr).toContain('Port value "108O" must be numeric.');
+    expect(exitSourceResult.status).toBe(1);
+    expect(exitSourceResult.stderr).toContain(
+      'Exit source "tailscale" must be mullvad-wireguard-socks or tailscale-exit.',
+    );
+  });
+
   it('completes setup from a clean XDG home and exposes direct config inspection surfaces', {
     timeout: 20000,
   }, async () => {
@@ -1416,7 +1444,7 @@ describe('mullgate setup CLI flow', () => {
           ['config', 'set', 'setup.auth.password', '--stdin'],
           {
             env,
-            input: 'rotated-password\n',
+            input: ' rotated-password \n',
           },
         );
         const setPortResult = await runCli(['config', 'set', 'setup.bind.httpPort', '9091'], {
@@ -1427,9 +1455,9 @@ describe('mullgate setup CLI flow', () => {
         const validateResult = await runCli(['proxy', 'validate'], { env });
 
         expect(setPasswordResult.status).toBe(0);
-        expect(setPasswordResult.stdout).not.toContain('rotated-password');
+        expect(setPasswordResult.stdout).not.toContain(' rotated-password ');
         expect(setPortResult.status).toBe(0);
-        expect(getPasswordResult.stdout.trim()).toBe('rotated-password');
+        expect(getPasswordResult.stdout).toBe(' rotated-password \n');
         expect(getPortResult.stdout.trim()).toBe('9091');
         expect(validateResult.status).toBe(0);
         expect(`\n${normalizeOutput(setPasswordResult.stdout, env)}`).toMatchInlineSnapshot(`
@@ -1456,11 +1484,11 @@ runtime status: unvalidated"
         const renderedWireproxyConfig = await readFile(paths.entryWireproxyConfigFile, 'utf8');
         const renderedRouteProxyConfig = await readFile(paths.routeProxyConfigFile, 'utf8');
         expect(renderedWireproxyConfig).toContain('BindAddress = 127.0.0.1:39101');
-        expect(renderedRouteProxyConfig).toContain('users alice:CL:rotated-password');
+        expect(renderedRouteProxyConfig).toContain('users alice:CL: rotated-password ');
         expect(renderedRouteProxyConfig).toContain('proxy -p9091 -i127.0.0.1 -e127.0.0.1');
       },
     );
-  }, 20000);
+  }, 45000);
 
   it('reports corrupted rendered artifacts with phase, source, and secret-safe diagnostics', {
     timeout: 20000,

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -48,13 +49,21 @@ describe('mullgate misc command contract', () => {
     expect(`\n${normalized}`).toMatchInlineSnapshot(`
       "
       Mullgate version
-      cli version: 2.0.1
+      cli version: 2.0.2
       config schema: 2
       node: ${process.version}
       platform: ${process.platform}
       arch: ${process.arch}
       hostname: HOSTNAME_REPLACED"
     `);
+  });
+
+  it('exposes the live S02 runtime verifier as a package script', async () => {
+    const packageJson = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.['verify:s02-runtime']).toBe('tsx scripts/verify-s02-runtime.ts');
   });
 
   it('prints bash completions', { timeout: 15000 }, async () => {

@@ -132,7 +132,27 @@ export async function runStopFlow(
     checkedAt,
     `Runtime stopped via docker compose down from ${composeFilePath}.`,
   );
-  await store.save(stoppedConfig);
+
+  try {
+    await store.save(stoppedConfig);
+  } catch (error) {
+    return {
+      ok: false,
+      exitCode: 1,
+      summary: [
+        'Mullgate runtime stop partially completed.',
+        'phase: persist-config',
+        'source: filesystem',
+        `attempted at: ${checkedAt}`,
+        `docker compose: ${composeFilePath}`,
+        `command: ${stopResult.command.rendered}`,
+        `config: ${store.paths.configFile}`,
+        'reason: Docker Compose stopped the runtime, but Mullgate could not persist the updated runtime status.',
+        `cause: ${error instanceof Error ? error.message : String(error)}`,
+        'remediation: Check config file permissions and rerun `mullgate proxy status`; the saved runtime status may be stale.',
+      ].join('\n'),
+    };
+  }
 
   return {
     ok: true,

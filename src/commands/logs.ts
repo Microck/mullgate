@@ -165,7 +165,11 @@ export async function runLogsFlow(
 }
 
 function parsePositiveInteger(raw: string, label: string): number {
-  const numeric = Number.parseInt(raw, 10);
+  if (!/^[1-9]\d*$/.test(raw.trim())) {
+    throw new Error(`Expected --${label} to be a positive integer.`);
+  }
+
+  const numeric = Number(raw.trim());
 
   if (!Number.isFinite(numeric) || numeric <= 0) {
     throw new Error(`Expected --${label} to be a positive integer.`);

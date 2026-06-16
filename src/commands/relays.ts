@@ -16,15 +16,17 @@ import {
 import {
   chooseRelaysForProxyExportSelector,
   listMatchingRelays,
-  loadRelayCatalogForProxyExport,
+  renderProxyExportSelectorLabel,
+} from './proxy-export-relays.js';
+import { loadRelayCatalogForProxyExport } from './proxy-export-routes.js';
+import {
   type ProxyExportFailure,
   type ProxyExportSelector,
   parseRelayOwnerFilter,
   parseRelayRunModeFilter,
   type RelayOwnerFilter,
   type RelayRunModeFilter,
-  renderProxyExportSelectorLabel,
-} from './config.js';
+} from './proxy-export-selectors.js';
 
 const DEFAULT_VERIFY_TARGET_URL = 'https://am.i.mullvad.net/json';
 const VERIFY_TARGET_URL_ENV = 'MULLGATE_VERIFY_TARGET_URL';
@@ -609,10 +611,11 @@ function resolveRelayCommandSelection(input: {
     return serverResult;
   }
 
+  const exactServerRequestedCount = requestedCount ?? 1;
   const selector: ProxyExportSelector = {
     ...selectorBase,
     server: serverResult.hostname,
-    requestedCount: requestedCount ?? 1,
+    requestedCount: exactServerRequestedCount,
   };
   const matchedRelays = listMatchingRelays({
     relayCatalog: input.relayCatalog,
@@ -631,7 +634,7 @@ function resolveRelayCommandSelection(input: {
       selector,
       label: renderProxyExportSelectorLabel(selector),
       matchedRelays,
-      requestedCount: selector.requestedCount,
+      requestedCount: exactServerRequestedCount,
     },
   };
 }

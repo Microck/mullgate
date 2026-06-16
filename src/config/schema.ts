@@ -14,7 +14,7 @@ export const bindConfigSchema = z.object({
 
 export const authConfigSchema = z.object({
   username: nonEmptyString,
-  password: z.string().trim(),
+  password: z.string(),
 });
 
 export const accessModeSchema = z.enum(['published-routes', 'inline-selector']);

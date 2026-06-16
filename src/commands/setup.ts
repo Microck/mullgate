@@ -120,10 +120,47 @@ export function registerSetupCommand(program: Command): void {
     .option(`--mullvad-relays-url <url>`, `Override ${RELAYS_URL_ENV} for relay metadata.`)
     .action(async (options: SetupCommandOptions) => {
       const store = new ConfigStore();
-      const result = await runSetupFlow(buildRunOptions(options, process.env, store));
+      const runOptions = readRunOptions(options, process.env, store);
+
+      if (!runOptions.ok) {
+        writeCliReport({ sink: process.stderr, text: runOptions.summary, tone: 'error' });
+        process.exitCode = 1;
+        return;
+      }
+
+      const result = await runSetupFlow(runOptions.value);
       writeSetupResult(result);
       process.exitCode = result.exitCode;
     });
+}
+
+function readRunOptions(
+  options: SetupCommandOptions,
+  env: NodeJS.ProcessEnv,
+  store: ConfigStore,
+):
+  | { readonly ok: true; readonly value: RunSetupFlowOptions }
+  | { readonly ok: false; readonly summary: string } {
+  try {
+    return {
+      ok: true,
+      value: buildRunOptions(options, env, store),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    return {
+      ok: false,
+      summary: [
+        'Mullgate setup failed.',
+        'phase: setup-validation',
+        'source: input',
+        `reason: ${message}`,
+        `config: ${store.paths.configFile}`,
+        'next: Update the reported setup value, then rerun `mullgate setup --non-interactive` or `mullgate setup`.',
+      ].join('\n'),
+    };
+  }
 }
 
 function buildRunOptions(
@@ -333,11 +370,17 @@ function readOptionalString(value: string | undefined): string | undefined {
 function readOptionalExitSource(value: string | undefined): RawSetupInputValues['exitSource'] {
   const trimmed = value?.trim();
 
+  if (!trimmed) {
+    return undefined;
+  }
+
   if (trimmed === 'mullvad-wireguard-socks' || trimmed === 'tailscale-exit') {
     return trimmed;
   }
 
-  return undefined;
+  throw new Error(
+    `Exit source ${formatInputValue(value)} must be mullvad-wireguard-socks or tailscale-exit.`,
+  );
 }
 
 function readOptionalExposureMode(
@@ -345,11 +388,17 @@ function readOptionalExposureMode(
 ): RawSetupInputValues['exposureMode'] | undefined {
   const trimmed = value?.trim();
 
+  if (!trimmed) {
+    return undefined;
+  }
+
   if (trimmed === 'loopback' || trimmed === 'private-network' || trimmed === 'public') {
     return trimmed;
   }
 
-  return undefined;
+  throw new Error(
+    `Exposure mode ${formatInputValue(value)} must be loopback, private-network, or public.`,
+  );
 }
 
 function readOptionalNumber(value: string | undefined): number | undefined {
@@ -360,5 +409,15 @@ function readOptionalNumber(value: string | undefined): number | undefined {
   }
 
   const numeric = Number(trimmed);
-  return Number.isFinite(numeric) ? numeric : undefined;
+
+  if (!Number.isFinite(numeric)) {
+    throw new Error(`Port value ${formatInputValue(value)} must be numeric.`);
+  }
+
+  return numeric;
+}
+
+function formatInputValue(value: string | undefined): string {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length > 0 ? JSON.stringify(trimmed) : 'an empty value';
 }

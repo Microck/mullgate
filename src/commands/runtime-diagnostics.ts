@@ -18,12 +18,24 @@ export type ArtifactReadResult<T> =
 
 export type ContainerLiveState = 'running' | 'starting' | 'stopped' | 'degraded';
 
-export async function readJsonArtifact<T>(targetPath: string): Promise<ArtifactReadResult<T>> {
+export async function readJsonArtifact<T>(
+  targetPath: string,
+  isValid?: (value: unknown) => value is T,
+): Promise<ArtifactReadResult<T>> {
   try {
     const raw = await readFile(targetPath, 'utf8');
+    const parsed = JSON.parse(raw) as unknown;
+
+    if (isValid && !isValid(parsed)) {
+      return {
+        kind: 'invalid',
+        reason: 'artifact JSON does not match the expected runtime schema',
+      };
+    }
+
     return {
       kind: 'present',
-      value: JSON.parse(raw) as T,
+      value: parsed as T,
     };
   } catch (error) {
     if (isMissingFileError(error)) {

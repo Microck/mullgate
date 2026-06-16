@@ -1,10 +1,14 @@
+import { mkdtempSync } from 'node:fs';
+import { mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   buildProxyExportPlan,
   describeConfiguredProxyExportRoutes,
+  ensureProxyExportRoutes,
   listMatchingRelays,
   parseProxyExportSelectors,
   planProxyExportRelayTargets,
@@ -17,6 +21,7 @@ import {
   renderRegionGroupsReport,
   resolveProxyExportSelectorsWithCatalog,
   updateExposureConfig,
+  validateSavedConfig,
 } from '../../src/commands/config.js';
 import { resolveMullgatePaths } from '../../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../../src/config/schema.js';
@@ -24,6 +29,16 @@ import { ConfigStore } from '../../src/config/store.js';
 import type { MullvadRelayCatalog } from '../../src/mullvad/fetch-relays.js';
 import { requireDefined } from '../../src/required.js';
 import { createFixtureRoute, createFixtureRuntime } from '../helpers/mullgate-fixtures.js';
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  );
+});
 
 function requireRoute(
   config: MullgateConfig,
@@ -519,7 +534,7 @@ copy/paste hosts block
   it('renders selector-driven access guidance when inline-selector mode is enabled', () => {
     const config = createFixtureConfig();
     config.setup.access.mode = 'inline-selector';
-    config.setup.auth.password = '';
+    config.setup.auth.password = 'inline-secret';
     config.setup.exposure = {
       mode: 'private-network',
       allowLan: true,
@@ -542,6 +557,7 @@ copy/paste hosts block
     expect(report).toContain('best-effort syntax: selector@host:port');
     expect(report).toContain('guaranteed: socks5://se:[redacted]@100.124.44.113:1080');
     expect(report).toContain('best effort: socks5://se@100.124.44.113:1080');
+    expect(report).not.toContain('inline-secret');
   });
 
   it('updates exposure settings without raw JSON edits and mirrors the first bind IP back to setup.bind.host', () => {
@@ -860,12 +876,53 @@ copy/paste hosts block
       tokens: ['--country', 'Sweden', '--count', '1', '--count', '2'],
       message: 'Selector country=sweden already has a --count.',
     },
+    {
+      tokens: ['--country='],
+      message: 'A non-empty country selector value is required.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--owner', 'bogus'],
+      message: 'Relay ownership "bogus" must be one of mullvad, rented, or all.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--run-mode', 'bad'],
+      message: 'Relay run mode "bad" must be one of ram, disk, or all.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--min-port-speed', 'nope'],
+      message: 'Minimum port speed "nope" must be a positive integer.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--count', '0'],
+      message: 'Selector counts must be positive integers.',
+    },
+    {
+      tokens: ['--country', 'Sweden', '--count'],
+      message: '--count requires a value.',
+    },
   ])('rejects invalid proxy export selector refinements: $message', ({ tokens, message }) => {
     expect(parseProxyExportSelectors(tokens)).toEqual({
       ok: false,
       phase: 'export-proxies',
       source: 'input',
       message,
+    });
+  });
+
+  it('parses explicit all selector counts distinctly from default counts', () => {
+    expect(parseProxyExportSelectors(['--country', 'Sweden', '--count', 'all'])).toEqual({
+      ok: true,
+      selectors: [
+        {
+          kind: 'country',
+          value: 'sweden',
+          providers: [],
+          owner: 'all',
+          runMode: 'all',
+          minPortSpeed: null,
+          requestedCount: 'all',
+        },
+      ],
     });
   });
 
@@ -1220,11 +1277,9 @@ copy/paste hosts block
 
     expect(
       planProxyExportRelayTargets({
-        config,
         relayCatalog,
         selectors: [selector],
         configuredRoutes,
-        configPath: '/tmp/mullgate-home/config/mullgate/config.json',
       }),
     ).toEqual({
       ok: true,
@@ -1235,6 +1290,270 @@ copy/paste hosts block
         },
       ],
     });
+  });
+
+  it('plans every matching missing relay when a selector explicitly requests all', () => {
+    const relayCatalog = createFixtureRelayCatalog();
+    const expandedRelayCatalog: MullvadRelayCatalog = {
+      ...relayCatalog,
+      relayCount: relayCatalog.relayCount + 1,
+      countries: relayCatalog.countries.map((country) =>
+        country.code === 'us'
+          ? {
+              ...country,
+              cities: country.cities.map((city) =>
+                city.code === 'nyc' ? { ...city, relayCount: city.relayCount + 1 } : city,
+              ),
+            }
+          : country,
+      ),
+      relays: [
+        ...relayCatalog.relays,
+        {
+          ...requireDefined(relayCatalog.relays[2], 'Expected US relay fixture.'),
+          hostname: 'us-nyc-wg-002',
+          fqdn: 'us-nyc-wg-002.relays.mullvad.net',
+          publicKey: 'relay-public-key-us-nyc-002',
+        },
+      ],
+    };
+    const configuredRoutes = describeConfiguredProxyExportRoutes({
+      config: createFixtureConfig(),
+      relayCatalog: expandedRelayCatalog,
+    });
+    const selector = {
+      kind: 'country' as const,
+      value: 'us',
+      providers: [],
+      owner: 'all' as const,
+      runMode: 'all' as const,
+      minPortSpeed: null,
+      requestedCount: 'all' as const,
+    };
+
+    expect(
+      planProxyExportRelayTargets({
+        relayCatalog: expandedRelayCatalog,
+        selectors: [selector],
+        configuredRoutes,
+      }).targets.map((target) => target.relay.hostname),
+    ).toEqual(['us-nyc-wg-001', 'us-nyc-wg-002']);
+  });
+
+  it('preserves tailscale internal SOCKS IPs when selector export materializes routes', async () => {
+    const config = createFixtureConfig();
+    const paths = resolveMullgatePaths({
+      ...process.env,
+      MULLGATE_PLATFORM: 'linux',
+      HOME: '/tmp/mullgate-home',
+      XDG_CONFIG_HOME: '/tmp/mullgate-home/config',
+      XDG_STATE_HOME: '/tmp/mullgate-home/state',
+      XDG_CACHE_HOME: '/tmp/mullgate-home/cache',
+    });
+    const relayCatalog: MullvadRelayCatalog = {
+      ...createExpandedFixtureRelayCatalog(),
+      relays: createExpandedFixtureRelayCatalog().relays.map((relay, index) => ({
+        ...relay,
+        socksName: `${relay.hostname}-socks.relays.mullvad.net`,
+        socksPort: 1080,
+        socksInternalIp: `100.64.0.${index + 10}`,
+      })),
+    };
+    const result = await ensureProxyExportRoutes({
+      store: new ConfigStore(paths),
+      config: {
+        ...config,
+        mullvad: {
+          ...config.mullvad,
+          exitSource: 'tailscale-exit',
+        },
+      },
+      relayCatalog,
+      exportInput: {
+        protocol: 'socks5',
+        selectors: [
+          {
+            kind: 'country',
+            value: 'us',
+            providers: [],
+            owner: 'all',
+            runMode: 'all',
+            minPortSpeed: null,
+            requestedCount: 1,
+          },
+        ],
+        writeMode: 'dry-run',
+        force: false,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.createdAliases).toEqual(['us-nyc-wg-001']);
+    expect(result.config.routing.locations.at(-1)?.mullvad.exit.socksInternalIp).toBe(
+      '100.64.0.12',
+    );
+  });
+
+  it('rejects tailscale selector-added routes when relay metadata lacks internal SOCKS IPs', async () => {
+    const config = createFixtureConfig();
+    const paths = resolveMullgatePaths({
+      ...process.env,
+      MULLGATE_PLATFORM: 'linux',
+      HOME: '/tmp/mullgate-home',
+      XDG_CONFIG_HOME: '/tmp/mullgate-home/config',
+      XDG_STATE_HOME: '/tmp/mullgate-home/state',
+      XDG_CACHE_HOME: '/tmp/mullgate-home/cache',
+    });
+    const relayCatalog: MullvadRelayCatalog = {
+      ...createExpandedFixtureRelayCatalog(),
+      relays: createExpandedFixtureRelayCatalog().relays.map((relay) => ({
+        ...relay,
+        socksName: `${relay.hostname}-socks.relays.mullvad.net`,
+        socksPort: 1080,
+      })),
+    };
+    const result = await ensureProxyExportRoutes({
+      store: new ConfigStore(paths),
+      config: {
+        ...config,
+        mullvad: {
+          ...config.mullvad,
+          exitSource: 'tailscale-exit',
+        },
+      },
+      relayCatalog,
+      exportInput: {
+        protocol: 'socks5',
+        selectors: [
+          {
+            kind: 'country',
+            value: 'us',
+            providers: [],
+            owner: 'all',
+            runMode: 'all',
+            minPortSpeed: null,
+            requestedCount: 1,
+          },
+        ],
+        writeMode: 'dry-run',
+        force: false,
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      phase: 'relay-normalize',
+      source: 'mullvad-relay-catalog',
+      message:
+        'Relay us-nyc-wg-001 is missing the internal SOCKS IP required by tailscale-exit routes.',
+    });
+  });
+
+  it('rejects public export route bind IP overflow without wrapping to 0.0.0.0', async () => {
+    const config = createFixtureConfig();
+    const paths = resolveMullgatePaths({
+      ...process.env,
+      MULLGATE_PLATFORM: 'linux',
+      HOME: '/tmp/mullgate-home',
+      XDG_CONFIG_HOME: '/tmp/mullgate-home/config',
+      XDG_STATE_HOME: '/tmp/mullgate-home/state',
+      XDG_CACHE_HOME: '/tmp/mullgate-home/cache',
+    });
+    config.setup.exposure = {
+      mode: 'public',
+      allowLan: true,
+      baseDomain: null,
+    };
+    config.setup.bind.host = '255.255.255.255';
+    config.routing.locations = [
+      {
+        ...requireRoute(config, 0),
+        bindIp: '255.255.255.255',
+      },
+    ];
+    const relayCatalog: MullvadRelayCatalog = {
+      ...createExpandedFixtureRelayCatalog(),
+      relays: createExpandedFixtureRelayCatalog().relays.map((relay) => ({
+        ...relay,
+        socksName: `${relay.hostname}-socks.relays.mullvad.net`,
+        socksPort: 1080,
+      })),
+    };
+
+    const result = await ensureProxyExportRoutes({
+      store: new ConfigStore(paths),
+      config,
+      relayCatalog,
+      exportInput: {
+        protocol: 'socks5',
+        selectors: [
+          {
+            kind: 'country',
+            value: 'us',
+            providers: [],
+            owner: 'all',
+            runMode: 'all',
+            minPortSpeed: null,
+            requestedCount: 1,
+          },
+        ],
+        writeMode: 'dry-run',
+        force: false,
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      phase: 'setup-validation',
+      source: 'input',
+      message: 'Cannot derive the next bind IP from 255.255.255.255.',
+    });
+  });
+
+  it('returns a validation error when existing runtime artifacts cannot be read', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'mullgate-config-validation-'));
+    const home = root.replaceAll('\\', '/');
+    temporaryDirectories.push(root);
+    const paths = resolveMullgatePaths({
+      ...process.env,
+      MULLGATE_PLATFORM: 'linux',
+      HOME: home,
+      XDG_CONFIG_HOME: `${home}/config`,
+      XDG_STATE_HOME: `${home}/state`,
+      XDG_CACHE_HOME: `${home}/cache`,
+    });
+    const store = new ConfigStore(paths);
+
+    await store.save({
+      ...createFixtureConfig(),
+      setup: {
+        ...createFixtureConfig().setup,
+        bind: {
+          ...createFixtureConfig().setup.bind,
+          httpsPort: null,
+        },
+        https: {
+          enabled: false,
+        },
+      },
+    });
+    await mkdir(paths.entryWireproxyConfigFile, { recursive: true });
+    await mkdir(paths.routeProxyConfigFile, { recursive: true });
+
+    const result = await validateSavedConfig({ store, refresh: false });
+
+    expect(result).toMatchObject({
+      ok: false,
+      phase: 'validation',
+      source: 'filesystem',
+      message: 'Failed to read existing runtime artifacts for validation.',
+    });
+    expect(result.ok ? '' : result.cause).toContain('EISDIR');
   });
 
   it('fails proxy export explicitly when inline-selector mode is enabled', () => {

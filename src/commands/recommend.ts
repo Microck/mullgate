@@ -11,21 +11,24 @@ import {
   probeRelayLatency,
   type RelayProbeResult,
 } from '../mullvad/relay-probe.js';
+import { createAuthenticatedEndpointUrl } from './config.js';
+import {
+  type ProxyExportResolvedInput,
+  resolveProxyExportSelectorsWithCatalog,
+} from './proxy-export-plan.js';
 import {
   chooseSpreadRelays,
-  createAuthenticatedEndpointUrl,
-  describeConfiguredProxyExportRoutes,
-  ensureProxyExportRoutes,
-  extractOrderedCommandArgs,
   listMatchingRelays,
-  loadRelayCatalogForProxyExport,
+  renderProxyExportSelectorLabel,
+} from './proxy-export-relays.js';
+import { describeConfiguredProxyExportRoutes } from './proxy-export-route-descriptors.js';
+import { ensureProxyExportRoutes, loadRelayCatalogForProxyExport } from './proxy-export-routes.js';
+import {
+  extractOrderedCommandArgs,
   type ProxyExportFailure,
-  type ProxyExportResolvedInput,
   type ProxyExportSelector,
   parseProxyExportSelectors,
-  renderProxyExportSelectorLabel,
-  resolveProxyExportSelectorsWithCatalog,
-} from './config.js';
+} from './proxy-export-selectors.js';
 
 type RecommendCommandOptions = {
   readonly apply?: boolean;
@@ -220,7 +223,7 @@ export async function runRecommendFlow(input: {
 
   const normalizedSelectors = resolvedSelectors.selectors.map((selector) => ({
     ...selector,
-    requestedCount: selector.requestedCount ?? 1,
+    requestedCount: normalizeRecommendSelectorCount(selector),
   }));
   const recommendedRelaysResult = await recommendRelaysForSelectors({
     selectors: normalizedSelectors,
@@ -394,10 +397,12 @@ function selectRecommendedRelays(input: {
   readonly selector: ProxyExportSelector;
   readonly successfulProbes: readonly Extract<RelayProbeResult, { ok: true }>[];
 }): readonly Extract<RelayProbeResult, { ok: true }>[] {
+  const requestedCount = normalizeRecommendSelectorCount(input.selector);
+
   if (input.selector.server) {
     return input.successfulProbes
       .filter((result) => result.relay.hostname === input.selector.server)
-      .slice(0, input.selector.requestedCount ?? 1);
+      .slice(0, requestedCount);
   }
 
   const sortedRelays = input.successfulProbes.map((result) => result.relay);
@@ -405,12 +410,12 @@ function selectRecommendedRelays(input: {
     input.selector.kind === 'region'
       ? chooseSpreadRelays({
           candidates: sortedRelays,
-          count: input.selector.requestedCount ?? 1,
+          count: requestedCount,
           spreadKey: (relay) => relay.location.countryCode,
         })
       : chooseSpreadRelays({
           candidates: sortedRelays,
-          count: input.selector.requestedCount ?? 1,
+          count: requestedCount,
           spreadKey: input.selector.city
             ? (relay) => relay.hostname
             : (relay) => relay.location.cityCode,
@@ -418,6 +423,12 @@ function selectRecommendedRelays(input: {
   const selectedHostnames = new Set(selectedRelays.map((relay) => relay.hostname));
 
   return input.successfulProbes.filter((result) => selectedHostnames.has(result.relay.hostname));
+}
+
+function normalizeRecommendSelectorCount(selector: ProxyExportSelector): number {
+  return selector.requestedCount === 'all'
+    ? Number.MAX_SAFE_INTEGER
+    : (selector.requestedCount ?? 1);
 }
 
 function createRecommendExportInput(input: {

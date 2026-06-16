@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 
+import { createRequire } from 'node:module';
 import { Command } from 'commander';
-import packageJson from '../package.json' with { type: 'json' };
 import { writeCliReport } from './cli-output.js';
 import { registerCompletionsCommand } from './commands/completions.js';
 import { registerConfigCommands } from './commands/config.js';
 import { registerProxyCommand } from './commands/proxy.js';
 import { registerSetupCommand } from './commands/setup.js';
 import { registerVersionCommand } from './commands/version.js';
+
+const require = createRequire(import.meta.url);
+const packageJson = require('../package.json') as { readonly version: string };
 
 /**
  * Builds the Mullgate CLI command tree with all top-level subcommands registered.
