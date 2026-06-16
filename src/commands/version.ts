@@ -5,7 +5,7 @@ import type { Command } from 'commander';
 import { type WritableTextSink, writeCliReport } from '../cli-output.js';
 import { CONFIG_VERSION } from '../config/schema.js';
 
-export const CLI_VERSION = '2.0.3';
+export const CLI_VERSION = '2.0.4';
 
 /**
  * Optional I/O overrides for the `mullgate version` command.

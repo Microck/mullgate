@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [2.0.4] - 2026-06-16
+
+### Added
+
+- added guided `mullgate setup` support for the `tailscale-exit` source so interactive setup can collect Tailscale tailnet, auth key, and pinned exit node inputs
+
+### Changed
+
+- updated usage docs to present guided `tailscale-exit` setup alongside the existing flags and environment-variable setup paths
+
 ## [2.0.3] - 2026-06-16
 
 ### Fixed
