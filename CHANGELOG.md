@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [2.0.3] - 2026-06-16
+
+### Fixed
+
+- fixed Clawpatch-reported release build, config validation, status, stop, setup parsing, log parsing, and proxy export edge cases
+- prevented proxy credentials from leaking through exposure reports and live verifier command arguments
+- preserved tailscale-exit route metadata when selector-driven export or recommendation adds routes
+- exposed the S02 runtime verifier through `pnpm verify:s02-runtime` and made it clean up started runtimes
+- bundled CLI version metadata so standalone release binaries can run without loading `package.json` at runtime
+
 ## [2.0.2] - 2026-06-16
 
 ### Fixed

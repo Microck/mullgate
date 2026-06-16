@@ -1,16 +1,12 @@
 #!/usr/bin/env node
 
-import { createRequire } from 'node:module';
 import { Command } from 'commander';
 import { writeCliReport } from './cli-output.js';
 import { registerCompletionsCommand } from './commands/completions.js';
 import { registerConfigCommands } from './commands/config.js';
 import { registerProxyCommand } from './commands/proxy.js';
 import { registerSetupCommand } from './commands/setup.js';
-import { registerVersionCommand } from './commands/version.js';
-
-const require = createRequire(import.meta.url);
-const packageJson = require('../package.json') as { readonly version: string };
+import { CLI_VERSION, registerVersionCommand } from './commands/version.js';
 
 /**
  * Builds the Mullgate CLI command tree with all top-level subcommands registered.
@@ -21,7 +17,7 @@ export function createCli(): Command {
   program
     .name('mullgate')
     .description('Minimal Mullvad proxy CLI for setup, daily proxy operations, and advanced config')
-    .version(packageJson.version, '-v, --version', 'display the installed Mullgate CLI version')
+    .version(CLI_VERSION, '-v, --version', 'display the installed Mullgate CLI version')
     .showHelpAfterError();
 
   registerSetupCommand(program);

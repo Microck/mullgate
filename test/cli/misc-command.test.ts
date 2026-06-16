@@ -4,6 +4,8 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { CLI_VERSION } from '../../src/commands/version.js';
+
 type CliResult = {
   readonly status: number | null;
   readonly stdout: string;
@@ -49,7 +51,7 @@ describe('mullgate misc command contract', () => {
     expect(`\n${normalized}`).toMatchInlineSnapshot(`
       "
       Mullgate version
-      cli version: 2.0.2
+      cli version: 2.0.3
       config schema: 2
       node: ${process.version}
       platform: ${process.platform}
@@ -60,9 +62,11 @@ describe('mullgate misc command contract', () => {
 
   it('exposes the live S02 runtime verifier as a package script', async () => {
     const packageJson = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8')) as {
+      version?: string;
       scripts?: Record<string, string>;
     };
 
+    expect(CLI_VERSION).toBe(packageJson.version);
     expect(packageJson.scripts?.['verify:s02-runtime']).toBe('tsx scripts/verify-s02-runtime.ts');
   });
 
