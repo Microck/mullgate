@@ -38,11 +38,11 @@ Mullgate reports platform support truthfully on Linux, macOS, and Windows.
 
 Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat the CLI and runtime manifest as supported config and diagnostic surfaces, but use a Linux host or Linux VM when you need the shipped multi-route Docker runtime to behave truthfully end to end.
 
-## Non-interactive setup inputs
+## Setup inputs
 
-`mullgate setup --non-interactive` fails instead of prompting when required inputs are missing. You can supply values with flags, environment variables, or a mix of both.
+`mullgate setup` prompts for the exit source first, then collects either the default Mullvad WireGuard inputs or the `tailscale-exit` inputs. `mullgate setup --non-interactive` fails instead of prompting when required inputs are missing. You can supply values with flags, environment variables, or a mix of both.
 
-### Required for the default non-interactive run
+### Required for the default setup run
 
 | Purpose | Flag | Environment variable |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ Use Linux for the full setup/runtime/probe workflow. On macOS and Windows, treat
 
 ### Required for `tailscale-exit`
 
-Set `MULLGATE_EXIT_SOURCE=tailscale-exit` when you want one Tailscale sidecar pinned to a Mullvad exit instead of the default Mullvad WireGuard entry device.
+Choose `tailscale-exit` in the guided setup, or set `MULLGATE_EXIT_SOURCE=tailscale-exit`, when you want one Tailscale sidecar pinned to a Mullvad exit instead of the default Mullvad WireGuard entry device.
 
 | Purpose | Flag | Environment variable |
 | --- | --- | --- |

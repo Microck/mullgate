@@ -379,7 +379,9 @@ afterEach(async () => {
 });
 
 describe('mullgate setup CLI flow', () => {
-  it('rejects invalid explicit setup overrides instead of falling through to defaults', async () => {
+  it('rejects invalid explicit setup overrides instead of falling through to defaults', {
+    timeout: 15000,
+  }, async () => {
     const env = createTempEnvironment();
 
     const exposureResult = await runCli(

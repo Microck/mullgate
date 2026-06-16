@@ -9,6 +9,7 @@ import {
   isCancel,
   outro,
   password,
+  select,
   text,
 } from '@clack/prompts';
 import {
@@ -52,6 +53,12 @@ const DEFAULT_EXPOSURE_MODE: ExposureMode = 'loopback';
 const PROVISION_RETRY_LIMIT = 3;
 const PROVISION_RETRY_FALLBACK_DELAY_MS = 1_500;
 const PROMPT_CANCELLED = Symbol('setup-prompt-cancelled');
+const DEFAULT_SETUP_PROMPTS = {
+  confirm,
+  password,
+  select,
+  text,
+};
 type ExitSource = NonNullable<MullgateConfig['mullvad']['exitSource']>;
 
 export type SetupInputValues = {
@@ -186,6 +193,7 @@ export type RunSetupFlowOptions = {
   readonly relaySocksResolver?: {
     readonly resolve4: (hostname: string) => Promise<string[]>;
   };
+  readonly promptHandlers?: typeof DEFAULT_SETUP_PROMPTS;
   readonly validateOptions?: Pick<
     ValidateRuntimeOptions,
     'wireproxyBinary' | 'dockerBinary' | 'dockerImage' | 'routeProxyDockerImage' | 'spawn'
@@ -210,6 +218,7 @@ export async function runSetupFlow(options: RunSetupFlowOptions = {}): Promise<S
     interactive,
     initialValues: options.initialValues,
     paths: store.paths,
+    prompts: options.promptHandlers,
   });
 
   if (promptValues === PROMPT_CANCELLED) {
@@ -1127,6 +1136,7 @@ async function collectSetupInputs(input: {
   interactive: boolean;
   initialValues?: Partial<RawSetupInputValues>;
   paths: MullgatePaths;
+  prompts?: typeof DEFAULT_SETUP_PROMPTS;
 }): Promise<
   | typeof PROMPT_CANCELLED
   | { readonly ok: true; readonly value: SetupInputValues }
@@ -1137,6 +1147,7 @@ async function collectSetupInputs(input: {
       readonly artifactPath?: string;
     }
 > {
+  const prompts = input.prompts ?? DEFAULT_SETUP_PROMPTS;
   const values = normalizeInitialSetupValues(input.initialValues);
   const configuredLocations = values.locations ?? ['se-gothenburg'];
 
@@ -1175,19 +1186,97 @@ async function collectSetupInputs(input: {
 
   intro('Mullgate setup');
 
-  const accountNumber = await password({
-    message: 'Mullvad account number',
-    mask: '•',
-    validate: (value) =>
-      /^\d{6,16}$/.test((value ?? '').trim()) ? undefined : 'Enter 6-16 digits.',
+  const exitSource = await prompts.select<ExitSource>({
+    message: 'Exit source',
+    initialValue: values.exitSource,
+    options: [
+      {
+        value: 'mullvad-wireguard-socks',
+        label: 'Mullvad WireGuard entry',
+        hint: 'default',
+      },
+      {
+        value: 'tailscale-exit',
+        label: 'Tailscale Mullvad exit node',
+      },
+    ],
   });
 
-  if (isCancel(accountNumber)) {
+  if (isCancel(exitSource)) {
     clackCancel('Setup cancelled.');
     return PROMPT_CANCELLED;
   }
 
-  const socksPort = await text({
+  let accountNumber = values.accountNumber ?? '';
+  let tailscaleTailnet = values.tailscaleTailnet ?? null;
+  let tailscaleAuthKey = values.tailscaleAuthKey ?? null;
+  let tailscalePinnedExitNode = values.tailscalePinnedExitNode ?? null;
+
+  if (exitSource === 'mullvad-wireguard-socks') {
+    const accountNumberInput = await prompts.password({
+      message: 'Mullvad account number',
+      mask: '•',
+      validate: (value) =>
+        /^\d{6,16}$/.test((value ?? '').trim()) ? undefined : 'Enter 6-16 digits.',
+    });
+
+    if (isCancel(accountNumberInput)) {
+      clackCancel('Setup cancelled.');
+      return PROMPT_CANCELLED;
+    }
+
+    accountNumber = accountNumberInput.trim();
+    tailscaleTailnet = null;
+    tailscaleAuthKey = null;
+    tailscalePinnedExitNode = null;
+  } else {
+    const tailnetInput = await prompts.text({
+      message: 'Tailscale tailnet',
+      initialValue: values.tailscaleTailnet ?? '',
+      placeholder: 'example.ts.net',
+      validate: (value) =>
+        (value ?? '').trim().length > 0 ? undefined : 'Tailscale tailnet is required.',
+    });
+
+    if (isCancel(tailnetInput)) {
+      clackCancel('Setup cancelled.');
+      return PROMPT_CANCELLED;
+    }
+
+    const authKeyInput = await prompts.password({
+      message: 'Tailscale auth key',
+      mask: '•',
+      validate: (value) =>
+        (value ?? '').trim().length > 0 ? undefined : 'Tailscale auth key is required.',
+    });
+
+    if (isCancel(authKeyInput)) {
+      clackCancel('Setup cancelled.');
+      return PROMPT_CANCELLED;
+    }
+
+    const pinnedExitNodeInput = await prompts.text({
+      message: 'Pinned Tailscale Mullvad exit node',
+      initialValue: values.tailscalePinnedExitNode ?? '',
+      placeholder: '100.120.246.18',
+      validate: (value) =>
+        (value ?? '').trim().length > 0
+          ? undefined
+          : 'Pinned Tailscale Mullvad exit node is required.',
+    });
+
+    if (isCancel(pinnedExitNodeInput)) {
+      clackCancel('Setup cancelled.');
+      return PROMPT_CANCELLED;
+    }
+
+    accountNumber = '';
+    tailscaleTailnet = tailnetInput.trim();
+    tailscaleAuthKey = authKeyInput.trim();
+    tailscalePinnedExitNode = stripMullvadTailnetSuffix(pinnedExitNodeInput.trim());
+  }
+
+  const socksPort = await prompts.text({
     message: 'SOCKS5 port',
     initialValue: String(values.socksPort),
     validate: validatePortInput,
@@ -1198,7 +1287,7 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
-  const httpPort = await text({
+  const httpPort = await prompts.text({
     message: 'HTTP proxy port',
     initialValue: String(values.httpPort),
     validate: validatePortInput,
@@ -1209,7 +1298,7 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
-  const username = await text({
+  const username = await prompts.text({
     message: 'Proxy username',
     initialValue: values.username,
     validate: (value) =>
@@ -1221,7 +1310,7 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
-  const proxyPassword = await password({
+  const proxyPassword = await prompts.password({
     message: 'Proxy password',
     mask: '•',
   });
@@ -1231,7 +1320,7 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
-  const locationAliases = await text({
+  const locationAliases = await prompts.text({
     message: 'Mullvad route aliases (comma-separated, ordered)',
     initialValue: configuredLocations.join(', '),
     placeholder: 'sweden-gothenburg, austria-vienna',
@@ -1246,7 +1335,7 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
-  const exposureModeInput = await text({
+  const exposureModeInput = await prompts.text({
     message: 'Exposure mode (loopback, private-network, public)',
     initialValue: values.exposureMode,
     validate: validateExposureModeInput,
@@ -1258,7 +1347,7 @@ async function collectSetupInputs(input: {
   }
 
   const selectedExposureMode = parseExposureMode(exposureModeInput.trim());
-  const bindHost = await text({
+  const bindHost = await prompts.text({
     message: selectedExposureMode === 'private-network' ? 'Private-network host IP' : 'Bind host',
     initialValue: deriveInteractiveBindHostDefault({
       selectedExposureMode,
@@ -1273,7 +1362,7 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
-  const baseDomainInput = await text({
+  const baseDomainInput = await prompts.text({
     message: 'Base domain for derived route hostnames (optional)',
     initialValue: values.exposureBaseDomain ?? '',
     placeholder: 'proxy.example.com',
@@ -1288,7 +1377,7 @@ async function collectSetupInputs(input: {
   const routeBindIpInput =
     selectedExposureMode !== 'public'
       ? undefined
-      : await text({
+      : await prompts.text({
           message: 'Route bind IPs (comma-separated, ordered)',
           initialValue: values.routeBindIps?.join(', ') ?? values.bindHost,
           placeholder: '192.168.10.10, 192.168.10.11',
@@ -1303,7 +1392,7 @@ async function collectSetupInputs(input: {
     return PROMPT_CANCELLED;
   }
 
-  const configureHttps = await confirm({
+  const configureHttps = await prompts.confirm({
     message: 'Configure optional HTTPS certificate paths now?',
     initialValue: Boolean(values.httpsCertPath || values.httpsKeyPath || values.httpsPort !== null),
     active: 'Yes',
@@ -1320,7 +1409,7 @@ async function collectSetupInputs(input: {
   let httpsPort = values.httpsPort;
 
   if (configureHttps) {
-    const certPath = await text({
+    const certPath = await prompts.text({
       message: 'HTTPS certificate path',
       initialValue: values.httpsCertPath,
       validate: (value) =>
@@ -1334,7 +1423,7 @@ async function collectSetupInputs(input: {
       return PROMPT_CANCELLED;
     }
 
-    const keyPath = await text({
+    const keyPath = await prompts.text({
       message: 'HTTPS key path',
       initialValue: values.httpsKeyPath,
       validate: (value) =>
@@ -1346,7 +1435,7 @@ async function collectSetupInputs(input: {
       return PROMPT_CANCELLED;
     }
 
-    const httpsPortInput = await text({
+    const httpsPortInput = await prompts.text({
       message: 'HTTPS proxy port',
       initialValue: String(values.httpsPort ?? DEFAULT_HTTPS_PORT),
       validate: validatePortInput,
@@ -1368,7 +1457,11 @@ async function collectSetupInputs(input: {
 
   const finalized = finalizeSetupValues({
     ...values,
-    accountNumber: accountNumber.trim(),
+    exitSource,
+    accountNumber,
+    tailscaleTailnet,
+    tailscaleAuthKey,
+    tailscalePinnedExitNode,
     bindHost: bindHost.trim(),
     routeBindIps: parseBindIpList(routeBindIpInput),
     exposureMode: selectedExposureMode,

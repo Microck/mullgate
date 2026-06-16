@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { runSetupFlow } from '../src/app/setup-runner.js';
+import { type RunSetupFlowOptions, runSetupFlow } from '../src/app/setup-runner.js';
 import { resolveMullgatePaths } from '../src/config/paths.js';
 import { CONFIG_VERSION, type MullgateConfig } from '../src/config/schema.js';
 import { ConfigStore } from '../src/config/store.js';
@@ -1102,6 +1102,127 @@ describe('Mullvad provisioning and runtime artifact rendering', () => {
         expect(routeProxyConfig).toContain('parent 1000 socks5+ 10.124.0.22 1080');
         expect(routeProxyConfig).not.toContain('parent 1000 socks5+ 127.0.0.1 39101');
         expect(result.summary).toContain('exit source: tailscale-exit');
+
+        if (process.platform === 'win32') {
+          expect(dockerCommands).toHaveLength(0);
+        } else {
+          expect(dockerCommands).toHaveLength(1);
+        }
+      },
+    );
+  });
+
+  it('prompts for tailscale-exit setup values in the interactive flow', async () => {
+    const env = createTempEnvironment();
+    const paths = resolveMullgatePaths(env);
+    const store = new ConfigStore(paths);
+    const relayFixture = await readJsonFixture<unknown>('www-relays-all.json');
+    const dockerCommands: string[][] = [];
+    const promptHandlers: NonNullable<RunSetupFlowOptions['promptHandlers']> = {
+      select: async <Value>() => 'tailscale-exit' as Value,
+      password: async (options) => {
+        if (options.message === 'Tailscale auth key') {
+          return 'tskey-auth-interactive';
+        }
+
+        if (options.message === 'Proxy password') {
+          return 'interactive-secret';
+        }
+
+        throw new Error(`Unexpected password prompt: ${options.message}`);
+      },
+      text: async (options) => {
+        switch (options.message) {
+          case 'Tailscale tailnet':
+            return 'example.ts.net';
+          case 'Pinned Tailscale Mullvad exit node':
+            return '100.120.246.18';
+          case 'SOCKS5 port':
+            return '1080';
+          case 'HTTP proxy port':
+            return '8080';
+          case 'Proxy username':
+            return 'alice';
+          case 'Mullvad route aliases (comma-separated, ordered)':
+            return 'sweden-gothenburg, austria-vienna';
+          case 'Exposure mode (loopback, private-network, public)':
+            return 'loopback';
+          case 'Bind host':
+            return '127.0.0.1';
+          case 'Base domain for derived route hostnames (optional)':
+            return '';
+          default:
+            throw new Error(`Unexpected text prompt: ${options.message}`);
+        }
+      },
+      confirm: async () => false,
+    };
+
+    await withJsonServer(
+      {
+        '/relays': () => ({
+          body: JSON.stringify(relayFixture),
+        }),
+      },
+      async (baseUrl) => {
+        const result = await runSetupFlow({
+          store,
+          interactive: true,
+          promptHandlers,
+          relayCatalogUrl: new URL('/relays', baseUrl),
+          relaySocksResolver: {
+            resolve4: async (hostname) => {
+              if (hostname === 'se-got-wg-socks5-101.relays.mullvad.net') {
+                return ['10.124.0.20'];
+              }
+
+              if (hostname === 'at-vie-wg-socks5-001.relays.mullvad.net') {
+                return ['10.124.0.22'];
+              }
+
+              return ['10.124.0.99'];
+            },
+          },
+          checkedAt: '2026-06-16T00:00:00.000Z',
+          validateOptions: {
+            spawn: createSpawnStub({
+              docker: (args) => {
+                dockerCommands.push([...args]);
+                return {
+                  status: 0,
+                  stdout: 'docker 3proxy startup ok\n',
+                };
+              },
+            }),
+          },
+        });
+
+        expect(result.ok).toBe(true);
+
+        if (!result.ok) {
+          return;
+        }
+
+        const savedConfig = JSON.parse(await readFile(paths.configFile, 'utf8')) as MullgateConfig;
+
+        expect(savedConfig.mullvad.exitSource).toBe('tailscale-exit');
+        expect(savedConfig.mullvad.tailscale).toEqual({
+          tailnet: 'example.ts.net',
+          authKey: 'tskey-auth-interactive',
+          pinnedExitNode: '100.120.246.18',
+        });
+        expect(savedConfig.mullvad.wireguard.privateKey).toBeNull();
+        expect(savedConfig.runtime.backend).toBe('tailscale-exit-route-proxy');
+        expect(savedConfig.setup.auth).toEqual({
+          username: 'alice',
+          password: 'interactive-secret',
+        });
+        expect(
+          savedConfig.routing.locations.map((route) => route.relayPreference.requested),
+        ).toEqual(['sweden-gothenburg', 'austria-vienna']);
+        expect(
+          savedConfig.routing.locations.map((route) => route.mullvad.exit.socksInternalIp),
+        ).toEqual(['10.124.0.20', '10.124.0.22']);
 
         if (process.platform === 'win32') {
           expect(dockerCommands).toHaveLength(0);

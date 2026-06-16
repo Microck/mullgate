@@ -30,7 +30,9 @@ client -> mullgate listener -> route-proxy -> 10.124.x.x:1080 -> destination
 
 There is no WireProxy entry hop in this mode. The route proxy shares the sidecar's network namespace, so direct connections to `10.124.x.x:1080` use the Tailscale-routed path.
 
-## Non-interactive setup
+## Setup
+
+Run `mullgate setup` for the guided flow and choose `tailscale-exit` when prompted for the exit source. For repeatable setup, provide the same values with flags or environment variables.
 
 The required Tailscale-specific inputs are:
 
@@ -43,7 +45,7 @@ The proxy credentials and route locations are still normal Mullgate inputs.
 
 For `MULLGATE_TAILSCALE_PINNED_EXIT_NODE`, prefer the Tailscale IP printed by `tailscale exit-node list`. The sidecar passes this value directly to `tailscale up --exit-node`, and IPs are the most reliable form across Tailscale Docker image versions.
 
-Example:
+Environment example:
 
 ```bash
 export MULLGATE_EXIT_SOURCE=tailscale-exit
