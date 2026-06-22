@@ -37,14 +37,14 @@ jobs:
 
       - name: Checkout
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.0
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.release_tag) || github.event.workflow_run.head_sha }}
 
       - name: Install pnpm
         if: ${{ steps.check-publish-flag.outputs.enabled == 'true' }}
-        uses: pnpm/action-setup@v6.0.3
+        uses: pnpm/action-setup@v6.0.9
         with:
           version: 10.18.3
 
