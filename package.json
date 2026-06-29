@@ -68,19 +68,19 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.11",
-    "@types/node": "^24.10.1",
-    "@vitest/coverage-v8": "4.1.8",
+    "@biomejs/biome": "2.5.1",
+    "@types/node": "^26.0.1",
+    "@vitest/coverage-v8": "4.1.9",
     "simple-git-hooks": "2.13.1",
     "tsx": "^4.22.4",
-    "typescript": "^5.9.3",
-    "vite": "8.0.16",
+    "typescript": "^6.0.3",
+    "vite": "8.1.0",
     "vitest": "^4.1.8"
   },
   "packageManager": "pnpm@10.18.3",
   "pnpm": {
     "overrides": {
-      "vite": "8.0.16"
+      "vite": "8.1.0"
     }
   },
   "simple-git-hooks": {
