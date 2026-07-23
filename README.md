@@ -4,7 +4,7 @@
 
 
 <p align="center">
-  <a href="https://github.com/Microck/mullgate/releases"><img src="https://img.shields.io/github/v/release/Microck/mullgate?display_name=tag&style=flat-square&label=release&color=000000" alt="release badge"></a>
+  <a href="https://github.com/Microck/mullgate/releases"><img src="https://badgen.net/github/release/Microck/mullgate?label=release&color=000000" alt="release badge"></a>
   <a href="https://www.npmjs.com/package/mullgate"><img src="https://flat.badgen.net/npm/dt/mullgate?label=downloads&color=000000" alt="npm downloads"></a>
   <a href="https://github.com/Microck/mullgate/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Microck/mullgate/ci.yml?branch=main&style=flat-square&label=ci&color=000000" alt="ci badge"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-mit-000000?style=flat-square" alt="license badge"></a>
@@ -78,350 +78,108 @@ flowchart TB
     subgraph cli[CLI command surface]
         setup[mullgate setup]
         access[mullgate proxy access]
-        list[mullgate proxy list]
-        export[mullgate proxy export]
-        exportRegions[mullgate proxy export --regions]
-        relays[mullgate proxy relay list or probe]
-        verify[mullgate proxy relay verify]
-        recommend[mullgate proxy relay recommend]
-        validate[mullgate proxy validate --refresh]
+        status[mullgate proxy status]
+        doctor[mullgate proxy doctor]
         start[mullgate proxy start]
-        dryRun[mullgate proxy start --dry-run]
         stop[mullgate proxy stop]
         restart[mullgate proxy restart]
-        status[mullgate proxy status]
         logs[mullgate proxy logs]
-        doctor[mullgate proxy doctor]
-        autostart[mullgate proxy autostart]
-        version[mullgate version]
-        completions[mullgate completions bash]
-        path[mullgate config path]
+        export[mullgate proxy export]
+        relay[mullgate proxy relay ...]
+        config[mullgate config ...]
+        autostart[mullgate autostart]
     end
 
-    subgraph state[Canonical config and saved state]
-        config[config.json\nroutes plus credentials plus exposure posture]
-        cache[relay cache plus exact relay choices]
-        artifacts[derived runtime artifacts\nentry-wireproxy plus route-proxy plus docker-compose plus runtime-manifest plus validation metadata plus last-start]
+    subgraph runtime[Docker Compose runtime]
+        wg[WireGuard entry]
+        rp[Route proxy service]
+        socks[Per-route SOCKS5/HTTP/HTTPS listeners]
     end
 
-    subgraph planner[Route and exposure planning]
-        routeIntent[route aliases plus requested locations]
-        bindPlan[bind IP plan\nloopback or shared private host or public]
-        hostnamePlan[hostname plan\nroute alias or base-domain hostname or direct IP]
-        exactExit[exact relay hostname per route\noptional pinned recommendation]
+    subgraph mullvad[Mullvad network]
+        exit[Mullvad SOCKS5 exit nodes]
     end
 
-    subgraph runtime[Linux-first live runtime]
-        listeners[route-specific or shared-selector SOCKS5, HTTP, and HTTPS listeners]
-        router[routing by shared-host ports, destination bind IP, or selector username]
-        backends[one rendered backend per configured route]
-        docker[Docker runtime bundle]
-    end
+    operator --> cli
+    cli --> runtime
+    rp --> exit
+    wg --> mullvad
+    socks --> rp
 
-    subgraph clients[Clients]
-        localClient[local apps]
-        remoteClient[remote LAN, VPN, or internet clients]
-        dns[DNS or hosts mapping]
-    end
-
-    subgraph upstream[Mullvad-backed upstream path]
-        relayCatalog[Mullvad relay catalog]
-        wg[one shared Mullvad WireGuard entry device]
-        selectedRelay[selected Mullvad SOCKS5 exit per route]
-        destination[destination and observed exit]
-    end
-
-    operator --> setup
-    operator --> access
-    operator --> list
-    operator --> exportRegions
-    operator --> export
-    operator --> relays
-    operator --> verify
-    operator --> recommend
-    operator --> validate
-    operator --> start
-    operator --> dryRun
-    operator --> stop
-    operator --> restart
-    operator --> status
-    operator --> logs
-    operator --> doctor
-    operator --> autostart
-    operator --> version
-    operator --> completions
-    operator --> path
-
-    setup --> config
-    setup --> routeIntent
-    setup --> bindPlan
-    setup --> hostnamePlan
-    access --> bindPlan
-    access --> hostnamePlan
-    access --> config
-    exportRegions --> export
-    relays --> relayCatalog
-    relayCatalog --> recommend
-    recommend --> exactExit
-    recommend --> cache
-    exactExit --> config
-
-    routeIntent --> config
-    bindPlan --> config
-    hostnamePlan --> config
-    config --> artifacts
-    cache --> artifacts
-    validate --> artifacts
-    start --> artifacts
-    start --> docker
-    docker --> listeners
-    listeners --> router
-    router --> backends
-    backends --> wg
-    wg --> selectedRelay
-    selectedRelay --> destination
-
-    localClient --> listeners
-    remoteClient --> dns
-    dns --> listeners
-    hostnamePlan --> dns
-
-    status --> artifacts
-    status --> docker
-    doctor --> config
-    doctor --> artifacts
-    doctor --> dns
-    doctor --> docker
-    path --> config
-    path --> artifacts
-
-    bindPlan -.private-network reuses one trusted host IP; public still needs distinct bind IPs per route.-> listeners
-    hostnamePlan -.private-network hostnames can share one host IP because route selection moves to per-route ports.-> dns
-    wg -.one shared Mullvad device powers many routed exits.-> selectedRelay
+    style operator fill:#000,color:#fff
+    style cli fill:#333,color:#fff
+    style runtime fill:#1a1a2e,color:#fff
+    style mullvad fill:#1a1a2e,color:#fff
 ```
 
-The diagram above shows the current shipped Mullgate model end to end: setup writes canonical config, exposure defines the published host and hostname truth, relay tooling can pin exact exits, `start` renders and launches the shared-entry runtime, clients hit route-specific listeners, and `status` plus `doctor` inspect the same saved and live surfaces.
+## Quickstart
 
-## Full workflow
-
-Use these commands when you want to walk through the full operator surface.
-
-### Linux or macOS installer
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Microck/mullgate/main/scripts/install.sh | sh
-mullgate --help
-```
-
-### Windows
-
-```powershell
-irm https://raw.githubusercontent.com/Microck/mullgate/main/scripts/install.ps1 | iex
-mullgate --help
-```
-
-### Package manager install
+### 1. Install
 
 ```bash
 npm install -g mullgate
-pnpm add -g mullgate
-bun add -g mullgate
 ```
 
-### First run
-
-For an interactive setup flow:
+### 2. Setup
 
 ```bash
 mullgate setup
 ```
 
-For non-interactive setup, start from [`.env.example`](.env.example) and then run:
+This walks you through:
+- Mullvad account number
+- Mullvad proxy credentials (username/password from the Mullvad website)
+- Route aliases (friendly names for your proxy exits)
+- Bind posture (localhost, private network, or public)
+- Optional HTTPS certificate setup
 
-```bash
-mullgate setup --non-interactive
-mullgate proxy access
-mullgate proxy export --regions
-mullgate proxy export --guided
-mullgate proxy start --dry-run
-mullgate proxy start
-mullgate proxy status
-mullgate proxy logs --tail 50
-mullgate proxy doctor
-```
-
-![setup demo](images/demos/setup-guided.gif)
-
-In loopback mode, the direct bind-IP entrypoints reported by `mullgate proxy status` and `mullgate proxy access` are the canonical local access path. `mullgate proxy access` now combines the old exposure and hosts views into one access report, and it is also where you switch between the default `published-routes` model and the opt-in `inline-selector` model.
-
-If an installed `mullgate` command reports an unsupported config version, treat that as stale local state. Back up or remove the config/runtime paths it prints, then rerun `mullgate setup` and `mullgate proxy start` instead of trying to reuse the old runtime in place.
-
-## Platform support
-
-`mullgate` is currently a Linux-first runtime with truthful cross-platform install, config, and diagnostics surfaces.
-
-| Platform | Install | `path` / `status` / `doctor` | Full runtime execution |
-| --- | --- | --- | --- |
-| Linux | Supported | Supported | **Supported** |
-| macOS | Supported | Supported | **Partial** |
-| Windows | Supported | Supported | **Partial** |
-
-macOS and Windows can install the CLI and report config/runtime state truthfully, but the current Docker-first multi-route runtime still depends on Linux host-networking behavior. Use Linux for the full setup and live runtime path.
-
-## Command surface
-
-| Command | Key flags | Purpose |
-| --- | --- | --- |
-| `mullgate setup` | `--non-interactive`, `--exit-source`, `--location`, `--exposure-mode`, `--bind-host`, `--route-bind-ip`, `--base-domain`, `--socks-port`, `--http-port`, `--https-port` | create or update canonical config and derived runtime artifacts |
-| `mullgate proxy access` | `--mode`, `--access-mode`, `--base-domain`, `--clear-base-domain`, `--route-bind-ip`, `--unsafe-public-empty-password` | inspect or update exposure posture, access mode, shared-host planning, DNS guidance, selector examples, and direct-IP entrypoints |
-| `mullgate proxy list` | none | list configured routed proxies, hostnames, bind IPs, and runtime IDs |
-| `mullgate proxy export` | `--protocol`, `--regions`, `--guided`, selector flags | list region groups or generate client-ready proxy inventories for `published-routes` mode |
-| `mullgate proxy relay list` | selector flags such as `--country`, `--owner`, `--provider` | inspect relay candidates that match a policy |
-| `mullgate proxy relay probe` | `--country`, `--count` | latency-probe likely relay candidates |
-| `mullgate proxy relay recommend` | `--country`, `--count`, `--apply` | preview or pin an exact relay choice |
-| `mullgate proxy relay verify` | `--route` | verify a configured route across the published proxy protocols |
-| `mullgate proxy validate` | `--refresh` | refresh saved validation metadata and config-derived artifacts |
-| `mullgate proxy start` | `--dry-run` | render and validate artifacts, then optionally launch the runtime |
-| `mullgate proxy stop` | none | stop the saved Docker runtime bundle without rerendering artifacts |
-| `mullgate proxy restart` | none | stop the current bundle, rerender artifacts, and start it again |
-| `mullgate proxy status` | none | inspect live runtime state |
-| `mullgate proxy logs` | `--tail`, `--follow` | read the saved Docker Compose logs for the current runtime bundle |
-| `mullgate proxy doctor` | none | diagnose routing, hostname, and runtime failures |
-| `mullgate proxy autostart` | `enable`, `disable`, `status` | manage login-time startup on supported platforms |
-| `mullgate config path` | none | print config, state, cache, and runtime paths |
-| `mullgate config show` | none | print the saved canonical config |
-| `mullgate config get` | `<key>` | read one saved config value |
-| `mullgate config set` | `<key> <value>`, `--stdin`, `--json` | update one saved config value |
-| `mullgate version` | none | print CLI version plus support metadata |
-| `mullgate completions <shell>` | `bash`, `zsh`, `fish` | generate shell completion scripts |
-
-For operator workflows, `mullgate proxy start --dry-run` is the safe preflight path before touching Docker, `mullgate proxy logs` is the first live-runtime evidence surface after `status`, and `mullgate proxy restart` is the canonical "rerender + bounce" shortcut once setup is already saved.
-
-## Examples
-
-Set up two named exits and inspect the generated hostname mappings:
-
-```bash
-export MULLGATE_ACCOUNT_NUMBER=123456789012
-export MULLGATE_PROXY_USERNAME=alice
-export MULLGATE_PROXY_PASSWORD='replace-me'
-export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna
-
-mullgate setup --non-interactive
-mullgate proxy access
-```
-
-Use the Tailscale-backed exit source when your tailnet has the Mullvad add-on enabled. For the pinned exit node, prefer the Tailscale IP shown by `tailscale exit-node list`:
-
-```bash
-export MULLGATE_EXIT_SOURCE=tailscale-exit
-export MULLGATE_TAILSCALE_TAILNET=example.ts.net
-export MULLGATE_TAILSCALE_AUTH_KEY=tskey-auth-example
-export MULLGATE_TAILSCALE_PINNED_EXIT_NODE=100.120.246.18
-export MULLGATE_PROXY_USERNAME=alice
-export MULLGATE_PROXY_PASSWORD='replace-me'
-export MULLGATE_LOCATIONS=sweden-gothenburg,austria-vienna,usa-new-york-ny
-
-mullgate setup --non-interactive
-mullgate proxy start --dry-run
-```
-
-Before depending on a new Tailscale environment, run the isolated proof:
-
-```bash
-pnpm verify:tailscale-feasibility
-```
-
-Set up private-network exposure for other Tailscale devices. If Tailscale is running, Mullgate defaults to the host's `100.x` address; otherwise it falls back to `0.0.0.0` until you override the shared host:
-
-```bash
-export MULLGATE_EXPOSURE_MODE=private-network
-export MULLGATE_BIND_HOST=100.124.44.113
-
-mullgate setup --non-interactive
-mullgate proxy access
-```
-
-Switch that same trusted-network host to selector-driven access when you want one shared listener and route selection in the proxy username:
-
-```bash
-mullgate proxy access \
-  --mode private-network \
-  --access-mode inline-selector \
-  --route-bind-ip 100.124.44.113
-```
-
-With `inline-selector`, the guaranteed URL shape is `scheme://selector:@host:port`. For example:
-
-```text
-socks5://se:@100.124.44.113:1080
-socks5://se-got:@100.124.44.113:1080
-socks5://se-got-wg-101:@100.124.44.113:1080
-```
-
-The shorter `scheme://selector@host:port` form is best-effort only because some clients do not normalize a missing password consistently. If you expose `inline-selector` on a public host with an empty password, Mullgate blocks that by default until you opt in with `--unsafe-public-empty-password`.
-
-Start the runtime and inspect its current posture:
+### 3. Start
 
 ```bash
 mullgate proxy start
+```
+
+### 4. Check
+
+```bash
 mullgate proxy status
 mullgate proxy doctor
 ```
 
-Use one of the exposed routes from another client or shell:
+### 5. Export proxy lists
 
 ```bash
-curl \
-  --proxy socks5h://127.0.0.1:1080 \
-  --proxy-user "$MULLGATE_PROXY_USERNAME:$MULLGATE_PROXY_PASSWORD" \
-  https://am.i.mullvad.net/json
-```
-
-Generate a shareable proxy list from the saved route inventory:
-
-```bash
-mullgate proxy export --regions
 mullgate proxy export --guided
-mullgate proxy export --country se --city got --count 1 --region europe --provider m247 --owner mullvad --run-mode ram --min-port-speed 9000 --count 2 --output proxies.txt
-mullgate proxy export --dry-run --protocol http --country us --server us-nyc-wg-001 --owner rented
 ```
 
-`mullgate proxy export` currently supports `published-routes` mode only. If you switch to `inline-selector`, use `mullgate proxy access` to inspect the shared listener and selector examples instead of expecting per-route export output.
+## Commands
 
-Inspect candidate relays, preview the fastest exact match, then verify a configured exit:
-
-```bash
-mullgate proxy relay list --country Sweden --owner mullvad --run-mode ram --min-port-speed 9000
-mullgate proxy relay probe --country Sweden --count 2
-mullgate proxy relay recommend --country Sweden --count 1
-mullgate proxy relay recommend --country Sweden --count 1 --apply
-mullgate proxy relay verify --route sweden-gothenburg
-```
-
-Enable login-time startup on Linux when you want the proxy runtime to come back automatically:
-
-```bash
-mullgate proxy autostart enable
-mullgate proxy autostart status
-```
-
-`mullgate proxy autostart enable` now ensures `loginctl` linger is enabled for the current user, because a `systemd --user` unit does not reliably come back after reboot without it.
+| Command | Description |
+|---------|-------------|
+| `mullgate setup` | Guided or non-interactive setup |
+| `mullgate proxy start` | Start the proxy runtime |
+| `mullgate proxy stop` | Stop the proxy runtime |
+| `mullgate proxy restart` | Restart the proxy runtime |
+| `mullgate proxy status` | Show runtime status |
+| `mullgate proxy doctor` | Diagnose runtime issues |
+| `mullgate proxy logs` | Show runtime logs |
+| `mullgate proxy access` | Show access credentials |
+| `mullgate proxy export` | Export proxy lists |
+| `mullgate proxy relay list` | List available relays |
+| `mullgate proxy relay probe` | Probe relay latency |
+| `mullgate proxy relay verify` | Verify route exits |
+| `mullgate proxy relay recommend` | Get relay recommendations |
+| `mullgate config path` | Show config file path |
+| `mullgate config show` | Show current config |
+| `mullgate config edit` | Edit config in editor |
+| `mullgate autostart` | Manage systemd autostart |
+| `mullgate version` | Show version |
+| `mullgate completions` | Generate shell completions |
 
 ## Documentation
 
-- [Documentation site](https://mullgate.micr.dev)
-- [Quickstart](https://mullgate.micr.dev/docs/getting-started/quickstart)
-- [Usage guide](https://mullgate.micr.dev/docs/guides/usage)
-- [Setup and exposure](https://mullgate.micr.dev/docs/guides/setup-and-exposure)
-- [Command reference](https://mullgate.micr.dev/docs/reference/commands)
-- [Troubleshooting](https://mullgate.micr.dev/docs/guides/troubleshooting)
-- [`.env.example`](.env.example) - documented setup inputs for local runs
-
-## Disclaimer
-
-This project is unofficial and not affiliated with, endorsed by, or connected to Mullvad VPN AB. It is an independent, community-built tool.
+Full documentation is at [mullgate.micr.dev](https://mullgate.micr.dev).
 
 ## License
 
-[MIT license](LICENSE)
+MIT
